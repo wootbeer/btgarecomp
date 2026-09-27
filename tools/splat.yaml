@@ -113,44 +113,50 @@ segments:
     type: bin
     start: 0x40
 
-  - name: boot
+  - name: resident
     type: code
     start: 0x1000
     vram: 0x80000400
+    # 2026-09-27 round 8: the whole first ~1MB (ROM 0x1000-0x101000) is what
+    # the N64's IPL3 bootcode loads automatically before the game ever runs,
+    # for the standard CIC chips -- so it's all potentially resident code,
+    # not just the crt0 stub + main_probe's confirmed 19KB. Screenshots from
+    # a 2026-09-19 Ghidra session (see STATUS.md) found real, clean functions
+    # scattered across this whole range (FUN_80007078, FUN_80087570,
+    # FUN_80095470, FUN_80095b68, FUN_8002d40c/4dc, FUN_80027df1, and more --
+    # some inside the previously-"unanalyzed" unk_before_probe gap, some
+    # inside what unk_after_probe had marked as data past main_probe). Round
+    # 4 (see the log below) already established a bounded "code" segment
+    # can't hang even when it hits bad data -- it just falls back to raw
+    # .word for that span -- so scanning the whole 1MB in one shot is safe
+    # and should surface real function boundaries splat's own suggestion
+    # engine can propose, rather than hand-probing one address at a time.
+    # Superseded: the old boot/unk_before_probe/main_probe/unk_after_probe
+    # segments this replaces are still in version control history if the
+    # per-segment framing is ever useful again.
     subsegments:
-      - [0x1000, c, boot_entry]      # real crt0 stub, 0x38 bytes, ends after
-                                       # `jal 0x8009ED9C ; nop` -- see above.
-      - [0x1038, data, boot_data]     # floats + pointer table, not code.
-
-  - name: unk_before_probe
-    type: bin
-    start: 0x3000
-    vram: 0x80002400
-    # Still unanalyzed. This is the bulk of the ROM before our probe point --
-    # almost certainly contains real structure (overlay table, more
-    # resident code) we just haven't looked at yet.
-
-  - name: main_probe
-    type: code
-    start: 0x9F99C
-    vram: 0x8009ED9C
-    subsegments:
-      # Confirmed-clean range only, per round 6 above: 0x9F99C-0xA449C.
-      - [0x9F99C, c, main_entry]
-
-  - name: unk_after_probe
-    type: bin
-    start: 0xA449C
-    vram: 0x800A389C
-    # Real data starts here -- same failure mode as boot_data (see round 2
-    # above). Worth reading a chunk of it by hand at some point (it opened
-    # with what looked like an ASCII string), but not urgent. Rather than
-    # keep extending this one linear scan and risking another hang on
-    # unknown terrain, switching strategy: chase the three concrete leads
-    # from round 3 (func_80105DB0, func_801055CC, func_80105DD0 -- all
-    # jal targets from confirmed-real code) with their own small bounded
-    # probes below, and leave the large unknown gap between here and there
-    # as unanalyzed for now.
+      - [0x1000, c, resident_a]
+      # Round 8 continued: resident_a alone swallows into one giant
+      # never-returning "function" around rom 0x8000859C onward (see
+      # STATUS.md) -- 1136 real function boundaries did get recovered from
+      # inside that swallow by spimdisasm re-syncing partway through, but
+      # four addresses Ghidra found (FUN_8002d40c/4dc, FUN_80027df0,
+      # FUN_80048eb0) fall inside a ~455KB unresolved span
+      # (0x8000859C-0x80077C40) the re-sync never reached. Bounding each
+      # individually, same as round 3 originally did for main_probe, to get
+      # clean output instead of hand-reading raw .word bytes.
+      - [0x289F0, c, probe_27df0]      # FUN_80027DF0
+      - [0x28E00, bin, gap1]
+      - [0x2DE00, c, probe_2d40c]      # FUN_8002D40C and FUN_8002D4DC
+      - [0x2E200, bin, gap2]
+      - [0x49800, c, probe_48eb0]      # FUN_80048EB0
+      - [0x49C00, bin, gap3]
+      - [0x88170, c, probe_87570]      # SUB_80087570 itself, bounded exactly at its real start
+      - [0x88680, c, probe_87a80]      # SUB_80087A80, bounded exactly at its real start
+      - [0x88AF0, c, probe_87ef0]      # SUB_80087EF0, bounded exactly at its real start
+      - [0x89000, bin, gap4]
+      - [0xF8DCC, c, probe_f81cc]      # func_800F81CC, the SUB_80087570 trampoline's target
+      - [0xF9400, bin, rest_unanalyzed]
 
   - name: probe_105cc
     type: bin

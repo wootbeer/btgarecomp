@@ -1,30 +1,40 @@
-# Function addresses recovered from Ghidra screenshots uploaded 2026-09-27
-# (see STATUS.md's "2026-09-19 (transcribed 2026-09-27)" entry for how each
-# of these was found and what it does). No sizes -- these came from reading
-# screenshots of Ghidra's Listing/Decompile panes, not an exported symbol
-# table, so treat every address as needing a real Ghidra/splat re-check
-# before relying on it. Same "name = 0xADDR;" format as
+# Function addresses recovered from Ghidra screenshots uploaded 2026-09-27,
+# later cross-checked against the ROM directly with bounded splat probes
+# (round 8, see STATUS.md). Same "name = 0xADDR;" format as
 # undefined_funcs_auto.txt, so tools/symbols_to_n64recomp_toml.py accepts
 # this file directly.
+#
+# "verified" below means: confirmed with clean, individually-bounded splat
+# disassembly in round 8, content read and summarized in STATUS.md.
+# "unverified" means: read off a screenshot only, never independently
+# checked against the ROM -- two addresses that looked plausible this way
+# (0x8002d40c, 0x8002d4dc) turned out to be wrong (mid-function addresses,
+# not function starts) once checked, so treat the rest of the unverified
+# ones with real skepticism too.
 
+# --- verified (round 8) ---
+FUN_80087570 = 0x80087570;   # 2-instruction trampoline: j func_800F81CC
+FUN_80087A80 = 0x80087A80;   # object-pool slot allocator (D_80235F00 table)
+FUN_80087EF0 = 0x80087EF0;   # frame-age gate + call into func_800AD14C
+FUN_80048EB0 = 0x80048EB0;   # confirmed caller of FUN_800F80E8
+FUN_8002D3AC = 0x8002D3AC;   # vector distance/normalize -- unrelated to overlay hunt
+FUN_8002D468 = 0x8002D468;   # position += delta accumulate -- unrelated to overlay hunt
+FUN_80027DF0 = 0x80027DF0;   # scheduler/thread-queue cleanup -- unrelated to overlay hunt
+FUN_800F81CC = 0x800F81CC;   # NOT CODE at rest -- overlay-loaded VRAM slot, garbage when probed
+FUN_800F8700 = 0x800F8700;   # NOT CODE at rest -- same overlay slot family, garbage when probed
+
+# --- unverified, from screenshot transcription only ---
 FUN_80007078 = 0x80007078;
 FUN_80078e34 = 0x80078e34;
 FUN_80078e40 = 0x80078e40;
-FUN_80087570 = 0x80087570;
 FUN_80087664 = 0x80087664;
-FUN_80087a80 = 0x80087a80;
 FUN_80087eac = 0x80087eac;
-FUN_80087ef0 = 0x80087ef0;
 FUN_80095470 = 0x80095470;
 FUN_80095b68 = 0x80095b68;
 FUN_80095b90 = 0x80095b90;
 FUN_80095cf0 = 0x80095cf0;
 FUN_800923b0 = 0x800923b0;
 FUN_80027ce8 = 0x80027ce8;
-FUN_80027df1 = 0x80027df1;
-FUN_8002d40c = 0x8002d40c;
-FUN_8002d4dc = 0x8002d4dc;
-FUN_80048eb0 = 0x80048eb0;
 FUN_8009c9c0 = 0x8009c9c0;
 FUN_8009ca10 = 0x8009ca10;
 FUN_8009cb40 = 0x8009cb40;
@@ -36,5 +46,6 @@ FUN_80110750 = 0x80110750;
 FUN_800f80e8 = 0x800f80e8;
 FUN_800a1b80 = 0x800a1b80;
 
-# Data, not code -- the asset/overlay table (8-byte {size, romAddr} entries)
+# Data, not code -- the asset table claim is unverified (see STATUS.md
+# round 8 corrections); this address itself was read off a screenshot only.
 D_800a3b14 = 0x800a3b14;

@@ -3,6 +3,91 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 8: verified the transcribed leads directly against the ROM -- mixed results, but a real structural finding
+
+Went back to the ROM with splat/spimdisasm (confirmed working in this
+sandbox per round 7 below) to directly verify the addresses transcribed
+from screenshots in the entry below, rather than trusting the transcription.
+Method: bind small splat segments exactly at each address of interest
+(same technique round 3 originally used for `main_probe`), since the whole
+first-MB region swallows into one giant unreturning blob otherwise --
+confirmed again this round (scanning ROM `0x1000`-`0x1061CC` as one
+segment recovered 1136 real function boundaries via spimdisasm re-syncing
+partway through, but a ~455KB span from `0x8000859C` never re-synced and
+had to be probed individually).
+
+**Corrections to the 2026-09-19 transcription** (my own transcription
+error, not the original session's -- I conflated an instruction's address
+with its enclosing function's address when reading the screenshot):
+`0x8002D40C` and `0x8002D4DC` are not function starts. They're a `jal` and
+an epilogue instruction respectively, inside two unrelated, ordinary
+vector-math functions: `func_8002D3AC` (distance/normalize: `sqrt(x^2+y^2)`
+then divide) and `func_8002D468` (accumulate a delta into a stored
+position: `pos += delta`). Likewise `func_80027DF0` is real and matches
+its transcribed address exactly, but its actual content -- iterating
+`D_80216FD0`, decrementing counters, calling `func_80107F10`/
+`func_80108078`/`func_8010F6D0` -- reads like generic scheduler/thread
+queue cleanup, nothing to do with the asset table (`DAT_800a3b14`) the
+transcription associated it with. Net effect: the specific claim "these
+call sites read the asset table" doesn't hold up for these three
+addresses. `FUN_80048EB0` *did* verify correctly -- it genuinely calls
+`func_800F80E8` (see below), matching the transcription exactly.
+
+**What's confirmed real and matches** (all read directly off clean,
+individually-bounded splat output, not transcribed):
+- `func_80087570` -- confirmed real, exactly as transcribed. But its
+  entire body is just `j func_800F81CC` with `sw $v0, 0x0($a2)` in the
+  delay slot: a 2-instruction tail-call trampoline, not a "distance
+  check" itself.
+- `func_80087A80` -- allocates a slot from a 592-byte-stride table
+  (`D_80235F00`, indexed by an 8-bit type tag), fills it from another
+  object's position fields, and stamps it with the current frame counter
+  (`D_8021945C`) at offset `0x2C`. One type value (`0x7F`) short-circuits
+  with `j func_800F8700` instead. Reads like an object/effect pool
+  allocator.
+- `func_80087EF0` -- reads that same `0x2C`-offset frame stamp, computes
+  `D_8021945C - stamp`, and compares against `0x1E` (30) before calling
+  `func_800AD14C` with args from offsets `0xC`/`0x10`/`0x24` of the
+  record. **This matches `FUN_80087eac` from the uploaded `dec1.txt`
+  almost exactly** (same `func_0x800ad14c` call, same `+0xc`/`+0x10`/
+  `+0x24`/`+0x2c` offsets, same 30-frame-style threshold pattern) --
+  they're sibling functions on the same object-record layout. Read
+  together, this is an object/effect spawn-and-cooldown system: allocate
+  a slot, stamp its spawn frame, later check elapsed frames before acting
+  on it. "Distance-gated" in the 2026-09-19 entry's framing was most
+  likely describing this frame-age gate, not a ROM/overlay distance --
+  **the "loader entry point" read on `SUB_80087570` looks like a wrong
+  turn**, not the overlay mechanism.
+
+**The actual structural finding this round**: followed `func_80087570`'s
+tail-jump to its target, `func_800F81CC`. It's **not valid code** -- it
+disassembles to the same kind of dense, repeating-nibble garbage
+(`0x4A534211`, `0x5AD75AD7`, `0x52955295`, ...) that round 7 originally
+found at the `probe_105cc`/`probe_105db` "overlay wall" addresses, plus a
+long run of zero-padding. Same for `func_800F8700`, the fallback target
+`func_80087A80` jumps to for type `0x7F`. **Both addresses are still well
+inside the first automatically-loaded MB** (`0x800F81CC`, `0x800F8700` <<
+`0x80100400`), which the 2026-09-27 (round 7) entry below hadn't
+anticipated -- that entry's "past the 1MB boundary" framing for the
+overlay wall doesn't hold here. The more precise picture: there's a fixed
+VRAM code slot around `0x800F81CC`-`0x800F87xx` that legitimately holds
+non-code data most of the time and gets overlay-loaded with real,
+per-object-type handler code at runtime, with stable call-through points
+(`func_80087570`, the `func_800F8700` fallback) that always exist and
+just jump into whatever's currently loaded there. This is a materially
+different (and more specific) theory than either "overlay slots only
+exist past 1MB" (round 7) or "DMA is unused, it's a KSEG1 read loop"
+(2026-09-19 entry) -- it doesn't resolve the open DMA-vs-no-DMA
+contradiction from that entry, but it does explain why a fixed, frequently
+-called address can be garbage at one moment (as found here) and real code
+at another (as the `dec1.txt`/`ss.txt` decompiles, presumably captured
+while something legitimate *was* loaded there, suggest).
+
+**Not yet done**: `func_80087A80`'s type-indexed table (`D_80235F00`,
+592-byte stride) is the natural next place to look for how a type maps to
+what gets loaded into the `800F81CC` slot -- haven't traced what writes to
+that VRAM range yet, which is the actual loader.
+
 ## 2026-09-19 (transcribed 2026-09-27): recovered findings from screenshots -- a real overlay/asset table, and a direct link to the "wall" functions
 
 **This entire section was reconstructed from screenshots** Matt uploaded to
