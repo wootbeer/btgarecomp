@@ -3,6 +3,32 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 19: found the real ignored/renamed list -- 71 functions where this ROM's own copy should defer to librecomp
+
+Round 18 deliberately left `stubs`/`ignored`/`renamed` alone rather than
+guess at librecomp's API surface. Fixed that properly this round: cloned
+`N64Recomp/N64ModernRuntime` and grepped `librecomp/src/*.cpp` for every
+function name ending in `_recomp` -- that suffix marks something librecomp
+implements natively (139 total, `osInitialize`, `osPiStartDma`,
+`__osDisableInt`, the whole `osPfs*`/`osVi*`/`osCont*`/`osFlash*`/
+`osEeprom*`/`osVoice*` surface, etc.), not something a recompiled game
+should run its own copy of.
+
+Cross-referenced against the trusted symbol table's ~430 n64sym-identified
+names: **71 direct matches** -- real functions in this ROM, at real
+addresses, that duplicate something librecomp already provides. Generated
+`[patches] ignored = [...] renamed = [...]` for all 71
+(`BattleTanxGASyms/battletanxga.us.rev0.renamed_ignored.toml`), matching
+`bdragoncore/battle-tanx-recomp`'s exact pattern for this (same name in
+both lists: `ignored` skips recompiling this ROM's own copy, `renamed`
+points calls at librecomp's implementation instead).
+
+**Caveat**: this only covers names n64sym already matched by signature.
+`bdragoncore/battle-tanx-recomp`'s own list also stubs functions found by
+inspection rather than name-matching (e.g. two cache-invalidate loops the
+host doesn't need) -- nothing here does the equivalent search yet, so this
+71-entry list is a solid start, not a complete `[patches]` section.
+
 ## 2026-09-27, round 18: generated the instruction-level patches N64Recomp's config needs -- cop0/eret nops and guarded div hooks, for real addresses this time
 
 With a trusted, sized symbol table in hand (round 14), did the mechanical

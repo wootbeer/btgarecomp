@@ -85,13 +85,16 @@ well-trodden, mechanical problems compared to open-ended disassembly).
    spot-check a sample of the trusted entries against real disassembly,
    since sizes are still gap-derived rather than independently confirmed
    one by one.
-4. **libultra call identification** — largely done for the first MB: 430
-   of the 1444 function entries already carry n64sym's real name instead
-   of a `func_XXXXXXXX` placeholder (round 13). Remaining: decide which of
-   those need `renamed`/`ignored` treatment in the N64Recomp config in
-   favor of librecomp's own implementations (most should — that's the
-   whole point of identifying them), and extend identification to
-   whatever's found once the scan covers more of the ROM.
+4. ~~libultra call identification~~ — done for the first MB: 430 function
+   entries carry n64sym's real name, and 71 of those are confirmed
+   (cross-referenced directly against `N64ModernRuntime`'s
+   `librecomp/src/*.cpp`) to duplicate something librecomp already
+   provides. `[patches] ignored`/`renamed` generated for all 71
+   (`BattleTanxGASyms/battletanxga.us.rev0.renamed_ignored.toml`,
+   `STATUS.md` round 19). Not complete: the reference project's own list
+   also stubs a couple of functions found by inspection rather than
+   name-matching (e.g. cache-invalidate loops the host doesn't need) —
+   no equivalent search has been done here yet.
 5. ~~Instruction-level patches~~ — done for the first-MB code: 27 cop0
    nops, 3 eret nops
    (`BattleTanxGASyms/battletanxga.us.rev0.instruction_patches.toml`), and

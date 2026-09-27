@@ -1,0 +1,17 @@
+# stubs/ignored/renamed for BattleTanx: Global Assault (USA), first-MB code only.
+# Generated 2026-09-27 (round 19) by cross-referencing the trusted symbol table's
+# n64sym-identified names against N64ModernRuntime's librecomp/src/*.cpp (every
+# function ending in _recomp there is something librecomp provides natively).
+# 71 overlaps found -- this game's own compiled copy of each should be ignored
+# and calls renamed to librecomp's implementation instead, same pattern as
+# bdragoncore/battle-tanx-recomp's ignored+renamed lists.
+#
+# CAVEAT: this list only covers the ~430 names n64sym already identified within
+# the trusted 1321-function table. It is NOT the full stubs/ignored/renamed
+# section a real N64Recomp run would need (e.g. bdragoncore's config also stubs
+# two cache-invalidate functions found by inspection, not by name-matching --
+# nothing here does the equivalent search yet).
+
+[patches]
+ignored = ["__ll_div", "__ll_lshift", "__ll_mul", "__osDisableInt", "__osRestoreInt", "__osSetFpcCsr", "__osSpSetPc", "__ull_div", "__ull_rem", "__ull_rshift", "osAiGetLength", "osAiGetStatus", "osAiSetFrequency", "osAiSetNextBuffer", "osCartRomInit", "osContGetQuery", "osContGetReadData", "osContInit", "osContStartQuery", "osContStartReadData", "osCreateMesgQueue", "osCreatePiManager", "osCreateThread", "osCreateViManager", "osDestroyThread", "osDpSetNextBuffer", "osEPiRawStartDma", "osEPiStartDma", "osGetCount", "osGetThreadPri", "osGetTime", "osInitialize", "osInvalDCache", "osInvalICache", "osJamMesg", "osMotorInit", "osMotorStart", "osMotorStop", "osPfsAllocateFile", "osPfsChecker", "osPfsDeleteFile", "osPfsFileState", "osPfsFindFile", "osPfsFreeBlocks", "osPfsInitPak", "osPfsReadWriteFile", "osPiRawStartDma", "osPiStartDma", "osRecvMesg", "osSendMesg", "osSetEventMesg", "osSetIntMask", "osSetThreadPri", "osSetTime", "osSetTimer", "osSpTaskLoad", "osSpTaskStartGo", "osSpTaskYield", "osSpTaskYielded", "osStartThread", "osViBlack", "osViGetCurrentFramebuffer", "osViGetNextFramebuffer", "osViSetEvent", "osViSetMode", "osViSetSpecialFeatures", "osViSwapBuffer", "osVirtualToPhysical", "osWritebackDCache", "osWritebackDCacheAll", "osYieldThread"]
+renamed = ["__ll_div", "__ll_lshift", "__ll_mul", "__osDisableInt", "__osRestoreInt", "__osSetFpcCsr", "__osSpSetPc", "__ull_div", "__ull_rem", "__ull_rshift", "osAiGetLength", "osAiGetStatus", "osAiSetFrequency", "osAiSetNextBuffer", "osCartRomInit", "osContGetQuery", "osContGetReadData", "osContInit", "osContStartQuery", "osContStartReadData", "osCreateMesgQueue", "osCreatePiManager", "osCreateThread", "osCreateViManager", "osDestroyThread", "osDpSetNextBuffer", "osEPiRawStartDma", "osEPiStartDma", "osGetCount", "osGetThreadPri", "osGetTime", "osInitialize", "osInvalDCache", "osInvalICache", "osJamMesg", "osMotorInit", "osMotorStart", "osMotorStop", "osPfsAllocateFile", "osPfsChecker", "osPfsDeleteFile", "osPfsFileState", "osPfsFindFile", "osPfsFreeBlocks", "osPfsInitPak", "osPfsReadWriteFile", "osPiRawStartDma", "osPiStartDma", "osRecvMesg", "osSendMesg", "osSetEventMesg", "osSetIntMask", "osSetThreadPri", "osSetTime", "osSetTimer", "osSpTaskLoad", "osSpTaskStartGo", "osSpTaskYield", "osSpTaskYielded", "osStartThread", "osViBlack", "osViGetCurrentFramebuffer", "osViGetNextFramebuffer", "osViSetEvent", "osViSetMode", "osViSetSpecialFeatures", "osViSwapBuffer", "osVirtualToPhysical", "osWritebackDCache", "osWritebackDCacheAll", "osYieldThread"]
