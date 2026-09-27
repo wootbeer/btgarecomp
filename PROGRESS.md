@@ -58,22 +58,22 @@ still ahead, the same scale of effort the original game's recomp needed
    Assault needs its own version of the original game's
    `stock_runtime_compat.cpp`-style shims (item 7 below) — that depends on
    code not yet reached.
-3. **Full function boundary list** — 1310 addresses recovered for the
-   first MB (`syms/battletanx_ga_funcs_round11.txt`), but without exact
-   sizes (gaps between entries are only approximate) and covering only
-   ~1/8 of the ROM. Next: feed this list back into splat as
-   `symbol_addrs_path` seed points for a real, properly-bounded split (real
-   sizes, not gap-guesses), then extend the same corrected-header scan past
-   the first MB. Once sizes exist for a section, `tools/symbols_to_n64recomp_toml.py`
-   turns them into the symbol table
-   (`BattleTanxGASyms/battletanxga.us.rev0.syms.toml`) N64Recomp needs.
-4. **libultra call identification** — `n64sym` already found ~480 likely
-   matches (`STATUS.md` round 9) covering a good chunk of this. Remaining:
-   merge those into a real symbol file (cross-checked against the
-   round-11 function list, since n64sym's matches and the splat scan were
-   produced separately and haven't been reconciled against each other
-   yet), then figure out which of them need `renamed`/`ignored` treatment
-   in the N64Recomp config in favor of librecomp's own implementations.
+3. ~~Full function boundary list (first MB)~~ — done for the first MB:
+   1444 code entries with real (gap-derived) sizes in
+   `BattleTanxGASyms/battletanxga.us.rev0.syms.toml`, the actual format
+   N64Recomp expects (`STATUS.md` round 13). Still needed: extend the same
+   corrected-header splat scan past the first MB to cover the remaining
+   ~7/8 of the ROM, and spot-check a sample of the existing entries against
+   real disassembly, since sizes are gap-derived (a missed real boundary
+   between two known symbols inflates the earlier one's size) rather than
+   independently confirmed.
+4. **libultra call identification** — largely done for the first MB: 430
+   of the 1444 function entries already carry n64sym's real name instead
+   of a `func_XXXXXXXX` placeholder (round 13). Remaining: decide which of
+   those need `renamed`/`ignored` treatment in the N64Recomp config in
+   favor of librecomp's own implementations (most should — that's the
+   whole point of identifying them), and extend identification to
+   whatever's found once the scan covers more of the ROM.
 5. **Instruction-level patches** — every `cop0` write and `eret` needs a nop
    (nothing is emulated), and every `div`/`divu`/`ddiv`/`ddivu` needs the
    guarded hook version. The original project generated most of this

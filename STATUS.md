@@ -3,6 +3,47 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 13: a real, sized symbol table for the first MB -- BattleTanxGASyms/battletanxga.us.rev0.syms.toml now has actual content
+
+Merged round 11's 1310-function scan with n64sym's ~480 name matches
+(preferring the real name where both cover the same address; 20 name
+collisions where n64sym matched the same function twice at different
+addresses, disambiguated with an address suffix), filtered to the 1509
+entries that fall inside the scanned segment (`0x80071000`-`0x80171000`;
+52 matches -- fixed low-memory OS state like `osTvType`, plus a few past
+the first MB -- saved separately in
+`syms/battletanx_ga.symbol_addrs_outofrange.txt` for later), and fed the
+result back into splat as `symbol_addrs_path` seed points.
+
+Took three tries to get the run itself right (splat's symbol file format
+rejects `#` comments outright; a duplicate name from two n64sym matches
+needed disambiguating; two overlapping background invocations sharing one
+log path raced and produced a corrupted-looking "complete" log while the
+real job was still running for another 8+ minutes -- killed the stray and
+reran clean with a fresh log path). Once it ran cleanly: all 1509 seeds
+got individual labels with correct sizes (computed from the gap to the
+next known boundary), 430 with n64sym's real name instead of a
+`func_XXXXXXXX` placeholder.
+
+Split the result into 1444 likely-code entries and 65 data-shaped ones
+(`_rodata_`/`_bss_`/`D_`/`jtbl_`-style names, filtered out by pattern --
+N64Recomp's `functions` array should only ever list actual code, not
+data, or it'll try to recompile rodata as MIPS instructions). The 1444
+code entries are now in `BattleTanxGASyms/battletanxga.us.rev0.syms.toml`,
+in the actual format N64Recomp expects -- the first time this file has
+had real content instead of being an empty placeholder.
+
+**Caveats, spelled out in the file's own header**: sizes are gap-to-next-
+known-symbol, not confirmed function ends -- an unfound real boundary
+between two known symbols would make the earlier one's listed size too
+large. Names ending `_text_XXXX` mark an n64sym signature match at an
+offset *inside* a larger function, not necessarily a real separate
+function start. Still only covers the first MB (`1/8` of the ROM). Treat
+this as a strong first pass, not a verified split -- the next real step
+(beyond extending coverage past the first MB) is spot-checking a sample of
+these against real disassembly the way round 8/10 did for individual
+functions, now that doing so isn't fighting a wrong header.
+
 ## 2026-09-27, round 12: confirmed -- the overlay mystery was entirely the wrong header. There is no overlay system here (at least not in the first MB).
 
 Round 11's queued corrected-header scan finished: a single splat pass over
