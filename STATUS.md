@@ -3,6 +3,59 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 12: confirmed -- the overlay mystery was entirely the wrong header. There is no overlay system here (at least not in the first MB).
+
+Round 11's queued corrected-header scan finished: a single splat pass over
+the full first MB (ROM `0x1000`-`0x101000`) recovered **1310 real function
+boundaries** via spimdisasm re-syncing, running continuously from the crt0
+entry (`0x80071000`) through to `0x8016FC5C` -- past both the old "overlay
+wall" and the full "overlay blob" range with no gap, no renewed swallow,
+nothing resembling a wall at all.
+
+Checked function density specifically in the two ranges this entire
+investigation has spent the most effort on:
+
+| Region | Functions | Density |
+|---|---|---|
+| Old "overlay wall" (`0x80105000`-`0x80106500`) | 18 | 3.43/KB |
+| `OverlayScan6`'s claimed "overlay blob" (`0x800F8000`-`0x80112000`) | 302 | 2.90/KB |
+| Whole scanned window (average) | 1310 | 1.28/KB |
+
+Both "mystery" regions are **denser** with clean function boundaries than
+the scan's own average -- the opposite of what non-code/garbage data would
+look like. There is no overlay wall, no overlay blob, no custom
+per-object-type loading slot at `0x800F81CC`. Every round-7-through-9
+finding framed around "why does this region look like garbage" was
+answering a question created entirely by scanning the wrong ROM bytes.
+This also retroactively explains why `OverlayScan1`-`6` (2026-09-19,
+Ghidra) never found a loader despite exhaustively searching for one
+(direct calls, stored pointers, register-loaded indirect calls, hardware
+DMA register use): there wasn't one to find in that range. Their own
+Ghidra project may have had a comparable mapping issue for this address
+range, or simply never got a working disassembly of it at all -- either
+way, "no loader found" was the correct result, just not for the reason
+anyone thought at the time.
+
+**Saved**: the full 1310-function list is now in
+`syms/battletanx_ga_funcs_round11.txt` (vram addresses only, no sizes yet
+-- next real splat pass should use these as seed points via
+`symbol_addrs_path` to get a properly bounded, per-function split instead
+of one giant swallowed file). This is the first genuinely trustworthy,
+broad function-boundary dataset this project has produced.
+
+**Reframing what's actually left to do**, now that the phantom is cleared:
+this project doesn't have a special overlay-loader mystery to solve. It
+has the completely ordinary (if large) task any from-scratch N64 recomp
+has: turn 1310 anonymous `func_XXXXXXXX` addresses into a real symbol
+table (start + size + eventually names), find the actual entrypoint/boot
+sequence details needed for N64Recomp's config (stubs, instruction
+patches, stock-runtime compat shims -- see `PROGRESS.md`), and only then
+start standing up the N64Recomp build proper. Round 11's DMA-registers
+finding (PI hardware DMA is real and used ~59 places) remains true and
+useful independent of the overlay question -- osPiStartDma-family calls
+are ordinary and expected in any N64 game, not evidence of anything
+exotic.
+
 ## 2026-09-27, round 11: the "overlay" mystery itself may be a phantom -- two more pieces of convergent evidence
 
 Following up on round 10's header fix. `OverlayScan6.java` (never actually

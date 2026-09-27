@@ -20,37 +20,60 @@ found again from scratch by disassembling this game's binary.
       the `[[section]].functions` TOML array N64Recomp's symbol file format
       expects.
 - [x] ROM identified and normalized (USA, `NBQE`, entry point `0x80071000`)
-      and a confirmed-clean 19KB resident code block found via splat — see
-      `STATUS.md` and `syms/rom_info.md`. This happened on the
-      reverse-engineering side (splat/Ghidra against the real ROM), tracked
-      in `STATUS.md`, separately from this file's build-system tracking.
+      — see `STATUS.md` and `syms/rom_info.md`.
+- [x] The correct ROM-to-RAM mapping (`vram - 0x80070000`, not the
+      `0x80000400` convention every early round assumed — see
+      `syms/rom_info.md`), found and verified after the wrong assumption
+      produced a months-long false "overlay loader" investigation (rounds
+      1-9) that round 10-12 resolved as a phantom entirely caused by the
+      bad mapping. No custom overlay system was ever found once the right
+      bytes were being read.
+- [x] 1310 real function-start addresses recovered across the whole first
+      automatically-loaded MB (ROM `0x1000`-`0x101000`) via splat/
+      spimdisasm under the corrected mapping — `syms/battletanx_ga_funcs_round11.txt`.
+      No sizes yet (see item 3), and this is likely only a fraction of the
+      full ~8MB ROM's functions.
+- [x] A good chunk of this ROM's own libultra/audio-library surface
+      auto-identified by name via `n64sym` (~480 matches — `osInitialize`,
+      `__osDisableInt`, the whole `Mus*`/`al*` audio library, etc.) — not
+      yet merged into a real symbol file, see item 4.
+      This happened on the reverse-engineering side (splat/n64sym against
+      the real ROM), tracked in `STATUS.md`, separately from this file's
+      build-system tracking.
 
 ## Blocking, needs more reverse engineering
 
-The ROM is in hand and splat now runs against it (see `STATUS.md`), but the
-bulk of the actual disassembly work is still ahead — the same scale of
-effort the original game's recomp needed (its symbol table alone runs
-~1700 lines), and current progress covers only ~19KB of what's an 8MB ROM.
+The ROM is in hand, the mapping is now correct, and splat runs against it
+cleanly (see `STATUS.md`) — but the bulk of the actual disassembly work is
+still ahead, the same scale of effort the original game's recomp needed
+(its symbol table alone runs ~1700 lines), and current progress covers
+~1MB of what's an 8MB ROM (a real fraction now, not a rounding error).
 
 1. ~~Identify the exact ROM revision~~ — done, see `syms/rom_info.md`.
-2. ~~Find the entrypoint and boot sequence~~ — entry point and the `crt0`
-   stub are confirmed (`STATUS.md`). The boot-timing race documented in
+2. ~~Find the entrypoint and boot sequence~~ — entry point, the correct
+   ROM-to-RAM mapping, and the `crt0` stub are all confirmed
+   (`STATUS.md` rounds 10-12). The boot-timing race documented in
    `patches/README.md` still needs locating in real disassembly before it
    can become a TOML patch entry, and it's not yet known whether Global
    Assault needs its own version of the original game's
    `stock_runtime_compat.cpp`-style shims (item 7 below) — that depends on
    code not yet reached.
-3. **Full function boundary list** — the actual blocker right now is
-   `STATUS.md`'s "overlay wall": code past the confirmed 19KB block isn't
-   reliably at the naive linear ROM offset, and splitting the rest of the
-   ROM depends on resolving that first. Once real function boundaries exist
-   for a section, `tools/symbols_to_n64recomp_toml.py` turns them into the
-   symbol table (`BattleTanxGASyms/battletanxga.us.rev0.syms.toml`)
-   N64Recomp needs.
-4. **libultra call identification** — which known OS functions (`osSp*`,
-   `osSi*`, `osInvalICache`, etc.) exist in the binary and at what
-   addresses, so they can be `renamed`/`ignored` in favor of librecomp's
-   implementations instead of being recompiled from the game's copy.
+3. **Full function boundary list** — 1310 addresses recovered for the
+   first MB (`syms/battletanx_ga_funcs_round11.txt`), but without exact
+   sizes (gaps between entries are only approximate) and covering only
+   ~1/8 of the ROM. Next: feed this list back into splat as
+   `symbol_addrs_path` seed points for a real, properly-bounded split (real
+   sizes, not gap-guesses), then extend the same corrected-header scan past
+   the first MB. Once sizes exist for a section, `tools/symbols_to_n64recomp_toml.py`
+   turns them into the symbol table
+   (`BattleTanxGASyms/battletanxga.us.rev0.syms.toml`) N64Recomp needs.
+4. **libultra call identification** — `n64sym` already found ~480 likely
+   matches (`STATUS.md` round 9) covering a good chunk of this. Remaining:
+   merge those into a real symbol file (cross-checked against the
+   round-11 function list, since n64sym's matches and the splat scan were
+   produced separately and haven't been reconciled against each other
+   yet), then figure out which of them need `renamed`/`ignored` treatment
+   in the N64Recomp config in favor of librecomp's own implementations.
 5. **Instruction-level patches** — every `cop0` write and `eret` needs a nop
    (nothing is emulated), and every `div`/`divu`/`ddiv`/`ddivu` needs the
    guarded hook version. The original project generated most of this
