@@ -3,6 +3,68 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 9: checked reference projects Matt pointed at -- a real methodology gap, and the right splat feature for the overlay slot
+
+Matt asked to check the original BattleTanx's recomp repo for reusable
+names, and separately pointed at
+[RevoSucks/BMHeroRecomp](https://github.com/RevoSucks/BMHeroRecomp)
+(Bomberman Hero) as an example of this toolchain done well. Both led
+somewhere more useful than literal names.
+
+**bdragoncore/battle-tanx-recomp has no game-specific names to borrow.**
+Checked its full symbol table: every non-generic name in it (`osCreateThread`,
+`sprintf`, `memcpy`, `cosf`, ~150 total) is a standard libultra/libc name,
+almost certainly auto-identified by a signature-matching tool rather than
+found by hand -- there is not one manually-named game-specific function
+(no `player_update`-style name anywhere). So there's nothing to transplant
+address-for-address (the two games don't share code layout anyway), but it
+pointed at the actual reusable thing: the *tool* that generates exactly
+that kind of match automatically.
+
+**Found and built that tool: `n64sym`** (https://github.com/shygoo/n64sym).
+Ships a built-in signature database covering OS 2.0c through 2.0L
+`libultra`/`libgultra`/`libleo`/`libnos`/audio libraries, matches them
+against a ROM by compiled-instruction signature (tolerant of relocations),
+and can emit results directly in splat's `symbol_addrs.txt` format. Built
+cleanly in this sandbox (`make n64sym`, plain g++/make, no special
+dependencies) and kicked off a thorough scan
+(`n64sym rom/battletanx_ga_usa.z64 -s -t -f splat -o ...`) against the GA
+ROM -- if this finds real matches, it should identify a good chunk of GA's
+own libultra surface automatically, the same way bdragoncore's ~150 names
+likely got found. Results not in yet as of this entry; check the next one.
+
+**BMHeroRecomp turned out to be a bigger methodological finding than
+expected: it's not a from-scratch reverse-engineering effort at all.**
+It's built on top of an existing, separate **full matching decompilation**
+project, [bomberhackers/bmhero](https://github.com/bomberhackers/bmhero)
+(splat + `asm-differ`, the standard N64 decomp workflow -- rewrite each
+function in C until it compiles back to byte-identical machine code),
+and only uses that decomp's headers/function definitions where needed for
+patches. That's a fundamentally stronger foundation than anything possible
+here: **no decompilation project exists for BattleTanx: Global Assault**
+(confirmed by the 2026-09-18 entry's own README research, and nothing
+found since contradicts that). So this project is necessarily doing the
+harder, lower-rigor tier of recomp -- closer to what
+`bdragoncore/battle-tanx-recomp` itself did (address+size symbols only,
+no matching decomp behind it) -- which is a real, previously-shipped
+approach, just slower and more error-prone without a full decomp's
+byte-level verification to catch mistakes. Worth being upfront about that
+gap rather than implying this project has BMHeroRecomp-level rigor.
+
+**The concretely useful part**: bomberhackers/bmhero's `splat.yaml` shows
+the correct splat feature for exactly the "fixed VRAM slot with swappable
+content" pattern round 8 (below) found for GA at `~0x800F81CC`:
+`exclusive_ram_id: overlay`. Multiple segments, each with a different ROM
+`start` but the *same* `vram`, tagged with a shared `exclusive_ram_id`,
+tell splat these are mutually-exclusive overlays sharing one VRAM window.
+Bomberman Hero has 59 such overlay segments across 8 distinct VRAM slots
+(the largest hosting 36 different overlays -- almost certainly one per
+level or actor type). This is the right target shape for GA's own
+`splat.yaml` once the loader/mapping table is found (round 8's queued next
+step: trace what writes into the `800F81CC` slot) -- convert whatever
+table is found into one `exclusive_ram_id: overlay` group per distinct
+VRAM destination, matching this pattern rather than inventing a new one.
+
 ## 2026-09-27, round 8: verified the transcribed leads directly against the ROM -- mixed results, but a real structural finding
 
 Went back to the ROM with splat/spimdisasm (confirmed working in this
