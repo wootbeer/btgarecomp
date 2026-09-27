@@ -1,0 +1,158 @@
+# Instruction patches for BattleTanx: Global Assault (USA), first-MB code only.
+# Generated 2026-09-27 (round 18) by scanning every trusted function in
+# BattleTanxGASyms/battletanxga.us.rev0.syms.toml for cop0 writes and eret
+# (nothing is emulated -- nop both) and div/divu/ddiv/ddivu (needs the guarded
+# hook version, not a simple nop -- see the separate list below and
+# bdragoncore/battle-tanx-recomp's battletanx.us.rev0.toml for the hook pattern
+# this project hasn't written its own equivalent of yet).
+
+[[patches.instruction]]
+func = "func_800788E8"
+vram = 0x80078ce0
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osExceptionPreamble"
+vram = 0x80078d18
+value = 0x00000000
+
+[[patches.instruction]]
+func = "func_80078E40"
+vram = 0x80078e40
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osException"
+vram = 0x80078f50
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osException"
+vram = 0x80078f5c
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osException"
+vram = 0x80078f64
+value = 0x00000000
+
+[[patches.instruction]]
+func = "func_8007919C"
+vram = 0x80079220
+value = 0x00000000
+
+[[patches.instruction]]
+func = "func_8007919C"
+vram = 0x80079250
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osException_80104FB0"
+vram = 0x80104fcc
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osException_80104FB0"
+vram = 0x80105204
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osException_80104FB0"
+vram = 0x80105418
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osException_80104FB0"
+vram = 0x80105438
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osDispatchThread"
+vram = 0x80105770
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osDispatchThread"
+vram = 0x801057fc
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osDisableInt"
+vram = 0x80105dbc
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osRestoreInt"
+vram = 0x80105dd8
+value = 0x00000000
+
+[[patches.instruction]]
+func = "osMapTLBRdb"
+vram = 0x80107eb8
+value = 0x00000000
+
+[[patches.instruction]]
+func = "osMapTLBRdb"
+vram = 0x80107ebc
+value = 0x00000000
+
+[[patches.instruction]]
+func = "osMapTLBRdb"
+vram = 0x80107ec8
+value = 0x00000000
+
+[[patches.instruction]]
+func = "osMapTLBRdb"
+vram = 0x80107ed8
+value = 0x00000000
+
+[[patches.instruction]]
+func = "osMapTLBRdb"
+vram = 0x80107ee0
+value = 0x00000000
+
+[[patches.instruction]]
+func = "osMapTLBRdb"
+vram = 0x80107efc
+value = 0x00000000
+
+[[patches.instruction]]
+func = "osSetIntMask"
+vram = 0x8010f97c
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osSetSR"
+vram = 0x8010f990
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osSetCompare"
+vram = 0x80111320
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osProbeTLB"
+vram = 0x80111964
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osProbeTLB"
+vram = 0x801119fc
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osException"
+vram = 0x800790a8
+value = 0x00000000
+
+[[patches.instruction]]
+func = "func_8007919C"
+vram = 0x8007925c
+value = 0x00000000
+
+[[patches.instruction]]
+func = "__osDispatchThread"
+vram = 0x8010589c
+value = 0x00000000
+

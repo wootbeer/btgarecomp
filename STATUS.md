@@ -3,6 +3,45 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 18: generated the instruction-level patches N64Recomp's config needs -- cop0/eret nops and guarded div hooks, for real addresses this time
+
+With a trusted, sized symbol table in hand (round 14), did the mechanical
+scan `bdragoncore/battle-tanx-recomp`'s own config comments describe as
+needed: every `cop0` write and `eret` needs a nop (nothing is emulated),
+every `div`/`divu`/`ddiv`/`ddivu` needs a guarded hook instead of running
+raw (a real divide-by-zero in the game would otherwise be a host
+`SIGFPE`). Decoded these directly from each trusted function's raw
+instruction words (same technique as every raw-byte scan this session):
+
+- 27 `mtc0` (cop0 write) instructions, 3 `eret` -- all in places that make
+  complete sense (`__osException`, `__osDispatchThread`, `osMapTLBRdb`,
+  `__osDisableInt`/`__osRestoreInt`), which is itself a good sign the
+  underlying symbol table holds up.
+- 101 divisions: 62 `div`, 30 `divu`, 3 `ddiv`, 6 `ddivu`.
+
+Generated real `[[patches.instruction]]` entries for the cop0/eret nops
+(`BattleTanxGASyms/battletanxga.us.rev0.instruction_patches.toml`) and
+`[[patches.hook]]` entries with the guarded division C for all 101 divides
+(`BattleTanxGASyms/battletanxga.us.rev0.div_hooks.toml`), decoding each
+instruction's actual `rs`/`rt` operands so the hook text references the
+right `ctx->rN` registers rather than being copy-pasted boilerplate.
+
+**Caveat on the div hooks**: the `div`/`divu` (32-bit) hook text exactly
+mirrors a confirmed-real pattern from `bdragoncore/battle-tanx-recomp`'s
+own config. The `ddiv`/`ddivu` (64-bit) hooks are this project's own
+extrapolation -- no 64-bit division example existed in the reference to
+confirm the exact syntax/available macros against. Marked inline in the
+file; verify before trusting those 9 specifically.
+
+**Not done yet**: `stubs`/`ignored`/`renamed` (which of the ~430
+n64sym-identified functions should defer to librecomp's own
+implementations instead of being recompiled from this game's copy) needs
+real knowledge of librecomp's exact API surface to get right -- guessing
+here risks silently wrong config rather than an honest gap, so left for
+when that can be checked properly rather than fabricated. Same for the
+main `battletanxga.us.rev0.toml` `[input]`/full config file itself, which
+these two files are pieces of but don't yet assemble into.
+
 ## 2026-09-27, round 17: tested the "code mostly fits in the first MB" hypothesis directly against the second MB -- confirmed. This changes what "finishing the RE" even means for this project.
 
 Round 16 ended on a hypothesis rather than a fact: no evidence of code

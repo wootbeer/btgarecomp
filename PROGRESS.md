@@ -92,12 +92,15 @@ well-trodden, mechanical problems compared to open-ended disassembly).
    favor of librecomp's own implementations (most should — that's the
    whole point of identifying them), and extend identification to
    whatever's found once the scan covers more of the ROM.
-5. **Instruction-level patches** — every `cop0` write and `eret` needs a nop
-   (nothing is emulated), and every `div`/`divu`/`ddiv`/`ddivu` needs the
-   guarded hook version. The original project generated most of this
-   mechanically from the ROM + symbol table; that generator script wasn't
-   published in the reference repo, so either write an equivalent against
-   this ROM or find each one by hand/disassembler search.
+5. ~~Instruction-level patches~~ — done for the first-MB code: 27 cop0
+   nops, 3 eret nops
+   (`BattleTanxGASyms/battletanxga.us.rev0.instruction_patches.toml`), and
+   101 guarded division hooks
+   (`BattleTanxGASyms/battletanxga.us.rev0.div_hooks.toml`) — written by
+   an equivalent of the original project's unpublished generator, built
+   against this ROM directly (`STATUS.md` round 18). The 9 ddiv/ddivu
+   hooks are an unverified extrapolation (no reference example existed for
+   64-bit division) — check those specifically before trusting them.
 6. **RSP microcode identification** — which F3DEX/audio microcode
    variant(s) Global Assault ships (hash them and check against RT64's and
    N64ModernRuntime's known microcode tables), and whether the checked-in
