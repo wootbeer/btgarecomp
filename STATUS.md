@@ -3,6 +3,37 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 16: closed out the "does code reach outside the first MB" question -- no evidence found, likely because there isn't any (yet)
+
+Checked the rest of round 14's 71 remaining suspects. The large ones
+(several 0x2000-0x5000 bytes) turned out to be a third category, not
+gap-guessed code: raw bytes at the top few (`func_80164CC4`,
+`func_8014CFE4`, `func_80160E58`) are the exact same dense repeating-
+nibble pattern (`0x63196319`, `0x5AD75AD7`, ...) round 7 originally
+flagged as texture/asset data -- not code, not microcode, just ordinary
+non-code asset bytes that happened to fall between two known symbols with
+nothing splat or n64sym recognized in between.
+
+Checked the small ones (`<=0x200` bytes, the ones most likely to be real
+functions with a real external call) individually. All their out-of-range
+`j`/`jal`-shaped targets are either suspiciously round addresses
+(`0x88000000`, `0x88080000`, `0x8c000000` -- multiples that don't occur in
+real code, a signature of a false opcode match against data/padding) or
+single isolated one-off hits with no corroborating pattern. None read as
+a real call to real code outside the segment.
+
+**Conclusion**: nothing in the first MB's function table -- trusted or
+suspect -- shows genuine evidence of code reaching past
+`0x80171000`. Combined with rounds 14-15's findings (the suspicious
+regions were RSP microcode, a dispatch data table, and plain asset data,
+not further code), the most likely explanation is simply that this game's
+actual CPU code footprint mostly fits in the first automatically-loaded
+MB, with the remaining ~7MB being predominantly assets (textures, audio,
+level data) -- not proof, but the working hypothesis until the rest of the
+ROM is actually scanned. That scan -- extending the same corrected-header
+splat pass past `0x101000` -- is the natural next step now that this
+question has a real answer instead of an open loop.
+
 ## 2026-09-27, round 15: found a real dispatch-table data structure inside round 14's "suspect" pile; it's the first concrete trace of the message/event dispatcher the 2026-09-19 screenshots hypothesized
 
 Looked closer at round 14's 123 suspect entries rather than treating them
