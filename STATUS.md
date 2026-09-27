@@ -3,6 +3,145 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 21: first clean N64Recomp run -- `N64Recomp battletanxga.us.rev0.toml` exits 0
+
+The big one. Round 20 produced a well-formed config; this round is the
+whole debugging loop of actually running it against real `N64Recomp` until
+it stopped erroring, function by function. Ends with exit code 0, 1288
+functions, 27 output `.c`/`.h` files in `RecompiledFuncs/` (gitignored, not
+committed -- regenerate with `N64Recomp battletanxga.us.rev0.toml` from the
+repo root once the ROM is in place). Every fix below is applied to
+`battletanxga.us.rev0.toml`, `BattleTanxGASyms/battletanxga.us.rev0.syms.toml`,
+and the two source `BattleTanxGASyms/*.toml` pieces it's assembled from.
+
+Fixed, roughly in the order N64Recomp's own errors surfaced them:
+
+1. **The whole `[patches] ignored`/`renamed` list from round 19 was
+   redundant and actively broke the build.** N64Recomp has its own
+   built-in `reimplemented_funcs`/`ignored_funcs`/`renamed_funcs` lists
+   (`src/symbol_lists.cpp`, ~440 names) that it applies to matching
+   functions *before* it even reads the config's own ignored/renamed
+   lists, renaming them to `name_recomp`. Listing a name in both places
+   caused "Function X is set as ignored in the config file but does not
+   exist!" (it had already been renamed by the time the config-driven
+   pass ran). Diffed our 71 names against N64Recomp's built-in set: all
+   71 overlap, 0 remaining that need declaring ourselves. Deleted that
+   whole section. Any instruction patch or hook targeting one of those 71
+   names needed its `func` updated to `name_recomp` to match.
+2. **`__libm_qnan_f`** (in the trusted function list from n64sym) turned
+   out to be a libm quiet-NaN float *data* constant, not a function ("Unhandled
+   instruction: INVALID" trying to disassemble it as MIPS). Removed.
+3. **`sync` and `cache`**: N64Recomp's recompiler doesn't implement either
+   instruction at all. Nopped every real occurrence (`sync`: 4 icache/
+   dcache-init loops; `cache`: 2 more of the same -- the other `cache`
+   users, `osInvalDCache`/`osInvalICache`/`osWritebackDCache*`, are in
+   N64Recomp's built-in `reimplemented_funcs`, so their bodies are never
+   recompiled at all and don't need patches). Finding the real `sync`
+   instructions needed a slightly non-obvious scan: its encoding allows a
+   nonzero "stype" hint in bits that a naive all-zero-word search would
+   miss (confirmed against capstone's decode of the real bytes).
+4. **`mfc0`/`mtc0` for anything but cop0 register 12 (Status)**: N64Recomp
+   only implements register 12. Everything else ("Unhandled cop0 register
+   in mfc0/mtc0: N") is exception-vector dead code under a recompiled
+   runtime (EPC/Cause/ErrorEPC reads and writes, and one function that
+   dumps every single cop0 register as part of an exception-context save)
+   -- nopped 27 mtc0 + 3 eret (round 18) + 41 more mfc0 (this round). Two
+   whole functions (`func_8007919C`, `func_80079260`) and a second
+   exception-dispatcher copy (`__osException_80104FB0`) had unconditional
+   jumps INTO other functions' interiors that no per-function static
+   recompiler can handle ("Unhandled branch ... to <mid-function
+   address>") -- stubbed all three outright (`[patches] stubs`) rather
+   than patching every individual instruction, since none of it can ever
+   run under the recompiled runtime anyway.
+5. **`movz`/`movn`, trap instructions (`tltu`/`tgeu`), `dmtc0`, `jalr`
+   with a non-`$ra` link register**: none of these are implemented by
+   N64Recomp's recompiler. `tltu`/`tgeu` were two genuine compiler-inserted
+   assertion checks (nopped, safe -- they only ever fire on a bug). Every
+   `movz`/`movn`/`dmtc0`/degenerate-`jalr` occurrence turned out to be a
+   **data misdecode**, not real code (see next point).
+6. **The recurring pattern, by far the most work this round: gap-guessed
+   function sizes swallowing whatever came after the real code.** Round
+   14's splat-based sizing used "distance to the next known symbol" as a
+   function's size, which is only right when nothing sits between two
+   real functions. In practice there's often a short string constant, a
+   float/jump-table literal pool, or (worse) a completely separate second
+   function packed into that same gap. N64Recomp's recompiler disassembles
+   a function's *entire* declared byte range, so any of that trailing
+   junk being mistaken for code is fatal the moment it decodes into
+   something N64Recomp can't handle (or, worse, into something that
+   parses as a *plausible-looking but nonsensical* instruction --
+   `movn $zero, $zero, ...`, `jalr $zero, $zero`, `j 0x8C000000`, a branch
+   whose computed target lands outside this ROM's entire loaded segment --
+   which a simple "is this a valid MIPS word" check doesn't catch).
+   Resolved ~30 functions this way, in three shapes:
+     - **Pure trailing junk, no real second function**: truncate the
+       function's size to end right after its own last real `jr $ra`
+       return (confirmed by direct disassembly with `rabbitizer`, the
+       same MIPS decoder N64Recomp itself uses -- `pip install
+       rabbitizer`). ~20 functions (`func_80089E84`, `func_8008A8C4`,
+       `func_800A9B64`, `func_800D84DC`, `func_800EAF6C`, `func_800EFC28`,
+       `func_800F28AC`, `func_80113E30`, `func_800EA14C`, `func_800CAE10`
+       -- this last one the other direction, undershooting by 0x18 bytes
+       and cutting off a shared switch-statement epilogue several branches
+       target -- and more).
+     - **A real second function hiding in the same declared range**:
+       split into two symbols, e.g. `func_800E16D8`/`func_800E1BB0`,
+       `func_800F38C0`/`func_800F3B80`, `func_800F1770`/`func_800F17B0`,
+       `func_800F6650`/`func_800F6C70`, `func_80099784`/`func_80099830`.
+       Any instruction patch or hook whose target address moved into the
+       second half needed its `func` reference updated.
+     - **A handful of ~2-20 byte entries that were entirely fake** --
+       n64sym or the round-11 gap scan produced a "function" at an
+       address that's actually a pure ASCII string (`func_8011A3F0`,
+       `func_8011A484`, `func_8011A4C0` -- literally in-game UI text like
+       "Select one Button..." and "...fire All..."), a plain data
+       variable (`osViClock`, `__OSGlobalIntMask`, `__osPiAccessQueueEnabled`
+       -- real libultra names, but for globals, not functions), or a
+       pointer/dispatch table indistinguishable from the round-15 one at
+       0x8011a8 (`func_80119628`, `func_8011A5F0`, both in the same
+       0x8011axxx-0x8011bxxx neighborhood). Deleted outright.
+7. **Missing functions in gaps our round-11 scan never generated a symbol
+   for at all** (not a sizing problem -- no entry existed there). Found
+   two ways: (a) reactively, from N64Recomp's own `static_0_<addr>`
+   auto-analysis when something's `jal` target had no name
+   (`func_8007E118`, `func_800A10E0`, `func_800B95C8`/`func_800B99AC`,
+   `func_80114470`); (b) proactively, once the pattern was clear enough to
+   be worth automating -- swept every gap between two consecutive known
+   functions for a clean, valid instruction run ending in a real `jr $ra`
+   before waiting for N64Recomp to trip over it (`func_800BB53C`/
+   `func_800BBDC0`, `func_800D0070`, `func_800DEEDC`, `func_800EC778`,
+   `func_800F1900`). The proactive sweep needed the branch/jump-target
+   plausibility check from point 6 (a `j`/branch to an address outside
+   this ROM's own 0x80070000-0x80180000 loaded segment is data, not a
+   real control-flow edge) to avoid false negatives.
+8. **`n_alEnvmixerPull` stubbed, not fixed**: N64Recomp's static analysis
+   couldn't determine the size of a computed jump table this function
+   uses ("Failed to determine size of jump table at 0x80077720 for
+   instruction at 0x80100120" -- the table isn't in this function's own
+   byte range, which the analysis requires). This is CPU-side audio
+   envelope-mixing code (the software counterpart to the RSP audio
+   microcode's own mixing). Stubbed to unblock the build; unlike
+   everything else stubbed this round, this one is **not** known-dead
+   code and needs real attention once audio is being worked on (item 6 in
+   PROGRESS.md).
+
+Net effect on the symbol table: started this round at 1321 trusted
+functions (post round-14), ended at 1288 (many 1:1 replacements from
+splits, net loses from the outright-fake deletions, net gains from the
+newly-found missing functions -- see `git diff` on
+`BattleTanxGASyms/battletanxga.us.rev0.syms.toml` for the exact set).
+
+**Tooling note for next time**: `pip install rabbitizer` gives Python
+bindings for the *exact* MIPS decoder N64Recomp itself uses
+(`rabbitizer.Instruction(word).isValid()`, `.getOpcodeName()`,
+`.disassemble()`) -- far more reliable for this kind of validation than
+`capstone`, which is more lenient and both missed real problems (e.g. it
+happily decoded a `madd` where rabbitizer correctly said `INVALID`, since
+VR4300 doesn't have `madd`) and shares the "syntactically valid but
+nonsensical" blind spot for data that happens to decode as some real
+instruction. Any future symbol-table cleanup should validate against
+rabbitizer specifically, not capstone.
+
 ## 2026-09-27, round 20: assembled the real battletanxga.us.rev0.toml -- this project has an actual N64Recomp config file for the first time
 
 Merged rounds 13-19's pieces (the symbol table, the 71-entry ignored/

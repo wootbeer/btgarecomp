@@ -50,6 +50,21 @@ found again from scratch by disassembling this game's binary.
       `[[patches.instruction]]` (30 cop0/eret nops), `[[patches.hook]]`
       (101 division guards). The first time this project has had an
       actual config file to hand N64Recomp, not just pieces of one.
+- [x] **`N64Recomp battletanxga.us.rev0.toml` runs clean — exit code 0,
+      1288 functions, 27 output files** (round 21). This took a full
+      debugging pass against the real tool: dropped the whole
+      ignored/renamed list (redundant with N64Recomp's own built-in
+      one and actively broke the build), nopped several more
+      unhandled-instruction classes (`sync`, `cache`, most `mfc0`/`mtc0`,
+      two stray trap instructions), stubbed three dead exception-vector
+      functions and one real-but-not-yet-supported audio function
+      (`n_alEnvmixerPull`), and — the bulk of the work — found and fixed
+      ~30 function-boundary bugs where a gap-guessed size had swallowed
+      trailing string/table data or an entire second function, plus 8
+      functions missing from the symbol table entirely. Full breakdown in
+      `STATUS.md` round 21. `RecompiledFuncs/` isn't committed (gitignored,
+      build output) — regenerate with `N64Recomp battletanxga.us.rev0.toml`
+      from the repo root once the ROM is present locally.
 
 ## Blocking, needs more reverse engineering
 
@@ -79,22 +94,28 @@ well-trodden, mechanical problems compared to open-ended disassembly).
    Assault needs its own version of the original game's
    `stock_runtime_compat.cpp`-style shims (item 7 below) — that depends on
    code not yet reached.
-3. ~~Full function boundary list (first MB)~~ — mostly done for what
-   matters: 1321 code entries with real (gap-derived) sizes in
+3. ~~Full function boundary list (first MB)~~ — 1288 code entries in
    `BattleTanxGASyms/battletanxga.us.rev0.syms.toml`, the actual format
-   N64Recomp expects (`STATUS.md` rounds 13-14), covering essentially all
-   of this game's actual code (round 17 — the rest of the ROM is asset
-   data, not more functions to find). 71 entries
-   (`syms/battletanx_ga_funcs_suspect.txt`) are still unresolved gap-guess
-   artifacts; 52 more were identified as a real dispatch-table data
-   structure (`syms/battletanx_ga_data_table_0x8011a8.txt`, round 15) and
-   correctly excluded rather than miscounted as functions. Still needed:
-   properly re-split the 71 remaining suspects (bounded probing like round
-   8, now under the correct header) — mostly for completeness at this
-   point, not because anything suggests they hide new code elsewhere — and
-   spot-check a sample of the trusted entries against real disassembly,
-   since sizes are still gap-derived rather than independently confirmed
-   one by one.
+   N64Recomp expects, covering essentially all of this game's actual code
+   (round 17 — the rest of the ROM is asset data, not more functions to
+   find). This has now been validated the way that matters most: every
+   single one of these entries' bytes decodes and recompiles cleanly
+   through the real `N64Recomp` tool (round 21), not just a heuristic
+   disassembler check. Round 21 fixed ~30 boundary bugs (gap-guessed sizes
+   that had swallowed trailing data or a whole second function) and added
+   8 functions that were missing from the table entirely — see `STATUS.md`
+   round 21 for the full list and how each was found. 52 entries were
+   identified as a real dispatch-table data structure
+   (`syms/battletanx_ga_data_table_0x8011a8.txt`, round 15) and correctly
+   excluded rather than miscounted as functions. Remaining rough edges,
+   real but no longer blocking: sizes are still mostly gap-derived (just
+   independently confirmed to at least be *valid, self-consistent* code
+   now) rather than checked one-by-one against a full manual
+   disassembly, and it's not yet known whether any of the ~30
+   round-21 fixes changed real behavior versus just satisfying the
+   recompiler (the guarded-division hooks in particular deserve a
+   second look now that a couple of the functions they were attached to
+   turned out to be data, not code — see round 21's point 6).
 4. ~~libultra call identification~~ — done for the first MB: 430 function
    entries carry n64sym's real name, and 71 of those are confirmed
    (cross-referenced directly against `N64ModernRuntime`'s

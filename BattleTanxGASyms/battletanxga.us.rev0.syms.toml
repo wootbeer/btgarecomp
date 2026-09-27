@@ -29,7 +29,12 @@ vram = 0x80071000
 size = 0x100000
 
 functions = [
-    { name = "__libm_qnan_f", vram = 0x80077930, size = 0x10 },
+    { name = "func_80071000", vram = 0x80071000, size = 0x38 }, # crt0 entrypoint, real size confirmed round 10 manual decode
+    # __libm_qnan_f (was here, vram 0x80077930 size 0x10) removed round 21 --
+    # it's a libm quiet-NaN float DATA constant (bytes 7f81000000000000...,
+    # not valid MIPS), not a function; n64sym's signature match was for the
+    # constant's bytes, not a callable routine. N64Recomp choked trying to
+    # disassemble it ("Unhandled instruction: INVALID"). See STATUS.md round 21.
     { name = "func_80077C40", vram = 0x80077c40, size = 0x38 },
     { name = "func_80077C78", vram = 0x80077c78, size = 0x30 },
     { name = "func_80077CA8", vram = 0x80077ca8, size = 0x38 },
@@ -56,15 +61,15 @@ functions = [
     { name = "func_80078E40", vram = 0x80078e40, size = 0xc },
     { name = "__osException", vram = 0x80078e4c, size = 0x350 },
     { name = "func_8007919C", vram = 0x8007919c, size = 0xc4 },
-    { name = "func_80079260", vram = 0x80079260, size = 0x310 },
+    { name = "func_80079260", vram = 0x80079260, size = 0x304 },
     { name = "func_80079570", vram = 0x80079570, size = 0x180 },
     { name = "func_800796F0", vram = 0x800796f0, size = 0x278 },
-    { name = "func_80079968", vram = 0x80079968, size = 0x298 },
+    { name = "func_80079968", vram = 0x80079968, size = 0x290 },
     { name = "func_80079C00", vram = 0x80079c00, size = 0xb8 },
     { name = "func_80079CB8", vram = 0x80079cb8, size = 0x338 },
     { name = "func_80079FF0", vram = 0x80079ff0, size = 0xb0 },
     { name = "func_8007A0A0", vram = 0x8007a0a0, size = 0x1b0 },
-    { name = "func_8007A250", vram = 0x8007a250, size = 0x4c0 },
+    { name = "func_8007A250", vram = 0x8007a250, size = 0x4b4 },
     { name = "func_8007A710", vram = 0x8007a710, size = 0x10 },
     { name = "func_8007A720", vram = 0x8007a720, size = 0xf8 },
     { name = "func_8007A818", vram = 0x8007a818, size = 0xd8 },
@@ -87,7 +92,7 @@ functions = [
     { name = "func_8007B1F0", vram = 0x8007b1f0, size = 0x2a8 },
     { name = "func_8007B498", vram = 0x8007b498, size = 0x1c4 },
     { name = "func_8007B65C", vram = 0x8007b65c, size = 0x290 },
-    { name = "func_8007B8EC", vram = 0x8007b8ec, size = 0x404 },
+    { name = "func_8007B8EC", vram = 0x8007b8ec, size = 0x400 },
     { name = "func_8007BCF0", vram = 0x8007bcf0, size = 0x10c },
     { name = "func_8007BDFC", vram = 0x8007bdfc, size = 0xf4 },
     { name = "func_8007BEF0", vram = 0x8007bef0, size = 0x474 },
@@ -116,6 +121,16 @@ functions = [
     { name = "func_8007DE3C", vram = 0x8007de3c, size = 0x164 },
     { name = "func_8007DFA0", vram = 0x8007dfa0, size = 0x84 },
     { name = "func_8007E024", vram = 0x8007e024, size = 0xf4 },
+    # round 21: func_8007E118 was missing from this table entirely -- found
+    # only because N64Recomp's own analysis followed a `jal 0x8007e118` from
+    # elsewhere, auto-generated a "static_0_8007E118" for the unnamed target,
+    # and walked straight off the end of its real body (this one's own
+    # clean jr $ra return at 0x8007e15c) into 4 words of data, hitting a
+    # `j 0x8C000000` -- an address far outside any valid N64 RAM range,
+    # confirming it's a data misdecode, not a tail call ("Unhandled branch
+    # in static_0_8007E118"). Real function confirmed by direct disassembly:
+    # proper prologue, two real jal calls, clean return.
+    { name = "func_8007E118", vram = 0x8007e118, size = 0x48 },
     { name = "func_8007E170", vram = 0x8007e170, size = 0x8c },
     { name = "func_8007E1FC", vram = 0x8007e1fc, size = 0x14 },
     { name = "func_8007E210", vram = 0x8007e210, size = 0xc4 },
@@ -133,7 +148,7 @@ functions = [
     { name = "func_80080110", vram = 0x80080110, size = 0x708 },
     { name = "func_80080818", vram = 0x80080818, size = 0x9c },
     { name = "func_800808B4", vram = 0x800808b4, size = 0x6c },
-    { name = "func_80080920", vram = 0x80080920, size = 0x2a0 },
+    { name = "func_80080920", vram = 0x80080920, size = 0x29c },
     { name = "func_80080BC0", vram = 0x80080bc0, size = 0x44 },
     { name = "func_80080C04", vram = 0x80080c04, size = 0xc4 },
     { name = "func_80080CC8", vram = 0x80080cc8, size = 0xb1c },
@@ -147,10 +162,10 @@ functions = [
     { name = "func_80082560", vram = 0x80082560, size = 0x12c },
     { name = "func_8008268C", vram = 0x8008268c, size = 0x1a8 },
     { name = "func_80082834", vram = 0x80082834, size = 0x3c },
-    { name = "func_80082870", vram = 0x80082870, size = 0x220 },
+    { name = "func_80082870", vram = 0x80082870, size = 0x214 },
     { name = "func_80082A90", vram = 0x80082a90, size = 0xb0 },
     { name = "func_80082B40", vram = 0x80082b40, size = 0x94 },
-    { name = "func_80082BD4", vram = 0x80082bd4, size = 0x13c },
+    { name = "func_80082BD4", vram = 0x80082bd4, size = 0x134 },
     { name = "func_80082D10", vram = 0x80082d10, size = 0x50 },
     { name = "func_80082D60", vram = 0x80082d60, size = 0x38 },
     { name = "func_80082D98", vram = 0x80082d98, size = 0x184 },
@@ -200,7 +215,7 @@ functions = [
     { name = "func_8008616C", vram = 0x8008616c, size = 0x24 },
     { name = "func_80086190", vram = 0x80086190, size = 0x78 },
     { name = "func_80086208", vram = 0x80086208, size = 0x358 },
-    { name = "func_80086560", vram = 0x80086560, size = 0x1a0 },
+    { name = "func_80086560", vram = 0x80086560, size = 0x144 },
     { name = "func_80086700", vram = 0x80086700, size = 0x140 },
     { name = "func_80086840", vram = 0x80086840, size = 0x1e0 },
     { name = "func_80086A20", vram = 0x80086a20, size = 0x5d4 },
@@ -235,19 +250,19 @@ functions = [
     { name = "func_80089094", vram = 0x80089094, size = 0x54 },
     { name = "func_800890E8", vram = 0x800890e8, size = 0x6c },
     { name = "func_80089154", vram = 0x80089154, size = 0xac },
-    { name = "func_80089200", vram = 0x80089200, size = 0x410 },
+    { name = "func_80089200", vram = 0x80089200, size = 0x40c },
     { name = "func_80089610", vram = 0x80089610, size = 0x74 },
     { name = "func_80089684", vram = 0x80089684, size = 0x60c },
     { name = "func_80089C90", vram = 0x80089c90, size = 0x108 },
     { name = "func_80089D98", vram = 0x80089d98, size = 0x24 },
     { name = "func_80089DBC", vram = 0x80089dbc, size = 0x64 },
     { name = "alSynDelete", vram = 0x80089e20, size = 0x64 },
-    { name = "func_80089E84", vram = 0x80089e84, size = 0xbc },
+    { name = "func_80089E84", vram = 0x80089e84, size = 0xb4 },
     { name = "func_80089F40", vram = 0x80089f40, size = 0x264 },
     { name = "func_8008A1A4", vram = 0x8008a1a4, size = 0x254 },
     { name = "func_8008A3F8", vram = 0x8008a3f8, size = 0x234 },
     { name = "func_8008A62C", vram = 0x8008a62c, size = 0x298 },
-    { name = "func_8008A8C4", vram = 0x8008a8c4, size = 0x4bc },
+    { name = "func_8008A8C4", vram = 0x8008a8c4, size = 0x4b8 },
     { name = "func_8008AD80", vram = 0x8008ad80, size = 0x84 },
     { name = "func_8008AE04", vram = 0x8008ae04, size = 0x8cc },
     { name = "func_8008B6D0", vram = 0x8008b6d0, size = 0x15c },
@@ -342,7 +357,16 @@ functions = [
     { name = "func_80099534", vram = 0x80099534, size = 0x190 },
     { name = "func_800996C4", vram = 0x800996c4, size = 0x94 },
     { name = "func_80099758", vram = 0x80099758, size = 0x2c },
-    { name = "func_80099784", vram = 0x80099784, size = 0x124 },
+    { name = "func_80099784", vram = 0x80099784, size = 0xa0 },
+    # round 21: same split-function pattern, but the "invalid" marker this
+    # time is a `movn $zero, $zero, $s0` at 0x80099828 -- syntactically valid
+    # per rabbitizer, but writing to $zero is functionally meaningless for
+    # real compiled code (and N64Recomp's recompiler doesn't implement
+    # movz/movn at all -- the VR4300 doesn't have them either -- "Unhandled
+    # instruction: movn"), so it's data, not a real instruction. Two words of
+    # data at 0x80099828-0x80099830, then a second function resumes cleanly
+    # at 0x80099830 and runs to the original gap-guessed end (0x800998a8).
+    { name = "func_80099830", vram = 0x80099830, size = 0x78 },
     { name = "func_800998A8", vram = 0x800998a8, size = 0x40 },
     { name = "func_800998E8", vram = 0x800998e8, size = 0x700 },
     { name = "func_80099FE8", vram = 0x80099fe8, size = 0x4e0 },
@@ -360,7 +384,7 @@ functions = [
     { name = "func_8009C524", vram = 0x8009c524, size = 0xc20 },
     { name = "func_8009D144", vram = 0x8009d144, size = 0x24 },
     { name = "func_8009D168", vram = 0x8009d168, size = 0x64 },
-    { name = "func_8009D1CC", vram = 0x8009d1cc, size = 0xa4 },
+    { name = "func_8009D1CC", vram = 0x8009d1cc, size = 0x9c },
     { name = "func_8009D270", vram = 0x8009d270, size = 0x134 },
     { name = "func_8009D3A4", vram = 0x8009d3a4, size = 0x10c },
     { name = "func_8009D4B0", vram = 0x8009d4b0, size = 0x60 },
@@ -390,9 +414,9 @@ functions = [
     { name = "func_8009E948", vram = 0x8009e948, size = 0x80 },
     { name = "func_8009E9C8", vram = 0x8009e9c8, size = 0x1a0 },
     { name = "func_8009EB68", vram = 0x8009eb68, size = 0xa4 },
-    { name = "func_8009EC0C", vram = 0x8009ec0c, size = 0xf4 },
+    { name = "func_8009EC0C", vram = 0x8009ec0c, size = 0xe8 },
     { name = "func_8009ED00", vram = 0x8009ed00, size = 0x9c },
-    { name = "func_8009ED9C", vram = 0x8009ed9c, size = 0x144 },
+    { name = "func_8009ED9C", vram = 0x8009ed9c, size = 0x13c },
     { name = "func_8009EEE0", vram = 0x8009eee0, size = 0x50 },
     { name = "func_8009EF30", vram = 0x8009ef30, size = 0x1c },
     { name = "func_8009EF4C", vram = 0x8009ef4c, size = 0x88 },
@@ -411,7 +435,7 @@ functions = [
     { name = "func_8009FB68", vram = 0x8009fb68, size = 0x164 },
     { name = "func_8009FCCC", vram = 0x8009fccc, size = 0x250 },
     { name = "func_8009FF1C", vram = 0x8009ff1c, size = 0x9c },
-    { name = "func_8009FFB8", vram = 0x8009ffb8, size = 0x798 },
+    { name = "func_8009FFB8", vram = 0x8009ffb8, size = 0x78c },
     { name = "func_800A0750", vram = 0x800a0750, size = 0x1c8 },
     { name = "func_800A0918", vram = 0x800a0918, size = 0x50 },
     { name = "func_800A0968", vram = 0x800a0968, size = 0xec },
@@ -420,6 +444,13 @@ functions = [
     { name = "func_800A0E00", vram = 0x800a0e00, size = 0x240 },
     { name = "func_800A1040", vram = 0x800a1040, size = 0x50 },
     { name = "func_800A1090", vram = 0x800a1090, size = 0x50 },
+    # round 21: same missing-function pattern as func_8007E118 above --
+    # found via N64Recomp's own "static_0_800A10E0" auto-analysis of an
+    # unnamed jal target, which walked off this one's real jr $ra return
+    # (0x800a113c/0x800a1140) into a `j 0x8C000000` data misdecode
+    # immediately after. Fills the gap exactly between this function and
+    # func_800A1150 with no overlap.
+    { name = "func_800A10E0", vram = 0x800a10e0, size = 0x64 },
     { name = "func_800A1150", vram = 0x800a1150, size = 0x130 },
     { name = "__CallBackDmaNew", vram = 0x800a1280, size = 0xcc },
     { name = "func_800A134C", vram = 0x800a134c, size = 0x38 },
@@ -458,7 +489,7 @@ functions = [
     { name = "func_800A6B38", vram = 0x800a6b38, size = 0x24 },
     { name = "func_800A6B5C", vram = 0x800a6b5c, size = 0x20 },
     { name = "func_800A6B7C", vram = 0x800a6b7c, size = 0x514 },
-    { name = "func_800A7090", vram = 0x800a7090, size = 0x230 },
+    { name = "func_800A7090", vram = 0x800a7090, size = 0x1fc },
     { name = "func_800A72C0", vram = 0x800a72c0, size = 0x3a4 },
     { name = "func_800A7664", vram = 0x800a7664, size = 0x144 },
     { name = "func_800A77A8", vram = 0x800a77a8, size = 0x5c8 },
@@ -487,7 +518,7 @@ functions = [
     { name = "func_800A9928", vram = 0x800a9928, size = 0x11c },
     { name = "func_800A9A44", vram = 0x800a9a44, size = 0x54 },
     { name = "func_800A9A98", vram = 0x800a9a98, size = 0xcc },
-    { name = "func_800A9B64", vram = 0x800a9b64, size = 0x8c },
+    { name = "func_800A9B64", vram = 0x800a9b64, size = 0x84 },
     { name = "func_800A9BF0", vram = 0x800a9bf0, size = 0x34 },
     { name = "func_800A9C24", vram = 0x800a9c24, size = 0xa8 },
     { name = "func_800A9CCC", vram = 0x800a9ccc, size = 0x84 },
@@ -496,7 +527,7 @@ functions = [
     { name = "func_800A9EC0", vram = 0x800a9ec0, size = 0x50 },
     { name = "func_800A9F10", vram = 0x800a9f10, size = 0x148 },
     { name = "func_800AA058", vram = 0x800aa058, size = 0x540 },
-    { name = "func_800AA598", vram = 0x800aa598, size = 0xcc },
+    { name = "func_800AA598", vram = 0x800aa598, size = 0x2c },
     { name = "func_800AA664", vram = 0x800aa664, size = 0x244 },
     { name = "func_800AA8A8", vram = 0x800aa8a8, size = 0x238 },
     { name = "func_800AAAE0", vram = 0x800aaae0, size = 0x134 },
@@ -533,7 +564,7 @@ functions = [
     { name = "func_800B044C", vram = 0x800b044c, size = 0x94 },
     { name = "func_800B04E0", vram = 0x800b04e0, size = 0x114 },
     { name = "func_800B05F4", vram = 0x800b05f4, size = 0xb4 },
-    { name = "func_800B06A8", vram = 0x800b06a8, size = 0x38 },
+    { name = "func_800B06A8", vram = 0x800b06a8, size = 0x30 },
     { name = "func_800B06E0", vram = 0x800b06e0, size = 0xf4 },
     { name = "func_800B07D4", vram = 0x800b07d4, size = 0x59c },
     { name = "func_800B0D70", vram = 0x800b0d70, size = 0xc8 },
@@ -580,6 +611,20 @@ functions = [
     { name = "func_800B88DC", vram = 0x800b88dc, size = 0x7b8 },
     { name = "func_800B9094", vram = 0x800b9094, size = 0x310 },
     { name = "func_800B93A4", vram = 0x800b93a4, size = 0x224 },
+    # round 21: two more missing functions found the same way as
+    # func_8007E118/func_800A10E0 above, via N64Recomp's "static_0_800B95C8"
+    # auto-analysis. This one needed a sharper check than plain instruction
+    # validity: the branch/jump that broke it (`j 0x80001800` at 0x800b99a8)
+    # is a syntactically VALID instruction, just with a target address way
+    # outside this ROM's own loaded segment (0x80070000-0x80180000) --
+    # another data misdecode, just one instruction validity alone doesn't
+    # catch. Two words of data at 0x800b99a4-0x800b99ac separate this first
+    # function (ending in its own clean jr $ra) from a second one that
+    # resumes at 0x800b99ac and runs cleanly to func_800B9AB0's start below
+    # (that second piece has its own two small early-return sequences
+    # inside it, not further split -- no data separates them).
+    { name = "func_800B95C8", vram = 0x800b95c8, size = 0x3dc },
+    { name = "func_800B99AC", vram = 0x800b99ac, size = 0x104 },
     { name = "func_800B9AB0", vram = 0x800b9ab0, size = 0xdc },
     { name = "func_800B9B8C", vram = 0x800b9b8c, size = 0xdc },
     { name = "func_800B9C68", vram = 0x800b9c68, size = 0x36c },
@@ -587,6 +632,14 @@ functions = [
     { name = "func_800BA330", vram = 0x800ba330, size = 0x390 },
     { name = "func_800BA6C0", vram = 0x800ba6c0, size = 0xbe0 },
     { name = "func_800BB2A0", vram = 0x800bb2a0, size = 0x29c },
+    # round 21: found via a proactive gap sweep (checking every unclaimed
+    # byte range between consecutive known functions for a clean, valid
+    # instruction run ending in a real jr $ra) rather than waiting for
+    # N64Recomp to discover it one at a time through jal-following -- same
+    # underlying cause as func_8007E118/func_800A10E0/func_800B95C8 above
+    # (gaps our original round-11 splat scan just never got symbols for).
+    { name = "func_800BB53C", vram = 0x800bb53c, size = 0x880 },
+    { name = "func_800BBDC0", vram = 0x800bbdc0, size = 0x260 },
     { name = "func_800BC020", vram = 0x800bc020, size = 0x6cc },
     { name = "func_800BC6EC", vram = 0x800bc6ec, size = 0x308 },
     { name = "func_800BC9F4", vram = 0x800bc9f4, size = 0xe8c },
@@ -611,7 +664,7 @@ functions = [
     { name = "func_800BF798", vram = 0x800bf798, size = 0x74 },
     { name = "func_800BF80C", vram = 0x800bf80c, size = 0x2e0 },
     { name = "func_800BFAEC", vram = 0x800bfaec, size = 0x1b8 },
-    { name = "func_800BFCA4", vram = 0x800bfca4, size = 0x1fc },
+    { name = "func_800BFCA4", vram = 0x800bfca4, size = 0x1f0 },
     { name = "func_800BFEA0", vram = 0x800bfea0, size = 0x85c },
     { name = "__udiv_w_sdiv", vram = 0x800c06fc, size = 0x370 },
     { name = "func_800C0A6C", vram = 0x800c0a6c, size = 0x1ac },
@@ -652,11 +705,18 @@ functions = [
     { name = "func_800CAB44", vram = 0x800cab44, size = 0x7c },
     { name = "func_800CABC0", vram = 0x800cabc0, size = 0x1dc },
     { name = "func_800CAD9C", vram = 0x800cad9c, size = 0x74 },
-    { name = "func_800CAE10", vram = 0x800cae10, size = 0xa8 },
+    { name = "func_800CAE10", vram = 0x800cae10, size = 0xc0 },
+    # round 21: gap-guessed size undershot by 0x18 bytes -- several switch-
+    # style branches (0x800cae50/68/80/98/b0) all jump to a shared epilogue
+    # at 0x800caec8 (jr $ra) that fell just past the old declared end,
+    # tripping "Unhandled branch ... to 0x800CAEC8" since N64Recomp saw it
+    # as a branch leaving the function rather than part of it. The very next
+    # symbol (0x800caed0) starts immediately after this corrected end with
+    # no overlap, confirming the fix.
     { name = "osSetTime", vram = 0x800caeb8, size = 0x18 },
     { name = "func_800CAED0", vram = 0x800caed0, size = 0xd8 },
     { name = "func_800CAFA8", vram = 0x800cafa8, size = 0x118 },
-    { name = "func_800CB0C0", vram = 0x800cb0c0, size = 0x50 },
+    { name = "func_800CB0C0", vram = 0x800cb0c0, size = 0x4c },
     { name = "func_800CB110", vram = 0x800cb110, size = 0x224 },
     { name = "func_800CB334", vram = 0x800cb334, size = 0x600 },
     { name = "func_800CB934", vram = 0x800cb934, size = 0x50c },
@@ -666,7 +726,7 @@ functions = [
     { name = "func_800CC574", vram = 0x800cc574, size = 0x950 },
     { name = "func_800CCEC4", vram = 0x800ccec4, size = 0x86c },
     { name = "func_800CD730", vram = 0x800cd730, size = 0x12c },
-    { name = "func_800CD85C", vram = 0x800cd85c, size = 0x114 },
+    { name = "func_800CD85C", vram = 0x800cd85c, size = 0x110 },
     { name = "func_800CD970", vram = 0x800cd970, size = 0x400 },
     { name = "func_800CDD70", vram = 0x800cdd70, size = 0x418 },
     { name = "func_800CE188", vram = 0x800ce188, size = 0x488 },
@@ -677,6 +737,7 @@ functions = [
     { name = "func_800CEA50", vram = 0x800cea50, size = 0x1000 },
     { name = "osBbCardChange", vram = 0x800cfa50, size = 0x380 },
     { name = "func_800CFDD0", vram = 0x800cfdd0, size = 0x2a0 },
+    { name = "func_800D0070", vram = 0x800d0070, size = 0x568 },
     { name = "func_800D05E0", vram = 0x800d05e0, size = 0x278 },
     { name = "func_800D0858", vram = 0x800d0858, size = 0x108 },
     { name = "func_800D0960", vram = 0x800d0960, size = 0x114 },
@@ -702,24 +763,24 @@ functions = [
     { name = "func_800D5C80", vram = 0x800d5c80, size = 0x888 },
     { name = "func_800D6508", vram = 0x800d6508, size = 0x4d8 },
     { name = "func_800D69E0", vram = 0x800d69e0, size = 0x1a0 },
-    { name = "func_800D6B80", vram = 0x800d6b80, size = 0x2c0 },
-    { name = "func_800D6E40", vram = 0x800d6e40, size = 0xfa0 },
+    { name = "func_800D6B80", vram = 0x800d6b80, size = 0x2b4 },
+    { name = "func_800D6E40", vram = 0x800d6e40, size = 0xf94 },
     { name = "func_800D7DE0", vram = 0x800d7de0, size = 0x5a0 },
     { name = "func_800D8380", vram = 0x800d8380, size = 0x15c },
-    { name = "func_800D84DC", vram = 0x800d84dc, size = 0x414 },
+    { name = "func_800D84DC", vram = 0x800d84dc, size = 0x40c },
     { name = "func_800D88F0", vram = 0x800d88f0, size = 0x370 },
     { name = "func_800D8C60", vram = 0x800d8c60, size = 0x7cc },
     { name = "func_800D942C", vram = 0x800d942c, size = 0x4d4 },
     { name = "func_800D9900", vram = 0x800d9900, size = 0x1e0 },
-    { name = "func_800D9AE0", vram = 0x800d9ae0, size = 0x70 },
+    { name = "func_800D9AE0", vram = 0x800d9ae0, size = 0x68 },
     { name = "func_800D9B50", vram = 0x800d9b50, size = 0x200 },
     { name = "func_800D9D50", vram = 0x800d9d50, size = 0x7a0 },
     { name = "func_800DA4F0", vram = 0x800da4f0, size = 0x16c },
     { name = "func_800DA65C", vram = 0x800da65c, size = 0x174 },
     { name = "func_800DA7D0", vram = 0x800da7d0, size = 0x310 },
     { name = "func_800DAAE0", vram = 0x800daae0, size = 0x6d0 },
-    { name = "func_800DB1B0", vram = 0x800db1b0, size = 0x11f8 },
-    { name = "func_800DC3A8", vram = 0x800dc3a8, size = 0x5c0 },
+    { name = "func_800DB1B0", vram = 0x800db1b0, size = 0x538 },
+    { name = "func_800DC3A8", vram = 0x800dc3a8, size = 0x3fc },
     { name = "func_800DC968", vram = 0x800dc968, size = 0x770 },
     { name = "func_800DD0D8", vram = 0x800dd0d8, size = 0x1b8 },
     { name = "func_800DD290", vram = 0x800dd290, size = 0x110 },
@@ -729,6 +790,7 @@ functions = [
     { name = "func_800DE52C", vram = 0x800de52c, size = 0x404 },
     { name = "func_800DE930", vram = 0x800de930, size = 0x47c },
     { name = "func_800DEDAC", vram = 0x800dedac, size = 0x130 },
+    { name = "func_800DEEDC", vram = 0x800deedc, size = 0x1e8 },
     { name = "func_800DF0D0", vram = 0x800df0d0, size = 0x2e8 },
     { name = "func_800DF3B8", vram = 0x800df3b8, size = 0x1a0 },
     { name = "func_800DF558", vram = 0x800df558, size = 0xe4 },
@@ -738,7 +800,13 @@ functions = [
     { name = "func_800DF89C", vram = 0x800df89c, size = 0x1c0 },
     { name = "func_800DFA5C", vram = 0x800dfa5c, size = 0x1ae4 },
     { name = "func_800E1540", vram = 0x800e1540, size = 0x198 },
-    { name = "func_800E16D8", vram = 0x800e16d8, size = 0x940 },
+    { name = "func_800E16D8", vram = 0x800e16d8, size = 0x4cc },
+    # round 21: the original gap-guessed size (0x940) for func_800E16D8 actually
+    # covered TWO functions plus a short string constant between them
+    # ("...timeStampR..." at 0x800e1ba4, 0xc bytes) -- confirmed by disassembly:
+    # this one really does end in a clean jr $ra at 0x800e1b9c/0x800e1ba0.
+    # func_800E1BB0 below is the second function, recovered from the same gap.
+    { name = "func_800E1BB0", vram = 0x800e1bb0, size = 0x468 },
     { name = "func_800E2018", vram = 0x800e2018, size = 0x2f0 },
     { name = "func_800E2308", vram = 0x800e2308, size = 0x508 },
     { name = "func_800E2810", vram = 0x800e2810, size = 0x194 },
@@ -788,9 +856,15 @@ functions = [
     { name = "func_800E9B50", vram = 0x800e9b50, size = 0x15c },
     { name = "func_800E9CAC", vram = 0x800e9cac, size = 0x1cc },
     { name = "func_800E9E80", vram = 0x800e9e80, size = 0x2cc },
-    { name = "func_800EA14C", vram = 0x800ea14c, size = 0xae4 },
+    { name = "func_800EA14C", vram = 0x800ea14c, size = 0xae0 },
+    # round 21: trailing word at +0xae0 (0x800eac2c) decodes as
+    # `jalr $zero, $zero` (word 0x00000009) -- N64Recomp rejects it
+    # ("Invalid return address reg for jalr") and real code would never
+    # target $zero as a jalr link register anyway; it's one word of data
+    # right before the already-separately-declared func_800EAC30, so this
+    # just needed the trailing word trimmed off, no new symbol required.
     { name = "func_800EAC30", vram = 0x800eac30, size = 0x33c },
-    { name = "func_800EAF6C", vram = 0x800eaf6c, size = 0x7b4 },
+    { name = "func_800EAF6C", vram = 0x800eaf6c, size = 0x7a8 },
     { name = "func_800EB720", vram = 0x800eb720, size = 0x118 },
     { name = "func_800EB838", vram = 0x800eb838, size = 0x260 },
     { name = "func_800EBA98", vram = 0x800eba98, size = 0x4e8 },
@@ -799,6 +873,7 @@ functions = [
     { name = "func_800EC1F8", vram = 0x800ec1f8, size = 0x2b0 },
     { name = "func_800EC4A8", vram = 0x800ec4a8, size = 0x284 },
     { name = "func_800EC72C", vram = 0x800ec72c, size = 0x4c },
+    { name = "func_800EC778", vram = 0x800ec778, size = 0x10 },
     { name = "func_800EC790", vram = 0x800ec790, size = 0x880 },
     { name = "func_800ED010", vram = 0x800ed010, size = 0x310 },
     { name = "func_800ED320", vram = 0x800ed320, size = 0x1d4 },
@@ -811,7 +886,7 @@ functions = [
     { name = "func_800EEADC", vram = 0x800eeadc, size = 0x150 },
     { name = "func_800EEC2C", vram = 0x800eec2c, size = 0xb44 },
     { name = "func_800EF770", vram = 0x800ef770, size = 0x4b8 },
-    { name = "func_800EFC28", vram = 0x800efc28, size = 0x48 },
+    { name = "func_800EFC28", vram = 0x800efc28, size = 0x40 },
     { name = "func_800EFC70", vram = 0x800efc70, size = 0x158 },
     { name = "func_800EFDC8", vram = 0x800efdc8, size = 0x48 },
     { name = "func_800EFE10", vram = 0x800efe10, size = 0xb4 },
@@ -826,18 +901,29 @@ functions = [
     { name = "func_800F09C0", vram = 0x800f09c0, size = 0x148 },
     { name = "func_800F0B08", vram = 0x800f0b08, size = 0x3c8 },
     { name = "func_800F0ED0", vram = 0x800f0ed0, size = 0x8a0 },
-    { name = "func_800F1770", vram = 0x800f1770, size = 0x190 },
+    { name = "func_800F1770", vram = 0x800f1770, size = 0x3c },
+    # round 21: same split-function pattern as func_800E16D8/func_800F38C0 --
+    # a short string constant sits at 0x800f17ac right after this one's real
+    # jr $ra return, then a second, much bigger function resumes cleanly at
+    # 0x800f17b0 and runs to the original gap-guessed end (0x800f1900).
+    { name = "func_800F17B0", vram = 0x800f17b0, size = 0x150 },
+    { name = "func_800F1900", vram = 0x800f1900, size = 0x224 },
     { name = "func_800F1B30", vram = 0x800f1b30, size = 0x198 },
     { name = "func_800F1CC8", vram = 0x800f1cc8, size = 0x5c0 },
     { name = "func_800F2288", vram = 0x800f2288, size = 0x588 },
     { name = "func_800F2810", vram = 0x800f2810, size = 0x9c },
-    { name = "func_800F28AC", vram = 0x800f28ac, size = 0x314 },
+    { name = "func_800F28AC", vram = 0x800f28ac, size = 0x30c },
     { name = "func_800F2BC0", vram = 0x800f2bc0, size = 0x800 },
     { name = "func_800F33C0", vram = 0x800f33c0, size = 0x500 },
-    { name = "func_800F38C0", vram = 0x800f38c0, size = 0x444 },
+    { name = "func_800F38C0", vram = 0x800f38c0, size = 0x2bc },
+    # round 21: same story as func_800E16D8 above -- the original 0x444
+    # gap-guessed size covered this function (real end confirmed, clean jr $ra
+    # at 0x800f3b74/0x800f3b78) plus a 4-byte string constant ("MISS", at
+    # 0x800f3b7c) plus a second function recovered as func_800F3B80 below.
+    { name = "func_800F3B80", vram = 0x800f3b80, size = 0x184 },
     { name = "func_800F3D04", vram = 0x800f3d04, size = 0x154 },
     { name = "func_800F3E58", vram = 0x800f3e58, size = 0x840 },
-    { name = "func_800F4698", vram = 0x800f4698, size = 0xa20 },
+    { name = "func_800F4698", vram = 0x800f4698, size = 0x6dc },
     { name = "func_800F50B8", vram = 0x800f50b8, size = 0x1b8 },
     { name = "func_800F5270", vram = 0x800f5270, size = 0x28 },
     { name = "func_800F5298", vram = 0x800f5298, size = 0x1d8 },
@@ -847,20 +933,24 @@ functions = [
     { name = "func_800F5F10", vram = 0x800f5f10, size = 0x234 },
     { name = "func_800F6144", vram = 0x800f6144, size = 0x200 },
     { name = "func_800F6344", vram = 0x800f6344, size = 0x234 },
-    { name = "func_800F6578", vram = 0x800f6578, size = 0xd8 },
-    { name = "func_800F6650", vram = 0x800f6650, size = 0x880 },
+    { name = "func_800F6578", vram = 0x800f6578, size = 0xd0 },
+    { name = "func_800F6650", vram = 0x800f6650, size = 0x614 },
+    # round 21: same split-function pattern -- a short data gap at
+    # 0x800f6c64-0x800f6c70, then a second function resumes cleanly at
+    # 0x800f6c70 and runs to the original gap-guessed end (0x800f6ed0).
+    { name = "func_800F6C70", vram = 0x800f6c70, size = 0x260 },
     { name = "func_800F6ED0", vram = 0x800f6ed0, size = 0x280 },
     { name = "func_800F7150", vram = 0x800f7150, size = 0xe0 },
     { name = "func_800F7230", vram = 0x800f7230, size = 0x33c },
     { name = "func_800F756C", vram = 0x800f756c, size = 0x10 },
     { name = "func_800F757C", vram = 0x800f757c, size = 0x628 },
-    { name = "func_800F7BA4", vram = 0x800f7ba4, size = 0x8c },
+    { name = "func_800F7BA4", vram = 0x800f7ba4, size = 0x80 },
     { name = "func_800F7C30", vram = 0x800f7c30, size = 0x290 },
     { name = "func_800F7EC0", vram = 0x800f7ec0, size = 0x228 },
     { name = "func_800F80E8", vram = 0x800f80e8, size = 0x120 },
     { name = "func_800F8208", vram = 0x800f8208, size = 0x5c },
     { name = "func_800F8264", vram = 0x800f8264, size = 0x38c },
-    { name = "func_800F85F0", vram = 0x800f85f0, size = 0x70 },
+    { name = "func_800F85F0", vram = 0x800f85f0, size = 0x6c },
     { name = "func_800F8660", vram = 0x800f8660, size = 0x750 },
     { name = "func_800FAFBC", vram = 0x800fafbc, size = 0x288 },
     { name = "MusSetMasterVolume", vram = 0x800fb244, size = 0x2c },
@@ -1263,58 +1353,42 @@ functions = [
     { name = "func_80113D10", vram = 0x80113d10, size = 0x40 },
     { name = "func_80113D50", vram = 0x80113d50, size = 0xc0 },
     { name = "func_80113E10", vram = 0x80113e10, size = 0x20 },
-    { name = "func_80113E30", vram = 0x80113e30, size = 0x640 },
-    { name = "func_80115548", vram = 0x80115548, size = 0x68 },
-    { name = "func_801188F8", vram = 0x801188f8, size = 0x20 },
-    { name = "func_80118918", vram = 0x80118918, size = 0x10 },
-    { name = "func_80118928", vram = 0x80118928, size = 0x20 },
-    { name = "func_80119628", vram = 0x80119628, size = 0x40 },
+    { name = "func_80113E30", vram = 0x80113e30, size = 0x63c },
+    # round 21: another missing function found via N64Recomp's jal-following
+    # ("No function found for jal target: 0x84000000" while analyzing
+    # "static_0_80114470"). Real, clean function -- calls func_80113E30
+    # above and returns -- followed immediately by what looks like a string/
+    # data blob (a `jal 0x84000000` and other clearly-garbage decodes) that
+    # isn't claimed by any symbol; left unclaimed since nothing currently
+    # known calls into it.
+    { name = "func_80114470", vram = 0x80114470, size = 0x28 },
+    # func_80119628 (was here, vram 0x80119628 size 0x1c) removed round 21:
+    # entirely data, not code -- same neighborhood as the round-15 dispatch
+    # table (0x8011a8xx) and the round-21 ASCII-string deletions nearby.
+    # Every "instruction" here is a raw address value or table entry that
+    # happens to decode as something syntactically valid but nonsensical
+    # (an `lb` loading from a huge negative offset off $zero that is really
+    # just this function's own address reinterpreted, then a `dmtc0` that
+    # N64Recomp doesn't support -- "Unhandled instruction: dmtc0").
     { name = "func_80119668", vram = 0x80119668, size = 0x10 },
-    { name = "func_80119678", vram = 0x80119678, size = 0x30 },
-    { name = "func_801196A8", vram = 0x801196a8, size = 0x20 },
-    { name = "func_801196C8", vram = 0x801196c8, size = 0x20 },
+    { name = "func_80119678", vram = 0x80119678, size = 0x14 },
+    { name = "func_801196A8", vram = 0x801196a8, size = 0x10 },
+    { name = "func_801196C8", vram = 0x801196c8, size = 0x18 },
     { name = "func_801196E8", vram = 0x801196e8, size = 0x20 },
-    { name = "func_80119708", vram = 0x80119708, size = 0x10 },
-    { name = "func_8011A0C4", vram = 0x8011a0c4, size = 0x68 },
-    { name = "func_8011A12C", vram = 0x8011a12c, size = 0x6c },
-    { name = "func_8011A198", vram = 0x8011a198, size = 0x1c },
-    { name = "func_8011A1B4", vram = 0x8011a1b4, size = 0x58 },
-    { name = "func_8011A20C", vram = 0x8011a20c, size = 0xc },
-    { name = "func_8011A218", vram = 0x8011a218, size = 0x3c },
-    { name = "func_8011A254", vram = 0x8011a254, size = 0x18 },
-    { name = "func_8011A26C", vram = 0x8011a26c, size = 0x14 },
-    { name = "func_8011A344", vram = 0x8011a344, size = 0xc },
-    { name = "func_8011A3A8", vram = 0x8011a3a8, size = 0x14 },
-    { name = "func_8011A3BC", vram = 0x8011a3bc, size = 0x24 },
     { name = "func_8011A3E0", vram = 0x8011a3e0, size = 0x10 },
-    { name = "func_8011A3F0", vram = 0x8011a3f0, size = 0x1c },
-    { name = "func_8011A40C", vram = 0x8011a40c, size = 0x14 },
-    { name = "func_8011A420", vram = 0x8011a420, size = 0x3c },
-    { name = "func_8011A45C", vram = 0x8011a45c, size = 0x20 },
-    { name = "func_8011A47C", vram = 0x8011a47c, size = 0x8 },
-    { name = "func_8011A484", vram = 0x8011a484, size = 0x3c },
-    { name = "func_8011A4C0", vram = 0x8011a4c0, size = 0x20 },
     { name = "func_8011A4E0", vram = 0x8011a4e0, size = 0xc },
-    { name = "func_8011A4EC", vram = 0x8011a4ec, size = 0xc },
-    { name = "func_8011A540", vram = 0x8011a540, size = 0x40 },
-    { name = "func_8011A580", vram = 0x8011a580, size = 0x60 },
-    { name = "func_8011A5E0", vram = 0x8011a5e0, size = 0x10 },
-    { name = "func_8011A5F0", vram = 0x8011a5f0, size = 0x194 },
-    { name = "func_8011AB4C", vram = 0x8011ab4c, size = 0x20 },
+    # func_8011A5F0 (was here, vram 0x8011a5f0 size 0xac) removed round 21:
+    # same story as func_80119628 above -- a pointer/dispatch data table in
+    # the same 0x8011axxx-0x8011bxxx neighborhood misdecoding as a handful
+    # of syntactically-valid-but-nonsensical instructions ("mfc0 $zero,
+    # Random" reading a table pointer, then a `b` branching clean out to
+    # 0x8011B600 -- "Unhandled branch"), not real code.
     { name = "func_8011AB6C", vram = 0x8011ab6c, size = 0x10 },
-    { name = "func_8011AD0C", vram = 0x8011ad0c, size = 0x20 },
     { name = "func_8011AD2C", vram = 0x8011ad2c, size = 0x10 },
-    { name = "func_8011AECC", vram = 0x8011aecc, size = 0x20 },
     { name = "func_8011AEEC", vram = 0x8011aeec, size = 0x10 },
-    { name = "func_8011B08C", vram = 0x8011b08c, size = 0x20 },
     { name = "func_8011B0AC", vram = 0x8011b0ac, size = 0x10 },
     { name = "func_8011DBC8", vram = 0x8011dbc8, size = 0x10 },
-    { name = "func_8011DBD8", vram = 0x8011dbd8, size = 0x60 },
     { name = "func_8011DC38", vram = 0x8011dc38, size = 0x10 },
-    { name = "func_8011DC48", vram = 0x8011dc48, size = 0x60 },
-    { name = "func_8011DCA8", vram = 0x8011dca8, size = 0x10 },
-    { name = "func_8011DCB8", vram = 0x8011dcb8, size = 0x60 },
-    { name = "func_8011DD18", vram = 0x8011dd18, size = 0x10 },
     { name = "func_8011E710", vram = 0x8011e710, size = 0x10 },
     { name = "func_8011E720", vram = 0x8011e720, size = 0x10 },
     { name = "func_8011FA5C", vram = 0x8011fa5c, size = 0x10 },
@@ -1323,14 +1397,11 @@ functions = [
     { name = "n_alGlobals", vram = 0x80126b30, size = 0x4 },
     { name = "alGlobals", vram = 0x80126b34, size = 0xc },
     { name = "__osContinitialized", vram = 0x80126b50, size = 0x10 },
-    { name = "__osHwIntTable", vram = 0x80126e30, size = 0x28 },
-    { name = "osViClock", vram = 0x80126e58, size = 0x4 },
+    { name = "__osHwIntTable", vram = 0x80126e30, size = 0x24 },
     { name = "__osShutdown", vram = 0x80126e5c, size = 0x4 },
-    { name = "__OSGlobalIntMask", vram = 0x80126e60, size = 0x10 },
     { name = "__osPiDevMgr", vram = 0x80126e70, size = 0x8 },
     { name = "__osPiTable", vram = 0x80126e8c, size = 0x4 },
     { name = "__osCurrentHandle", vram = 0x80126e90, size = 0x10 },
-    { name = "__osPiAccessQueueEnabled", vram = 0x80126ea0, size = 0x30 },
     { name = "alGlobals_80126ED0", vram = 0x80126ed0, size = 0x18 },
     { name = "__osRunQueue", vram = 0x80126ee8, size = 0x4 },
     { name = "__osActiveQueue", vram = 0x80126eec, size = 0x4 },
@@ -1340,14 +1411,6 @@ functions = [
     { name = "__osViCurr", vram = 0x80126f70, size = 0x4 },
     { name = "__osViNext", vram = 0x80126f74, size = 0x2c },
     { name = "__osViCurr_8012DEE0", vram = 0x8012dee0, size = 0x8 },
-    { name = "__osPiDevMgr_8013B9FC", vram = 0x8013b9fc, size = 0x440 },
-    { name = "__osViDevMgr", vram = 0x8013be3c, size = 0x30cc },
-    { name = "func_80145254", vram = 0x80145254, size = 0x48 },
-    { name = "func_80146EE0", vram = 0x80146ee0, size = 0x5bc },
-    { name = "func_8014749C", vram = 0x8014749c, size = 0x2a4 },
-    { name = "func_80147740", vram = 0x80147740, size = 0x124 },
-    { name = "func_80147864", vram = 0x80147864, size = 0x8d4 },
-    { name = "func_80169CA0", vram = 0x80169ca0, size = 0x21c8 },
-    { name = "func_8016BE68", vram = 0x8016be68, size = 0x21e0 },
-    { name = "func_8016E048", vram = 0x8016e048, size = 0x1c14 },
+    { name = "func_8014749C", vram = 0x8014749c, size = 0x20 },
+    { name = "func_80147740", vram = 0x80147740, size = 0x28 },
 ]
