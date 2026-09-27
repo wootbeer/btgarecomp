@@ -3,6 +3,53 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 14: sanity-checked round 13's symbol table -- found and removed 123 gap-guess artifacts, confirmed round 9's RSP microcode hypothesis
+
+Before extending the scan past the first MB, checked whether any code in
+round 13's function list calls out beyond the segment (`0x80071000`-
+`0x80171000`) -- if the whole game's code fit in the first MB, there'd be
+nothing left to chase. Decoding `j`/`jal` directly from raw ROM bytes
+within each known function's byte range (not from spimdisasm's text
+output, which renders this whole run as raw `.word` throughout -- a
+rendering-confidence quirk unrelated to whether the underlying label/
+address data is correct, confirmed by re-deriving the exact same 1509
+boundaries from it a second time) found real problems, not real overlay
+leads:
+
+- `rspbootTextStart` (n64sym's own name!) is full of `j`/`jal`-shaped
+  words with nonsensical targets (`0x8c000000`, `0x84001xxx`, ...) --
+  because it's genuinely RSP microcode, a different instruction set
+  entirely, not CPU code. This **confirms round 9's original hypothesis**
+  about this region, which round 11-12 had provisionally walked back after
+  finding it densely function-packed under the corrected header. Round
+  9 was right about *what* it is; round 10-12 were right that it's
+  legitimately resident (both can be true).
+- 123 other entries (mostly large `func_XXXXXXXX` placeholders, 0x620-
+  0x16F0 bytes each, clustered `0x80118000`-`0x80153000`, plus two n64sym
+  *data* symbols wrongly carried as functions -- `__osCurrentTime`,
+  `__osTimerList_80134D00`, libultra state variables, not code) show the
+  same garbage-jump signature. These are gap-guess artifacts: not enough
+  known boundaries in that stretch for splat to have sub-divided it
+  correctly, so each absorbed neighboring microcode/data/unfound-function
+  bytes into one oversized "function."
+
+Pulled all 123 out to `syms/battletanx_ga_funcs_suspect.txt` rather than
+leave them in the trusted table -- N64Recomp would eventually choke trying
+to recompile RSP microcode or data as CPU code. Regenerated
+`BattleTanxGASyms/battletanxga.us.rev0.syms.toml` with the remaining 1321
+entries only (still not independently verified one-by-one, but at least
+self-consistent -- every entry's own body only jumps within the segment).
+
+**Real answer to the original question**: after excluding the known-bad
+123, the remaining functions collectively contain zero calls leaving the
+first-MB segment. Some of what's *in* the suspect list might still reach
+outside the segment once properly re-split (can't tell with garbage
+boundaries) -- so this doesn't yet prove the whole game fits in 1MB, but
+it does mean there's no clean evidence otherwise either. Re-splitting the
+suspect region properly (probably needs bounded sub-probing like round 8
+did, now under the correct header) would settle it either way, and is
+higher-priority than blindly extending the scan into unexplored ROM.
+
 ## 2026-09-27, round 13: a real, sized symbol table for the first MB -- BattleTanxGASyms/battletanxga.us.rev0.syms.toml now has actual content
 
 Merged round 11's 1310-function scan with n64sym's ~480 name matches

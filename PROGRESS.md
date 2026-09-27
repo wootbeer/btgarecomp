@@ -58,15 +58,19 @@ still ahead, the same scale of effort the original game's recomp needed
    Assault needs its own version of the original game's
    `stock_runtime_compat.cpp`-style shims (item 7 below) — that depends on
    code not yet reached.
-3. ~~Full function boundary list (first MB)~~ — done for the first MB:
-   1444 code entries with real (gap-derived) sizes in
+3. ~~Full function boundary list (first MB)~~ — mostly done for the first
+   MB: 1321 code entries with real (gap-derived) sizes in
    `BattleTanxGASyms/battletanxga.us.rev0.syms.toml`, the actual format
-   N64Recomp expects (`STATUS.md` round 13). Still needed: extend the same
+   N64Recomp expects (`STATUS.md` rounds 13-14). A further 123 entries
+   (`syms/battletanx_ga_funcs_suspect.txt`) were caught and pulled out as
+   gap-guess artifacts — mostly absorbed RSP microcode or unfound
+   boundaries, not real functions — rather than left in the trusted table.
+   Still needed: properly re-split that suspect region (bounded probing
+   like round 8, now under the correct header), extend the same
    corrected-header splat scan past the first MB to cover the remaining
-   ~7/8 of the ROM, and spot-check a sample of the existing entries against
-   real disassembly, since sizes are gap-derived (a missed real boundary
-   between two known symbols inflates the earlier one's size) rather than
-   independently confirmed.
+   ~7/8 of the ROM, and spot-check a sample of the trusted entries against
+   real disassembly, since sizes are still gap-derived rather than
+   independently confirmed one by one.
 4. **libultra call identification** — largely done for the first MB: 430
    of the 1444 function entries already carry n64sym's real name instead
    of a `func_XXXXXXXX` placeholder (round 13). Remaining: decide which of
