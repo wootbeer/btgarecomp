@@ -3,6 +3,47 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 15: found a real dispatch-table data structure inside round 14's "suspect" pile; it's the first concrete trace of the message/event dispatcher the 2026-09-19 screenshots hypothesized
+
+Looked closer at round 14's 123 suspect entries rather than treating them
+as uniformly bad. The small ones (many exactly `0x20` bytes) turned out to
+be a different problem entirely: not gap-guessed code, but a **real data
+table misread as a run of tiny functions**. Dumping the raw words at e.g.
+`0x8011A280` shows values like `0x80116E80`, `0x80117DDC`,
+`0x8011A8DC` -- valid pointers into our own known function range, sitting
+as plain data -- interleaved with what my `j`/`jal` opcode scanner
+mistook for branch instructions (a data word starting with byte `0x0A`
+has the same top-6-bit pattern as a real `j` opcode, by coincidence).
+
+Mapped the actual extent: `0x80118900`-`0x8011B300` (~10.5KB) is ~37%
+in-range pointers, consistent with a structured table (pointer/pointer/
+flag/zero-style entries) rather than code. A dense, pure 52-pointer run
+within it (`0x8011B1A4`-`0x8011B274`) alternates between two tight address
+clusters -- `~0x8011A8xx` and `~0x80116Exx`/`0x80116Fxx` -- repeating with
+minor variation, which reads like a genuine state-machine/dispatch table
+(pairs of e.g. condition-check and action function pointers). This is the
+first *concrete, address-level* trace of the "message/event dispatcher"
+pattern the 2026-09-19 screenshot session hypothesized from Ghidra's
+decompiler view, rather than just a plausible-sounding read of one
+function's C-level logic.
+
+**Still doesn't show code reaching outside the first MB**: every pointer
+found in this table stays within the known `0x80071000`-`0x80171000`
+segment. Moved the 52 addresses this table covers out of the suspect pile
+into `syms/battletanx_ga_data_table_0x8011a8.txt` (documented as data, not
+carried in the function symbol table at all -- distinct treatment from
+round 14's RSP-microcode exclusions, since this is genuine data rather
+than a different instruction set). 71 suspects remain genuinely
+unclassified -- likely still a mix of real gap-guessed code and more
+undiscovered data tables, not yet sorted.
+
+**Where this leaves the "does anything call outside the first MB"
+question**: still no confirmed evidence either way. Of the original 123
+suspects, 52 are now explained as this data table (in-range) and the
+`rspbootTextStart` region as RSP microcode (round 14). The remaining 71
+are the only place such evidence could still be hiding, and they haven't
+been individually resolved.
+
 ## 2026-09-27, round 14: sanity-checked round 13's symbol table -- found and removed 123 gap-guess artifacts, confirmed round 9's RSP microcode hypothesis
 
 Before extending the scan past the first MB, checked whether any code in
