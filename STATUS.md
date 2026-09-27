@@ -1,0 +1,226 @@
+# Status
+
+Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
+from the one that wrote the entries below).
+
+## 2026-09-27: splat now runs in a cloud sandbox; the "overlay wall" is probably not overlays
+
+Picked up the prior scaffold and analysis (uploaded by Matt to this repo's
+`main` branch as archives) and continued from where the 2026-09-18 entry
+left off.
+
+**The PyPI/npm/crates.io block from the previous entry is not universal.**
+In this session, `pip install splat64[mips]` (which pulls in `spimdisasm`
+and `rabbitizer`, splat's real dependency chain) worked with no issues,
+after two packaging speed bumps: `pylibyaml`/`intervaltree`'s legacy
+`setup.py` fails to build under a too-new `setuptools` (`AttributeError:
+install_layout`) unless you pin `setuptools<60` in a venv first, and the
+plain `pip install splat64` alone leaves `spimdisasm`/`rabbitizer`/`n64img`
+unresolved even though splat needs them at import time -- `splat64[mips]`
+pulls the full set. Once installed, `python3 -m splat split tools/splat.yaml`
+ran cleanly and reproduced the confirmed 19KB resident block
+(`0x9F99C`-`0xA449C` ROM, VRAM `0x8009ED9C`-`0x800A389C`) from the
+2026-09-18 entry exactly, plus function-split suggestions splat had never
+gotten to run before.
+
+**Read `func_8009ED9C` in full** (the very first function `crt0` calls, and
+per the round-6 findings the first instruction of the confirmed resident
+block). It:
+
+- Wraps its body in a call to `func_80105DB0` (return value kept in `$s0`)
+  at the top, and `func_80105DD0` (called with that same value in `$a0`) at
+  the very bottom -- a plain acquire/release or begin/end pair, not
+  something that reads like a DMA kickoff.
+- In between, does list/queue-style manipulation on two globals,
+  `D_80126EF0` and `D_80126EE8` -- consistent with the "list-traversal/
+  dispatch logic" read from the round-3 notes.
+- Also calls `func_80110EE0` and `func_801056CC` in passing, both similarly
+  unconditional.
+
+**Why this matters**: `func_80105DB0`, `func_801055CC`, `func_80105DD0` and
+`func_80110EE0` all sit at VRAM addresses past `0x80100400` -- the edge of
+the ~1 MiB block the N64's IPL3 bootcode loads automatically for the
+standard CIC chips (6101/6102/7101/7102), which is also, not coincidentally,
+almost exactly where the confirmed-clean resident block ends
+(`0x800A389C`). Code past that boundary normally has to be DMA'd in
+explicitly by the game before first use. But here, `func_80105DB0` is
+called completely unconditionally in the first few instructions of the
+*first function the game ever runs* -- and `crt0` itself is only 14
+instructions (set `$sp`, clear BSS, `jal 0x8009ED9C`), leaving no room for
+a loader call before that. That's hard to reconcile with "this is a
+runtime-loaded overlay slot," which was the working theory in the
+2026-09-18 entry after round 7 found texture-like garbage at the naive
+linear ROM offset for these addresses.
+
+Checked one alternative explanation and ruled it out: if there were a
+static jump/overlay table listing these functions' real ROM locations as
+raw data words, the literal 4-byte big-endian value for their VRAM address
+(e.g. `80 10 5D B0`) ought to show up somewhere in the ROM as data. It
+doesn't -- not for any of `func_80105DB0`, `func_801055CC`,
+`func_80105DD0`, `func_80110EE0`, `func_801056CC`, or even `func_8009ED9C`
+itself (checked all six against the full 8 MiB ROM). That's expected for
+plain `jal` call sites (the encoding doesn't carry a full 32-bit address),
+so it doesn't disprove an overlay table, but it does rule out "there's an
+easy-to-find table of raw pointers to grep for."
+
+**Leading hypothesis now**: the simple `rom_offset = vram - 0x7FFFF400`
+mapping that correctly located the confirmed 19KB block probably just
+stops applying past that block for a structural reason -- padding, a
+second linked segment, or a non-contiguous section layout the linker
+produced -- rather than these specifically being demand-loaded overlays.
+Round 7's "texture-like data" finding at the naive offset would then mean
+"wrong offset," not "not code." This doesn't yet rule the overlay theory
+back in either; it's genuinely unresolved.
+
+**Not attempted this round**: downloading and running Ghidra headless
+against `tools/OverlayScan6.java` (the script from 2026-09-18, written for
+exactly this search). Java 21 and network access are both available in
+this sandbox, so it's likely feasible here too, but pulling down a Ghidra
+distribution is a bigger, slower step worth checking with Matt about
+before spending the time.
+
+### Consolidated into the repo this round
+
+- `syms/rom_info.md`, `syms/undefined_funcs_auto.txt`,
+  `syms/undefined_syms_auto.txt`, `tools/*.py`, `tools/OverlayScan6.java`,
+  `tools/splat.yaml`, `battletanx_ga.ld`, `src_probes/*.c` (renamed from
+  `src/` to avoid colliding with the N64Recomp-style `src/` this repo also
+  has, from an earlier, more N64Recomp-build-centric scaffolding pass done
+  in parallel -- see below) -- all from the 2026-09-18 upload.
+- `tools/symbols_to_n64recomp_toml.py` -- new. Converts a Ghidra CSV export
+  or a splat-style `name = 0xADDR;` list into the `[[section]].functions`
+  TOML array N64Recomp's own symbol file format expects (see
+  `bdragoncore/battle-tanx-recomp`'s `BattleTanxSyms/*.syms.toml` for the
+  target format). Not yet run against anything real -- there's no confirmed
+  full function list yet to feed it.
+- The ROM (`rom/battletanx_ga_usa.z64`) and the large raw probe dumps
+  (`assets/unk_*.bin`, several megabytes each, essentially fragments of the
+  ROM itself) were deliberately **not** brought into this repo's tracked
+  tree -- see "Heads up" below.
+
+### Also present in this repo: a from-scratch N64Recomp-style scaffold
+
+Before finding this uploaded work, a parallel scaffolding pass (same
+session) set up `CMakeLists.txt`, `.gitmodules` (N64Recomp,
+N64ModernRuntime, RecompFrontend, rt64), `patches/`, `include/`, and
+`BattleTanxGASyms/` following `bdragoncore/battle-tanx-recomp`'s structure
+directly -- the build-system side of what this project will eventually
+need, once real symbols exist. That's still in the repo and still correct;
+it just hasn't been exercised against anything yet, since the symbol table
+it expects doesn't exist. The splat-based work above is the actual path to
+producing that symbol table. See `PROGRESS.md` for that side's status.
+
+### Heads up: the ROM ended up in this repo's history
+
+The uploaded `battletanx-recomp.7z` / `battletanx-recomp-scaffold.zip`
+archives (commits `d1abf2d` and `52b0132` on `main`) contain the full ROM
+dump and several multi-megabyte raw excerpts of it, because they're
+straight archives of a working directory that had those files present
+locally (correctly gitignored *within* that nested project, but the
+archive tool doesn't know about `.gitignore`). They're sitting in this
+repo's git history on GitHub now. Worth deciding whether to scrub that
+history (e.g. rewriting `main`, or just deleting-and-force-pushing once
+the useful bits are extracted) -- didn't do this myself since rewriting
+`main`'s history isn't something to do without asking first.
+
+## 2026-09-18 (evening, after seven rounds of real splat runs)
+
+### Today's arc: crt0 stub -> confirmed resident code -> the overlay wall
+
+Ran splat for real on Matt's machine (see "Blocked" below for why that
+couldn't happen in the sandbox that built this scaffold). Getting it
+running took a few config bugs (top-level segments must be `type: code`
+with an explicit `subsegments` entry; splat resolves `base_path` relative
+to the config file's own directory, not the invocation directory) -- all
+fixed in `tools/splat.yaml`.
+
+From there, seven rounds of narrowing (full history is in the comments at
+the top of `tools/splat.yaml` -- worth reading in full, it's a genuinely
+useful log of what worked and what didn't):
+
+1. Scanning the whole ROM as one segment hung -- no `jr $ra` ever found.
+2. Bounding it at the hang point produced a wall of raw `.word` output.
+   Reading it by hand: real code is a **0x38-byte crt0 stub**
+   (`0x80000400`-`0x80000438`) that clears BSS then does
+   `jal 0x8009ED9C ; nop` -- strong additional confirmation the compiler is
+   IDO/SN64-family, not GCC (this is the textbook idiom).
+3. Probed the `jal` target (ROM `0x9F99C`) in a small window. Fully clean.
+4-6. Widened progressively (8KB, then 128KB, then ~1.1MB) chasing a second
+   hang, which turned out to be a misread: a `Select-String` count of 7,522
+   "invalid instruction" hits at 128KB was wrongly written off as "small
+   isolated data pockets" before confirming where output actually stopped.
+   Checking the output directory directly (not just the progress bar) found
+   it frozen writing a 0-byte file at the exact address those samples
+   started at. **Confirmed real resident code: `0x9F99C`-`0xA449C` (~19KB),
+   VRAM `0x8009ED9C`-`0x800A389C`.**
+7. That confirmed 19KB block calls out to three further addresses
+   (`func_801055CC`, `func_80105DB0`, `func_80105DD0`). Probed each
+   individually rather than extending the linear scan again. All three
+   turned out to be **texture/pixel-looking data**, not code, from byte
+   zero -- not a partial corruption like every previous wall. This is the
+   signature of an **overlay slot**: the real code the game expects at
+   these RAM addresses gets DMA'd in at runtime from elsewhere in the ROM;
+   what's sitting at the naive "linear" ROM offset is just whatever
+   unrelated asset happens to occupy that byte range.
+
+   (2026-09-27 note: re-examined above -- the unconditional, argument-free
+   way `func_80105DB0` gets called from the very first instructions of the
+   very first function the game runs doesn't fit a demand-loaded overlay
+   well. Leading theory now is a wrong ROM-offset mapping past this point,
+   not necessarily an overlay. Still open.)
+
+**Where this leaves us**: this ROM has a real, non-trivial statically-
+resident block (crt0 stub + ~19KB of dispatcher-style logic), which is more
+than nothing, but code reachable beyond that isn't reliably at
+`vram - 0x7FFFF400` in the ROM file. Further progress needs the actual
+**overlay loader** -- almost certainly a DMA/file-load routine somewhere in
+that confirmed 19KB block -- which is a Ghidra job (reading real code for
+`osPiStartDma`-shaped calls), not something splat's config can find by
+guessing more addresses.
+
+## Done
+
+- Confirmed the supplied ROM is v64 byte-swapped despite its `.n64`
+  extension; normalized to big-endian `.z64`; header matches expected USA
+  identification (`NBQE`) -- see `syms/rom_info.md`.
+- Scaffolded the repo: `lib/` submodules for N64Recomp, N64ModernRuntime,
+  RT64, RecompFrontend; `src/`, `include/`, `syms/`, `patches/`, `tools/`
+  layout following VPW64Recomp/GGA-Recomp.
+- Documented the known USA-ROM boot-timing race as a patch to expect --
+  see `patches/README.md`.
+- Got real, clean disassembly confirming the crt0 stub and ~19KB of
+  resident dispatcher code, and confirmed (empirically, not by assumption)
+  that this game uses an overlay system for code beyond that.
+
+## Blocked / needs to happen elsewhere
+
+The cloud sandbox this scaffold was built in has PyPI, npm, and crates.io
+blocked by egress policy (confirmed genuine 403s). splat's real dependency
+chain (`spimdisasm`, `rabbitizer`) couldn't be installed there. All the
+actual disassembly work above happened on Matt's machine instead, driven
+interactively from this session.
+
+(2026-09-27 note: not true in every cloud sandbox -- see above.)
+
+## Next steps, in order
+
+1. Ghidra pass (N64 loader plugin) over the confirmed resident block
+   (`0x9F99C`-`0xA449C`). Specifically look for DMA/file-read calls
+   (`osPiStartDma` or equivalent) -- that's the overlay loader, and finding
+   it is what unblocks reading any code beyond the resident block.
+   (2026-09-27: `tools/OverlayScan6.java` is a Ghidra script written for
+   this; not yet run. Worth trying headless in a cloud sandbox before
+   assuming it needs Matt's machine.)
+2. Once the loader is found, figure out its table format (what maps an
+   overlay ID/address to a ROM source location) -- that turns "guess a jal
+   target and hope" into "look it up properly."
+3. Check whether the original 1998 BattleTanx N64 ROM is available, to
+   byte-match shared engine/libultra functions against it (the trick both
+   VPW64Recomp and GGA-Recomp used against their own sister titles) --
+   still useful for identifying functions within the confirmed resident
+   block, independent of the overlay question.
+4. Locate the USA boot-race branch (`patches/README.md`) in the real
+   symbol map and turn it into a real N64Recomp TOML patch entry.
+5. Once the overlay mechanism is understood, start standing up the
+   N64Recomp TOML config proper and get a first compile against
+   N64ModernRuntime + RT64.

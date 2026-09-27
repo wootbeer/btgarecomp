@@ -1,0 +1,172 @@
+options:
+  base_path:    ..
+  platform:     n64
+  compiler:     IDO           # UNCONFIRMED — Z-Axis/3DO era N64 titles commonly used
+                                # SN64/IDO rather than GCC; revisit once splat's auto
+                                # instruction-pattern check runs against the real ROM.
+  basename:     battletanx_ga
+  build_path:   build
+  target_path:  rom/battletanx_ga_usa.z64
+  asm_path:     asm
+  src_path:     src
+  cache_path:   .splache
+  symbol_addrs_path:         syms/battletanx_ga.symbol_addrs.txt
+  undefined_funcs_auto_path: syms/undefined_funcs_auto.txt
+  undefined_syms_auto_path:  syms/undefined_syms_auto.txt
+  asset_path:   assets
+  create_asm_dependencies: True
+  disassemble_all: True
+
+# PASS-0 STARTER CONFIG — not a finished split, but past two dead ends now.
+#
+# Round 1: auto-scanning the whole ROM as one "code" segment hung forever --
+# splat's auto function-detector never found a jr $ra and was plowing through
+# non-code data trying to disassemble it as MIPS.
+#
+# Round 2: bounding "boot" to 0x1000-0x3000 (VRAM 0x80000400-0x80002400)
+# "fixed" the hang but produced ONE 8KB pseudo-function rendered entirely as
+# raw .word with hundreds of "invalid instruction" markers. Reading it by
+# hand: real code is only the first 0x38 bytes (0x1000-0x1038) -- a textbook
+# N64/IDO crt0 stub (set $sp, clear BSS in a loop, then `jal 0x8009ED9C ;
+# nop`) that never returns, which is exactly why no jr $ra was ever going to
+# turn up: this stub isn't supposed to have one. Immediately after that it's
+# genuine data (IEEE-754 floats, pointer tables) misdecoded as "invalid
+# instructions" because splat/spimdisasm renders a whole function as raw
+# words the moment any single instruction inside it fails validation.
+# Lesson banked: a jr-$ra hang/absence doesn't mean "still in code, keep
+# scanning" -- it can mean "this routine doesn't return, stop here."
+#
+# That `jal 0x8009ED9C` is a real lead: it converts to ROM offset 0x9F99C --
+# past the traditional 1MB IPL3 default, so this game's boot config loads
+# more than the usual amount resident, or this ends up being overlay-loaded
+# later (unconfirmed either way, but it clearly runs as a normal jal target
+# from boot, so treat it as resident until proven otherwise).
+#
+# Round 3: probed a small (0x200-byte) window there. It came back CLEAN --
+# three real functions (func_8009ED9C, func_8009EE80, func_8009EF60), zero
+# invalid-instruction fallback, proper stack frames, real jr $ra returns,
+# and calls out to three more addresses (func_80105DB0, func_801055CC,
+# func_80105DD0) plus two data globals (D_80126EF0, D_80126EE8). This reads
+# like genuine list-traversal/dispatch game logic, not boot scaffolding --
+# a good sign the resident code region extends significantly past the boot
+# stub.
+#
+# Round 4: widened to 0x2000 bytes (8KB). Also fully clean -- 56 real
+# functions, all cleanly bounded, zero invalid-instruction fallback. This is
+# clearly a large contiguous block of genuine resident code, not a small
+# pocket. A bounded "code" segment can't hang outright even in the worst
+# case (an unreturning function just produces a raw-.word dump, same as the
+# boot region did) -- only an unbounded one can -- so it's safe to jump much
+# further at once instead of doubling cautiously.
+#
+# Round 5: widened to 0x20000 bytes (128KB). ~320 functions came out, but a
+# `Select-String` count of "invalid instruction" across the output came back
+# at 7,522 -- much higher than the handful of sample lines first looked at
+# suggested. Wrongly read at the time as "small isolated data pockets";
+# pushed forward another 1MB anyway (round 6 below), which is what exposed
+# the mistake.
+#
+# Round 6: with the window widened to ~1.1MB, splat hung for real -- verified
+# by checking the output directory directly rather than guessing from the
+# progress bar: it was frozen writing a 0-byte func_800A389C.s, the exact
+# same address the round-5 "sample" invalid-instruction lines started at.
+# So that wasn't a small embedded string pocket after all -- it's the same
+# failure mode as the boot stub: one function that never returns, absorbing
+# everything from there to the segment end, and round 5's 7,522 count was
+# this same runaway blob, just capped short by the smaller 128KB window at
+# the time. Real resident code is confirmed clean from VRAM 0x8009ED9C to
+# 0x800A389C (ROM 0x9F99C-0xA449C, ~19KB, matching the last successfully
+# written file, func_800A386C.s) -- ending main_probe's code range there.
+# Lesson reinforced: don't read a "clean enough" narrative into a nonzero
+# invalid-instruction count just because it's smaller than expected -- check
+# where output actually stopped before pushing further.
+#
+# Round 7: probed the three jal-target leads from round 3
+# (func_801055CC, func_80105DB0, func_80105DD0) individually. All three
+# landed on the SAME kind of thing -- dense, repeating nibble/byte patterns
+# (0x6B5B6B5B, 0x19491949, 0x44444568...) that read as packed texture/pixel
+# data, starting at byte zero of each "function" (not partway through, like
+# every previous wall). Real code calling directly into what's clearly image
+# data doesn't add up under the "ROM is one linear resident blob" model this
+# whole config has assumed so far -- but it fits a well-known N64 pattern:
+# these are overlay slots. The actual code the game expects to find at e.g.
+# 0x80105DB0 gets DMA'd in at runtime by an overlay loader, from some other
+# ROM location entirely -- what's sitting at the naive linear-mapped offset
+# is just whatever unrelated asset happens to occupy that ROM byte range.
+#
+# Practical takeaway: this ROM does have real, substantial statically-
+# resident code (confirmed 0x9F99C-0xA449C, main_probe above) -- but code it
+# calls into further out is not reliably at "vram - 0x7FFFF400" in the ROM
+# file, so extending main_probe's linear model further, or probing more raw
+# jal targets the same way, isn't a reliable way to make progress from here.
+# The two probe segments below are left in as "bin" (not "code") since they
+# turned out to be data, not a real lead. The next real step is finding the
+# overlay LOADER itself (almost certainly DMA/file-load calls) inside the
+# confirmed-resident block, which is a Ghidra job, not a splat-config one --
+# see STATUS.md.
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: ipl3
+    type: bin
+    start: 0x40
+
+  - name: boot
+    type: code
+    start: 0x1000
+    vram: 0x80000400
+    subsegments:
+      - [0x1000, c, boot_entry]      # real crt0 stub, 0x38 bytes, ends after
+                                       # `jal 0x8009ED9C ; nop` -- see above.
+      - [0x1038, data, boot_data]     # floats + pointer table, not code.
+
+  - name: unk_before_probe
+    type: bin
+    start: 0x3000
+    vram: 0x80002400
+    # Still unanalyzed. This is the bulk of the ROM before our probe point --
+    # almost certainly contains real structure (overlay table, more
+    # resident code) we just haven't looked at yet.
+
+  - name: main_probe
+    type: code
+    start: 0x9F99C
+    vram: 0x8009ED9C
+    subsegments:
+      # Confirmed-clean range only, per round 6 above: 0x9F99C-0xA449C.
+      - [0x9F99C, c, main_entry]
+
+  - name: unk_after_probe
+    type: bin
+    start: 0xA449C
+    vram: 0x800A389C
+    # Real data starts here -- same failure mode as boot_data (see round 2
+    # above). Worth reading a chunk of it by hand at some point (it opened
+    # with what looked like an ASCII string), but not urgent. Rather than
+    # keep extending this one linear scan and risking another hang on
+    # unknown terrain, switching strategy: chase the three concrete leads
+    # from round 3 (func_80105DB0, func_801055CC, func_80105DD0 -- all
+    # jal targets from confirmed-real code) with their own small bounded
+    # probes below, and leave the large unknown gap between here and there
+    # as unanalyzed for now.
+
+  - name: probe_105cc
+    type: bin
+    start: 0x1061CC
+    vram: 0x801055CC
+    # Round 7: this jal target turned out to be texture/pixel data, not
+    # code -- overlay slot, most likely (see round 7 note above).
+
+  - name: probe_105db
+    type: bin
+    start: 0x1069B0
+    vram: 0x80105DB0
+    # Round 7: same story -- func_80105DB0/func_80105DD0 are also
+    # texture-like data, not code. Left as two named segments (rather than
+    # merging into the surrounding unk_after_probe) so these specific
+    # addresses stay easy to find later if the overlay loader investigation
+    # wants to check what SHOULD be here at runtime.
+
+  - [0x800000]   # end of ROM (8 MiB cart)
