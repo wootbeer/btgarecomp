@@ -54,7 +54,12 @@ symbols_file_path = "BattleTanxGASyms/battletanxga.us.rev0.syms.toml"
 #    normally does); stubbed for now to get a build, but this one is a
 #    real gap to revisit once real audio is being worked on, not dead code
 #    like the others in this list.
-stubs = ["func_8007919C", "func_80079260", "__osException_80104FB0", "n_alEnvmixerPull"]
+#  - func_801000B0: round 22's automated cross-function-branch split (see
+#    STATUS.md) split this out of n_alEnvmixerPull's own byte range, since
+#    something else branches directly into it. It still contains the same
+#    jump table at 0x80100120 that made n_alEnvmixerPull itself
+#    unanalyzable, so it needs the same treatment for the same reason.
+stubs = ["func_8007919C", "func_80079260", "__osException_80104FB0", "n_alEnvmixerPull", "func_801000B0"]
 
 # Instruction patches: cop0 writes and eret (nothing is emulated) -- round 18.
 
@@ -225,20 +230,15 @@ func = "func_80078E18"
 vram = 0x80078e20
 value = 0x00000000
 
-# tltu -- also unhandled by N64Recomp's recompiler ("Unhandled instruction:
-# tltu"). A single compiler-inserted trap/assertion check (traps if $a2 is
-# nonzero) inside func_800D8C60; safe to nop like the other "nothing is
-# emulated" cases -- a defensive check like this only ever fires on a bug,
-# never during normal gameplay (round 21).
-[[patches.instruction]]
-func = "func_800D8C60"
-vram = 0x800d92dc
-value = 0x00000000
-
-[[patches.instruction]]
-func = "func_800E7EE0"
-vram = 0x800e7f5c
-value = 0x00000000
+# tltu/tgeu -- round 21 treated both as real compiler-inserted trap checks
+# and nopped them (N64Recomp's recompiler doesn't implement either
+# instruction: "Unhandled instruction: tltu/tgeu"). Round 22 found both
+# were actually the same trailing-garbage-word pattern as the various
+# split fixes above (a data word right after a function's real jr $ra
+# return, before the next declared function) -- neither was real code, so
+# both patches were removed along with the syms.toml truncations/splits
+# that excluded them from any function's declared range
+# (func_800D8C60/func_800D92E0, func_800E7EE0).
 
 # sync -- unhandled by N64Recomp's recompiler, nop it (round 21).
 [[patches.instruction]]
@@ -561,7 +561,7 @@ text = """
 """
 
 [[patches.hook]]
-func = "func_800A2E30"
+func = "func_800A2EF0"
 before_vram = 0x800a30ac
 text = """
     if (U32(ctx->r3) != 0) { lo = S32(U32(ctx->r2) / U32(ctx->r3)); hi = S32(U32(ctx->r2) % U32(ctx->r3)); } else { lo = 0; hi = 0; }
@@ -638,7 +638,7 @@ text = """
 """
 
 [[patches.hook]]
-func = "func_800D8C60"
+func = "func_800D92E0"
 before_vram = 0x800d9398
 text = """
     if (U32(ctx->r3) != 0) { lo = S32(U32(ctx->r2) / U32(ctx->r3)); hi = S32(U32(ctx->r2) % U32(ctx->r3)); } else { lo = 0; hi = 0; }

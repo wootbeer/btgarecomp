@@ -3,6 +3,105 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 22: first full build -- `BattleTanxGARecompiled` links and runs
+
+Checked out the submodules `.gitmodules` had listed but that had never
+actually been added (`git submodule add` for N64ModernRuntime,
+RecompFrontend, rt64, plus all of rt64's own ~16 nested submodules and
+N64ModernRuntime's/RecompFrontend's own few), installed the missing system
+deps (`libvulkan-dev`, `libsdl2-dev`, `libgtk-3-dev`), and iterated the full
+CMake + ninja build against round 21's clean N64Recomp output until it
+linked. `./build/BattleTanxGARecompiled` now exists and runs (exit 0 --
+it's still the placeholder `main()`, see below for what that means).
+
+Two kinds of work this round:
+
+**More symbol-table bugs, found because N64Recomp not erroring during its
+own analysis pass doesn't mean the C it generates actually compiles.**
+Round 21 declared victory at `N64Recomp`'s exit code 0; round 22 found 9
+more function-boundary problems that only surfaced once `gcc` tried to
+compile `RecompiledFuncs/*.c`:
+- A branch/jump leaving its function is only turned into a proper tail
+  call when the target is the exact START of some known function
+  (`recompilation.cpp`'s `functions_by_vram.find`); otherwise N64Recomp
+  emits `goto L_<addr>` to a label that's never defined, and `gcc` fails
+  with "label ... used but not defined". Found and fixed 9 of these by
+  splitting the target function at that exact address, including one
+  chain reaction (splitting `func_800DB1B0` revealed a *second* branch
+  into what became the new `func_800DB258`, needing a further split) --
+  wrote a small script that repeats the branch-target scan and
+  auto-splits until none remain, rather than fixing them one rebuild at a
+  time.
+- A write to `$zero` (other than the literal canonical nop encoding)
+  compiles to invalid C (`0 = ...;`), since N64Recomp's codegen doesn't
+  special-case it. `rabbitizer`'s `outputsToGprZero()`/`isNop()` catch
+  this class directly -- found `and $zero,$zero,$zero`, `mfhi $zero`,
+  `sllv/srlv $zero,...` and more, all the same trailing-garbage-word
+  pattern as round 21's fixes, plus five more fully-fake ~0x10-0x20-byte
+  entries in the same persistently bad 0x8011axxx neighborhood.
+- The hardest class: a garbage word that decodes as a **fully plausible,
+  syntactically valid instruction with real-looking operands** --
+  `beql $s2, $s5, ...`/`bne $t3, $t6, ...` built from what's actually
+  mid-string ASCII bytes. Nothing in a static per-instruction check flags
+  these; the only tell is where their *computed branch target* lands.
+  Found 3 this way (`func_800E5BB8`, `func_800F7EC0`, and
+  `func_800F8660` -- the last one had actually been logging as an
+  "Indirect tail call" during N64Recomp's own analysis with no warning at
+  all, then still broke the C compile; **N64Recomp's own log output not
+  complaining about a function is not proof it will compile**). Also
+  found two ENTIRE functions this way that round 21 had wrongly kept as
+  real code (`func_8014749C`, `func_80147740` -- every single instruction
+  in both was this same repeating-word garbage, `0x52945294`, matching
+  round 16's already-known texture/palette data pattern; deleted both).
+- Wrote a proactive full-corpus sweep for "a branch/jump target that is
+  neither inside its own function nor the start of any known function" to
+  catch the rest of this category in one pass instead of one rebuild
+  error at a time -- converged to 0 remaining after applying its findings
+  (except the one deliberately-left-alone jump-table case in
+  `func_800F8660`, later fixed for real once the C compiler caught it too).
+- `n_alEnvmixerPull`'s own stub (round 21) needed to extend to a second
+  function, `func_801000B0`, split out of it by the branch-target sweep --
+  it contains the same unanalyzable jump table, so it's stubbed for the
+  same reason.
+
+**Missing pieces in the actual CMake/build wiring**, none of which had
+ever been exercised against a real build before:
+- `include/btga_recomp_hooks.h` (force-included into every
+  `RecompiledFuncs/*.c`, per `CMakeLists.txt`) didn't exist. Everything
+  the current hooks need (`ctx`, `S32`/`S64`/`U32`/`U64`) already comes
+  from N64Recomp's own generated `recomp.h`, so this is a placeholder for
+  now -- add real declarations here as future hooks need them.
+- The `patches/*.c` -> `patches.elf` -> `N64RecompCLI patches.toml` ->
+  `RecompiledPatches/patches.c` pipeline (`PatchesLib` in
+  `CMakeLists.txt`) assumed real patch sources and a `patches.toml` that
+  don't exist yet (PROGRESS.md item 8 is explicitly not started).
+  Guarded it the same way `RecompiledFuncs`/`BattleTanxGARecompiled`
+  already guard their own not-yet-written sources: build `PatchesLib` as
+  an empty placeholder until real patches exist, instead of failing
+  outright (`ld.lld: error: no input files`).
+- `lib/RecompFrontend/recompui/src/api/ui_api_events.cpp` unconditionally
+  `#include`s `patches/ui_funcs.h` (marked `// TODO: Forced game
+  includes`) for a `RecompuiEventData` struct/enum set that's meant to be
+  generated per-game. Wrote `patches/recompui_event_structs.h` by hand
+  from the actual field usage in that file plus the enum values in
+  `lib/RecompFrontend/recompui/src/elements/ui_types.h` (which even names
+  the expected filename in a comment -- "must be kept in sync with
+  patches/recompui_event_structs.h"), and had `ui_funcs.h` include it.
+  This is real, needed-now content (unlike the hooks placeholder above),
+  not a stub -- but still has no actual game callback declarations in it
+  yet, since there are no UI-driving patches to declare.
+
+**What "runs" means right now**: `BattleTanxGARecompiled` links
+successfully with all 1300 recompiled functions in `RecompiledFuncs`, all
+of RT64/N64ModernRuntime/RecompFrontend, and executes -- but `src/main/`
+and `rsp/` are still empty (see `CMakeLists.txt`'s own placeholder-`main()`
+fallback), so nothing calls `recomp_entrypoint` or drives the
+ultramodern runtime loop yet, and the linker drops the unreferenced
+`RecompiledFuncs`/`PatchesLib` object code entirely (hence the ~15KB
+binary). Writing that entry point (`bdragoncore/battle-tanx-recomp`'s
+equivalent is `src/main/*.cpp`) is the next real step toward the game
+actually running, ahead of or alongside PROGRESS.md's items 6-8.
+
 ## 2026-09-27, round 21: first clean N64Recomp run -- `N64Recomp battletanxga.us.rev0.toml` exits 0
 
 The big one. Round 20 produced a well-formed config; this round is the

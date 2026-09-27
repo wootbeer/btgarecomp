@@ -173,14 +173,12 @@ func = "func_80078E18"
 vram = 0x80078e20
 value = 0x00000000
 
-# tltu -- also unhandled by N64Recomp's recompiler ("Unhandled instruction:
-# tltu"). A single compiler-inserted trap/assertion check (traps if $a2 is
-# nonzero) inside func_800D8C60; safe to nop like the other "nothing is
-# emulated" cases.
-[[patches.instruction]]
-func = "func_800D8C60"
-vram = 0x800d92dc
-value = 0x00000000
+# tltu/tgeu (was here for func_800D8C60 and func_800E7EE0) -- round 21
+# mistook both for real compiler-inserted trap checks and nopped them;
+# round 22 found both were actually trailing-garbage words past those
+# functions' real jr $ra returns, not real instructions at all, and
+# removed the patches along with the syms.toml split/truncation that
+# excludes them from any function's declared range. See STATUS.md round 22.
 
 [[patches.instruction]]
 func = "func_800E7EE0"

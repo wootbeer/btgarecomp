@@ -65,6 +65,28 @@ found again from scratch by disassembling this game's binary.
       `STATUS.md` round 21. `RecompiledFuncs/` isn't committed (gitignored,
       build output) — regenerate with `N64Recomp battletanxga.us.rev0.toml`
       from the repo root once the ROM is present locally.
+- [x] **Full build: `./build/BattleTanxGARecompiled` links and runs**
+      (round 22). Checked out the real submodules for the first time
+      (N64ModernRuntime, RecompFrontend, rt64 and their own nested
+      submodules — `.gitmodules` had listed them since the start but
+      `git submodule add` had never actually been run), installed the
+      missing system packages (`libvulkan-dev`, `libsdl2-dev`,
+      `libgtk-3-dev`), fixed 9 more symbol-table bugs that N64Recomp's own
+      exit code hadn't caught (it only caught them once `gcc` tried to
+      compile the generated C — its own "no error" isn't proof the output
+      compiles), and filled in three pieces of CMake/build wiring that had
+      never been exercised: a placeholder `include/btga_recomp_hooks.h`,
+      an empty-`PatchesLib` guard for the not-yet-written `patches/*.c`
+      pipeline, and a real (not placeholder) `patches/
+      recompui_event_structs.h` for the UI event ABI recompui's own
+      "forced game include" needs regardless of whether this game has any
+      UI-driving patches yet. Full breakdown in `STATUS.md` round 22.
+      **What this doesn't mean yet**: `src/main/` and `rsp/` are still
+      empty, so the linker drops all the recompiled game code as
+      unreferenced and the binary just runs an empty placeholder `main()`
+      — writing the real entry point (item 7 below, and
+      `bdragoncore/battle-tanx-recomp`'s `src/main/*.cpp` for the shape of
+      it) is what makes the game itself start running.
 
 ## Blocking, needs more reverse engineering
 

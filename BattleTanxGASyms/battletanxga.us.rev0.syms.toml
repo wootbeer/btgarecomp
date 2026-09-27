@@ -354,7 +354,9 @@ functions = [
     { name = "func_800992E0", vram = 0x800992e0, size = 0xd0 },
     { name = "func_800993B0", vram = 0x800993b0, size = 0xb4 },
     { name = "func_80099464", vram = 0x80099464, size = 0xd0 },
-    { name = "func_80099534", vram = 0x80099534, size = 0x190 },
+    { name = "func_80099534", vram = 0x80099534, size = 0x130 },
+    { name = "func_80099664", vram = 0x80099664, size = 0x2c },
+    { name = "func_80099690", vram = 0x80099690, size = 0x34 },
     { name = "func_800996C4", vram = 0x800996c4, size = 0x94 },
     { name = "func_80099758", vram = 0x80099758, size = 0x2c },
     { name = "func_80099784", vram = 0x80099784, size = 0xa0 },
@@ -386,7 +388,7 @@ functions = [
     { name = "func_8009D168", vram = 0x8009d168, size = 0x64 },
     { name = "func_8009D1CC", vram = 0x8009d1cc, size = 0x9c },
     { name = "func_8009D270", vram = 0x8009d270, size = 0x134 },
-    { name = "func_8009D3A4", vram = 0x8009d3a4, size = 0x10c },
+    { name = "func_8009D3A4", vram = 0x8009d3a4, size = 0x108 },
     { name = "func_8009D4B0", vram = 0x8009d4b0, size = 0x60 },
     { name = "func_8009D510", vram = 0x8009d510, size = 0x68 },
     { name = "func_8009D578", vram = 0x8009d578, size = 0x3c },
@@ -475,7 +477,10 @@ functions = [
     { name = "func_800A2B9C", vram = 0x800a2b9c, size = 0xd0 },
     { name = "func_800A2C6C", vram = 0x800a2c6c, size = 0x190 },
     { name = "func_800A2DFC", vram = 0x800a2dfc, size = 0x34 },
-    { name = "func_800A2E30", vram = 0x800a2e30, size = 0x928 },
+    # round 22: split -- trailing garbage word (srlv $zero,$zero,$zero) right
+    # after this one's real jr $ra return; real code resumes at 0x800a2ef0.
+    { name = "func_800A2EF0", vram = 0x800a2ef0, size = 0x868 },
+    { name = "func_800A2E30", vram = 0x800a2e30, size = 0xbc },
     { name = "func_800A3758", vram = 0x800a3758, size = 0x974 },
     { name = "func_800A40CC", vram = 0x800a40cc, size = 0x1b0c },
     { name = "func_800A5BD8", vram = 0x800a5bd8, size = 0x508 },
@@ -769,17 +774,44 @@ functions = [
     { name = "func_800D8380", vram = 0x800d8380, size = 0x15c },
     { name = "func_800D84DC", vram = 0x800d84dc, size = 0x40c },
     { name = "func_800D88F0", vram = 0x800d88f0, size = 0x370 },
-    { name = "func_800D8C60", vram = 0x800d8c60, size = 0x7cc },
+    { name = "func_800D8C60", vram = 0x800d8c60, size = 0x674 },
+    # round 22: same trailing-garbage-then-real-function pattern as many
+    # round-21 fixes, just missed then because the garbage word
+    # (`and $zero, $zero, $zero` at 0x800d92d4) is syntactically valid and
+    # not movz/movn/an out-of-range branch -- the checks that round 21's
+    # sweep used. Found instead at the C-compile stage: N64Recomp's
+    # codegen emits a literal "0 = 0 & 0;" for a write to $zero it doesn't
+    # special-case, which is invalid C. The round-21 tltu patch at
+    # 0x800d92dc (see instruction-patches section above) turns out to
+    # have been nopping a word inside this same garbage span, not a real
+    # compiler check -- removed along with this split, since it's now
+    # outside any declared function's range.
+    { name = "func_800D92E0", vram = 0x800d92e0, size = 0x14c },
     { name = "func_800D942C", vram = 0x800d942c, size = 0x4d4 },
     { name = "func_800D9900", vram = 0x800d9900, size = 0x1e0 },
     { name = "func_800D9AE0", vram = 0x800d9ae0, size = 0x68 },
     { name = "func_800D9B50", vram = 0x800d9b50, size = 0x200 },
     { name = "func_800D9D50", vram = 0x800d9d50, size = 0x7a0 },
-    { name = "func_800DA4F0", vram = 0x800da4f0, size = 0x16c },
+    { name = "func_800DA4F0", vram = 0x800da4f0, size = 0x140 },
+    # round 22: split at 0x800da630 -- func_800C48F0 has a conditional
+    # branch (bnel) targeting this exact mid-function address. N64Recomp's
+    # recompiler can only turn a branch leaving its function into a proper
+    # tail call when the target is the START of some known function
+    # (recompilation.cpp's `functions_by_vram.find(branch_target)` check);
+    # otherwise it emits a `goto L_<addr>` to a label that's never defined
+    # ("[Warn] ... branching outside of the function", then a real C
+    # compile error: "label 'L_800DA630' used but not defined"). Splitting
+    # here turns it into a normal tail call, the same mechanism already
+    # working for every other cross-function jump in this ROM.
+    { name = "func_800DA630", vram = 0x800da630, size = 0x2c },
     { name = "func_800DA65C", vram = 0x800da65c, size = 0x174 },
     { name = "func_800DA7D0", vram = 0x800da7d0, size = 0x310 },
     { name = "func_800DAAE0", vram = 0x800daae0, size = 0x6d0 },
-    { name = "func_800DB1B0", vram = 0x800db1b0, size = 0x538 },
+    { name = "func_800DB1B0", vram = 0x800db1b0, size = 0xa8 },
+    # round 22: same split reason as func_800DA630 above -- func_800C48F0
+    # also branches (beq) straight to this mid-function address.
+    { name = "func_800DB258", vram = 0x800db258, size = 0x270 },
+    { name = "func_800DB4C8", vram = 0x800db4c8, size = 0x220 },
     { name = "func_800DC3A8", vram = 0x800dc3a8, size = 0x3fc },
     { name = "func_800DC968", vram = 0x800dc968, size = 0x770 },
     { name = "func_800DD0D8", vram = 0x800dd0d8, size = 0x1b8 },
@@ -822,8 +854,22 @@ functions = [
     { name = "func_800E4F00", vram = 0x800e4f00, size = 0x3c },
     { name = "func_800E4F3C", vram = 0x800e4f3c, size = 0x6f0 },
     { name = "func_800E562C", vram = 0x800e562c, size = 0xa4 },
-    { name = "func_800E56D0", vram = 0x800e56d0, size = 0x4e8 },
-    { name = "func_800E5BB8", vram = 0x800e5bb8, size = 0x988 },
+    # round 22: split -- two trailing garbage words (mfhi $zero / sll $zero,...
+    # / mfhi $zero again) after the real jr $ra return; real code resumes
+    # at 0x800e58d0.
+    { name = "func_800E58D0", vram = 0x800e58d0, size = 0x2e8 },
+    { name = "func_800E56D0", vram = 0x800e56d0, size = 0x1f4 },
+    { name = "func_800E5BB8", vram = 0x800e5bb8, size = 0x934 },
+    # round 22: split -- the trailing garbage word this time (0x800e64ec,
+    # raw bytes "RUP_") is a genuinely hard case: it decodes as a fully
+    # plausible `beql $s2, $s5, ...` with real-looking operands, not
+    # something outputsToGprZero()/movz-movn/notEmittedByCompilers flags,
+    # so no automated sweep caught it -- only found because its computed
+    # branch target (0x800fa66c, from elsewhere entirely) landed on a
+    # non-function-start address and broke the C compile ("label
+    # 'L_800FA66C' used but not defined"). Real code resumes cleanly at
+    # 0x800e64f0 and runs to this entry's original declared end.
+    { name = "func_800E64F0", vram = 0x800e64f0, size = 0x50 },
     { name = "func_800E6540", vram = 0x800e6540, size = 0x168 },
     { name = "func_800E66A8", vram = 0x800e66a8, size = 0x7b4 },
     { name = "func_800E6E5C", vram = 0x800e6e5c, size = 0x2e0 },
@@ -834,7 +880,12 @@ functions = [
     { name = "func_800E7768", vram = 0x800e7768, size = 0x2a8 },
     { name = "func_800E7A10", vram = 0x800e7a10, size = 0x414 },
     { name = "func_800E7E24", vram = 0x800e7e24, size = 0xbc },
-    { name = "func_800E7EE0", vram = 0x800e7ee0, size = 0x80 },
+    { name = "func_800E7EE0", vram = 0x800e7ee0, size = 0x7c },
+    # round 22: trimmed the trailing word (was a "tgeu" at 0x800e7f5c) --
+    # same story as func_800D8C60/func_800D92E0 above, a data misdecode
+    # right after this function's real jr $ra return, not a real trap
+    # instruction. The already-separately-declared func_800E7F60
+    # immediately follows with no gap, so no new symbol needed here.
     { name = "func_800E7F60", vram = 0x800e7f60, size = 0x130 },
     { name = "func_800E8090", vram = 0x800e8090, size = 0x64 },
     { name = "func_800E80F4", vram = 0x800e80f4, size = 0x1b8 },
@@ -924,7 +975,7 @@ functions = [
     { name = "func_800F3D04", vram = 0x800f3d04, size = 0x154 },
     { name = "func_800F3E58", vram = 0x800f3e58, size = 0x840 },
     { name = "func_800F4698", vram = 0x800f4698, size = 0x6dc },
-    { name = "func_800F50B8", vram = 0x800f50b8, size = 0x1b8 },
+    { name = "func_800F50B8", vram = 0x800f50b8, size = 0x1ac },
     { name = "func_800F5270", vram = 0x800f5270, size = 0x28 },
     { name = "func_800F5298", vram = 0x800f5298, size = 0x1d8 },
     { name = "func_800F5470", vram = 0x800f5470, size = 0xd8 },
@@ -943,15 +994,35 @@ functions = [
     { name = "func_800F7150", vram = 0x800f7150, size = 0xe0 },
     { name = "func_800F7230", vram = 0x800f7230, size = 0x33c },
     { name = "func_800F756C", vram = 0x800f756c, size = 0x10 },
-    { name = "func_800F757C", vram = 0x800f757c, size = 0x628 },
+    # round 22: split -- trailing garbage word (sllv $zero,$at,$zero) right
+    # after this one's real jr $ra return; real code resumes at 0x800f764c.
+    { name = "func_800F764C", vram = 0x800f764c, size = 0x558 },
+    { name = "func_800F757C", vram = 0x800f757c, size = 0xcc },
     { name = "func_800F7BA4", vram = 0x800f7ba4, size = 0x80 },
     { name = "func_800F7C30", vram = 0x800f7c30, size = 0x290 },
-    { name = "func_800F7EC0", vram = 0x800f7ec0, size = 0x228 },
+    { name = "func_800F7EC0", vram = 0x800f7ec0, size = 0x1dc },
+    # round 22: split -- another hard-to-detect trailing garbage word
+    # (0x800f809c, raw bytes spell "num", part of a string) that decodes as
+    # a fully plausible `bne`; only surfaced because its computed branch
+    # target (0x80115654) landed in the ~24KB unclaimed data gap after
+    # func_80114470 (confirmed pure data by direct inspection: IEEE-754
+    # floats, movz/movn, far-out-of-segment jump targets -- not more code).
+    # Real code resumes cleanly at 0x800f80a0 and runs to this entry's
+    # original declared end.
+    { name = "func_800F80A0", vram = 0x800f80a0, size = 0x48 },
     { name = "func_800F80E8", vram = 0x800f80e8, size = 0x120 },
     { name = "func_800F8208", vram = 0x800f8208, size = 0x5c },
     { name = "func_800F8264", vram = 0x800f8264, size = 0x38c },
     { name = "func_800F85F0", vram = 0x800f85f0, size = 0x6c },
-    { name = "func_800F8660", vram = 0x800f8660, size = 0x750 },
+    { name = "func_800F8660", vram = 0x800f8660, size = 0x744 },
+    # round 22: trimmed 0xc bytes of trailing garbage (a `beql`/`jr $zero`/
+    # `sll $zero,...` trio right after the real jr $ra return) that N64Recomp
+    # had actually been logging as "[Info] Indirect tail call in
+    # func_800F8660" without erroring during its own analysis pass -- but
+    # still broke the C compile ("0 = S32(ctx->r6 << 0);", "label
+    # 'L_800F9068' used but not defined"). N64Recomp not erroring during
+    # analysis doesn't guarantee the generated C compiles; always check the
+    # actual build, not just N64Recomp's own exit code.
     { name = "func_800FAFBC", vram = 0x800fafbc, size = 0x288 },
     { name = "MusSetMasterVolume", vram = 0x800fb244, size = 0x2c },
     { name = "MusStartSong", vram = 0x800fb270, size = 0x280 },
@@ -1038,15 +1109,20 @@ functions = [
     { name = "func_800FFA1C", vram = 0x800ffa1c, size = 0x74 },
     { name = "func_800FFA90", vram = 0x800ffa90, size = 0xa0 },
     { name = "n_alFxNew", vram = 0x800ffb30, size = 0xc4 },
-    { name = "n_drvrnew_text_00C4", vram = 0x800ffbf4, size = 0x258 },
+    { name = "n_drvrnew_text_00C4", vram = 0x800ffbf4, size = 0xa0 },
+    { name = "func_800FFC94", vram = 0x800ffc94, size = 0x1b8 },
     { name = "n_drvrnew_text_031C", vram = 0x800ffe4c, size = 0x90 },
-    { name = "n_drvrnew_text_03AC", vram = 0x800ffedc, size = 0x40 },
+    { name = "n_drvrnew_text_03AC", vram = 0x800ffedc, size = 0x18 },
+    { name = "func_800FFEF4", vram = 0x800ffef4, size = 0x28 },
     { name = "alN_PVoiceNew", vram = 0x800fff1c, size = 0x134 },
-    { name = "n_alEnvmixerPull", vram = 0x80100050, size = 0x1ec },
+    { name = "n_alEnvmixerPull", vram = 0x80100050, size = 0x60 },
+    { name = "func_801000B0", vram = 0x801000b0, size = 0x18c },
     { name = "n_env_text_01EC", vram = 0x8010023c, size = 0xd0 },
-    { name = "n_env_text_02BC", vram = 0x8010030c, size = 0x214 },
+    { name = "n_env_text_02BC", vram = 0x8010030c, size = 0x1e8 },
+    { name = "func_801004F4", vram = 0x801004f4, size = 0x2c },
     { name = "n_env_text_04D0", vram = 0x80100520, size = 0x8 },
-    { name = "n_env_text_04D8", vram = 0x80100528, size = 0xa0 },
+    { name = "n_env_text_04D8", vram = 0x80100528, size = 0x40 },
+    { name = "func_80100568", vram = 0x80100568, size = 0x60 },
     { name = "n_alEnvmixerParam", vram = 0x801005c8, size = 0x8c },
     { name = "n_env_text_0604", vram = 0x80100654, size = 0x8 },
     { name = "n_env_text_060C", vram = 0x8010065c, size = 0x10 },
@@ -1060,10 +1136,13 @@ functions = [
     { name = "n_env_text_09BC", vram = 0x80100a0c, size = 0x14 },
     { name = "n_alAdpcmPull", vram = 0x80100a20, size = 0xcc },
     { name = "n_load_text_00CC", vram = 0x80100aec, size = 0x68 },
-    { name = "n_load_text_0134", vram = 0x80100b54, size = 0x240 },
-    { name = "n_load_text_0374", vram = 0x80100d94, size = 0x4c },
+    { name = "n_load_text_0134", vram = 0x80100b54, size = 0x184 },
+    { name = "func_80100CD8", vram = 0x80100cd8, size = 0xbc },
+    { name = "n_load_text_0374", vram = 0x80100d94, size = 0x38 },
+    { name = "func_80100DCC", vram = 0x80100dcc, size = 0x14 },
     { name = "n_load_text_03C0", vram = 0x80100de0, size = 0x24 },
-    { name = "n_load_text_03E4", vram = 0x80100e04, size = 0x34 },
+    { name = "n_load_text_03E4", vram = 0x80100e04, size = 0x30 },
+    { name = "func_80100E34", vram = 0x80100e34, size = 0x4 },
     { name = "n_load_text_0418", vram = 0x80100e38, size = 0x30 },
     { name = "n_alLoadParam", vram = 0x80100e68, size = 0x178 },
     { name = "n_load_text_05C0", vram = 0x80100fe0, size = 0x8 },
@@ -1370,11 +1449,13 @@ functions = [
     # (an `lb` loading from a huge negative offset off $zero that is really
     # just this function's own address reinterpreted, then a `dmtc0` that
     # N64Recomp doesn't support -- "Unhandled instruction: dmtc0").
-    { name = "func_80119668", vram = 0x80119668, size = 0x10 },
-    { name = "func_80119678", vram = 0x80119678, size = 0x14 },
-    { name = "func_801196A8", vram = 0x801196a8, size = 0x10 },
-    { name = "func_801196C8", vram = 0x801196c8, size = 0x18 },
-    { name = "func_801196E8", vram = 0x801196e8, size = 0x20 },
+    # func_80119668/80119678/801196A8/801196C8/801196E8 (were here) removed
+    # round 22: same pure-data pattern as the other round-21/22 deletions in
+    # this exact 0x8011axxx-0x8011bxxx neighborhood -- each one's very
+    # first "instruction" is already a degenerate `sll $zero, $reg, 0`
+    # (writes to $zero, which real code never does -- caught by
+    # rabbitizer's `outputsToGprZero()`), immediately followed by more
+    # raw-address-as-instruction garbage, not real code at all.
     { name = "func_8011A3E0", vram = 0x8011a3e0, size = 0x10 },
     { name = "func_8011A4E0", vram = 0x8011a4e0, size = 0xc },
     # func_8011A5F0 (was here, vram 0x8011a5f0 size 0xac) removed round 21:
@@ -1411,6 +1492,15 @@ functions = [
     { name = "__osViCurr", vram = 0x80126f70, size = 0x4 },
     { name = "__osViNext", vram = 0x80126f74, size = 0x2c },
     { name = "__osViCurr_8012DEE0", vram = 0x8012dee0, size = 0x8 },
-    { name = "func_8014749C", vram = 0x8014749c, size = 0x20 },
-    { name = "func_80147740", vram = 0x80147740, size = 0x28 },
+    # func_8014749C and func_80147740 (were here) removed round 22: round
+    # 21's truncation heuristic (cut at the last confirmed jr $ra before the
+    # first outright-invalid word) mistakenly treated these as real code,
+    # since every word in both is a *syntactically valid* but nonsensical
+    # decode (`beql $s4, $s4, ...` repeated over and over -- the same
+    # repeating word pattern, 0x52945294, that round 16 already identified
+    # as texture/palette data elsewhere). Neither has a real jr $ra
+    # anywhere; both are pure data. Found via a full-corpus sweep for
+    # branches whose target lands somewhere with no known function AND
+    # isn't the source function's own range -- both branch out to
+    # 0x8015bxxx/0x8015cxxx/0x8012a8e0, addresses with no code nearby.
 ]
