@@ -3,6 +3,132 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-19 (transcribed 2026-09-27): recovered findings from screenshots -- a real overlay/asset table, and a direct link to the "wall" functions
+
+**This entire section was reconstructed from screenshots** Matt uploaded to
+this repo (`memorymap.png`, `scree2/4/5/6.png`, `screenpart.png`, `1.png`,
+`3.png`, `4.png`, `new1/2/3/34/345.png`, and others), not from any file.
+They show a Ghidra session (project `globalrecomp`, imported successfully
+with the N64 loader by Warranty Voider -- MIPS:BE:64:64-32addr, o32,
+Ghidra 12.1.2) and, in the `new*.png` files, a chat with a Claude Code
+session on Matt's own machine driving that Ghidra session interactively,
+timestamped the morning of 2026-09-19 -- i.e. **after** the 2026-09-18
+entry below, and with real progress that entry doesn't mention. That
+session said more than once that it was writing its findings into
+`STATUS.md` as it went; that version of the file was never uploaded here,
+only these screenshots were, so this section is a best-effort reconstruction
+of what it must have said. Treat the addresses/values below as read off
+screenshots, not verified against the ROM directly.
+
+**Confirmed real, non-splat-block functions found via Ghidra's own
+analysis** (separate from -- and in some cases earlier in VRAM than -- the
+19KB block splat confirmed on 2026-09-18):
+
+- `FUN_80007078` (VRAM `0x80007078`) -- calls `FUN_80078e34` and
+  `FUN_80078e40`. Real, clean code, well before the splat-confirmed block.
+- A cluster of functions (`FUN_80095470`, `FUN_80095b68`, `FUN_80095b90`,
+  `FUN_80095cf0`, `FUN_8009c9c0`, `FUN_8009ca10`, `FUN_8009cb40`,
+  `FUN_8009cc20`, and more -- 20+ total per Ghidra's own xref list) that
+  all read or write `PI_STATUS` (the real N64 Peripheral Interface DMA
+  status register, `0xA4600010`). `FUN_80095b68` decompiles cleanly:
+  ```c
+  void FUN_80095b68(void) {
+      do {} while ((PI_STATUS & 3) != 0);   // wait for PI DMA/IO idle
+      uStack00000018 = PI_STATUS;
+      ASIC_BM_STATUS = *(undefined4 *)(in_stack_0000001c + 0x10);
+      FUN_801067fc();
+      PI_STATUS = 2;                         // clear/ack
+      DAT_80126e60 = DAT_80126e60 | 0x100401;
+  }
+  ```
+  This is a textbook PI-DMA wait/kick routine -- real hardware DMA *is*
+  used somewhere in this game, contrary to the "DMA unused" note below.
+  Reconciling that contradiction is unresolved (see "Open contradiction").
+- **`FUN_80095470` calls `FUN_80105dd0` directly** -- one of the three
+  "overlay wall" functions from the 2026-09-18 entry
+  (`func_801055CC`/`func_80105DB0`/`func_80105DD0` there, same addresses,
+  Ghidra's auto-naming just capitalizes differently). This is the first
+  real evidence connecting the wall functions to the PI/DMA status-handling
+  code, rather than just being called blind from `func_8009ED9C` as the
+  2026-09-27 entry above found.
+- `FUN_8009f3b4`: checks flag `DAT_80126ed0`, conditionally calls
+  `FUN_80110750` and clears the flag.
+- **`FUN_80110750` and `FUN_800f80e8` both fail to decompile** -- Ghidra
+  reports "Control flow encountered bad instruction data" and falls
+  through to `halt_baddata()`. Cross-referenced from `FUN_8009f3b4`,
+  `FUN_80048eb0`, and `FUN_80087664`. These read exactly like the "overlay
+  slot" symptom from the 2026-09-18 entry (garbage at the naive address),
+  but now with real, confirmed callers instead of just a bare `jal` in
+  isolation.
+- `FUN_800923b0`: calls `FUN_80105db0()` (another wall function, no args),
+  stores the result, and compares it against an internal ROM header
+  pointer -- reads like a "re-initialize if the header pointer changed"
+  guard, i.e. more real control flow built around the wall functions.
+
+**The actual overlay/asset table, found by address, not guessed:**
+tightly packed 8-byte entries of `{ uint32 size; uint32 romAddr; }`
+starting at `DAT_800a3b14` (values noted: size `0x0000349B` + a romAddr
+around `0x8059xxxx`, size `0x00000AAC`, size `0x00000970`, and more -- a
+couple KB to ~20KB each, i.e. **individual asset chunks, not one big
+overlay blob**). Real Ghidra xrefs, not guesses:
+- `DAT_800a3b14` read by `FUN_8002d4dc` (at ROM/ref `0x80028240`)
+- `DAT_800a3b1c` / `DAT_800a3b2c` read by `FUN_8002d40c` (at
+  `0x80026d20` / `0x80026d24`)
+- `PTR_DAT_800a3b38` / `DAT_800a3b3c` read by `FUN_80027df1`
+
+The working theory in that thread: each call site loads one specific known
+asset by passing its `(size, romAddr)` pair into a **shared copy/decompress
+routine**, and that shared routine -- not any of these specific call sites
+-- is the real target, since it's very likely the same primitive the
+overlay loader itself uses.
+
+**A jump-table misdecoding theory for the "bad instruction data" crashes**:
+`FUN_80087570` (also referred to as the "distance-check / loader entry
+point" -- see below) has an unresolved register-indirect jump (`jr $reg`)
+right after what looks like a critical-section guard
+(`getCopReg(2, 0x3010)` / `getCopReg(2, 0x300e)`). Ghidra doesn't
+recognize the case-address table this jump presumably reads from as data,
+so it tries to disassemble those bytes as instructions and produces
+exactly the "Unimplemented instruction" / "bad instruction data" garbage
+seen at `FUN_80110750`, `FUN_800f80e8`, and `FUN_80087570` itself. If
+right, the fix is marking those byte spans as data instead of code, not
+finding a DMA loader.
+
+**A dispatcher lead pointing at the real activation code**: a
+message/event dispatcher (a common N64-era pattern -- one function fielding
+many per-object event IDs) has a case that calls three functions back to
+back: `SUB_80087570` (the distance-gated loader entry point being traced),
+then `SUB_80087ef0`, then `SUB_80087a80`. The latter two hadn't shown up
+before that point and were flagged as strong candidates for the code that
+actually performs the overlay copy/activation, since `SUB_80087570` itself
+only looked like a distance check plus a call onward.
+
+**Open contradiction, unresolved**: that thread stated "the actual DMA
+hardware registers are confirmed unused anywhere in this ROM, so the real
+overlay copy is almost certainly a plain software loop reading straight
+from the memory-mapped cartridge space (`0xB0xxxxxx`, direct-mapped per
+Ghidra's own memory map, no DMA controller involved) rather than a
+hardware-triggered transfer." That directly conflicts with the confirmed
+`PI_STATUS`-using functions above, which unambiguously do use real PI DMA
+registers. Possible reconciliations, neither confirmed: (a) that claim was
+scoped to the specific asset-table loader being traced at the time, while
+PI DMA is genuinely used elsewhere (e.g. controller pak / EEPROM save
+access, matching `patches/README.md`'s boot-race note about `osContInit`),
+or (b) the claim needs re-checking against `FUN_80095b68`/`FUN_80095470`
+directly. Worth resolving before trusting either theory fully.
+
+**Queued next steps in that thread** (not yet done, per the screenshots):
+decompile `SUB_80087ef0`, `SUB_80087a80`, `FUN_8002d40c`, `FUN_8002d4dc`,
+and `FUN_80027df1`; and fix the `FUN_80087570` jump table by marking the
+misread span as data.
+
+**Also recovered, likely unrelated to the overlay question**:
+`FUN_800a1b80` and neighbors look like a `%`-escape string formatter
+(printf-style); `FUN_80048eb0` parses a byte-packed, `\x02`-terminated
+value out of `DAT_80219590`/`91`/`92`, reading like a compressed
+command/animation-list decoder. Both are real, confirmed code, just not
+obviously part of the loading path.
+
 ## 2026-09-27: splat now runs in a cloud sandbox; the "overlay wall" is probably not overlays
 
 Picked up the prior scaffold and analysis (uploaded by Matt to this repo's
