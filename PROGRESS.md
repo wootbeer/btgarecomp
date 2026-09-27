@@ -35,11 +35,21 @@ found again from scratch by disassembling this game's binary.
       full ~8MB ROM's functions.
 - [x] A good chunk of this ROM's own libultra/audio-library surface
       auto-identified by name via `n64sym` (~480 matches — `osInitialize`,
-      `__osDisableInt`, the whole `Mus*`/`al*` audio library, etc.) — not
-      yet merged into a real symbol file, see item 4.
+      `__osDisableInt`, the whole `Mus*`/`al*` audio library, etc.), 71 of
+      which are confirmed duplicates of something librecomp already
+      provides.
       This happened on the reverse-engineering side (splat/n64sym against
       the real ROM), tracked in `STATUS.md`, separately from this file's
       build-system tracking.
+- [x] Confirmed (round 17) that this game's actual CPU code fits almost
+      entirely in the first automatically-loaded MB — the remaining ~7MB
+      is very likely asset data, not more code to find. Changes the shape
+      of what's left more than any single item below does.
+- [x] **`battletanxga.us.rev0.toml` exists and is well-formed** (round
+      20) — `[input]`, `[patches] ignored`/`renamed` (71 entries),
+      `[[patches.instruction]]` (30 cop0/eret nops), `[[patches.hook]]`
+      (101 division guards). The first time this project has had an
+      actual config file to hand N64Recomp, not just pieces of one.
 
 ## Blocking, needs more reverse engineering
 

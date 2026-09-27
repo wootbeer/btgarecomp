@@ -3,6 +3,29 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 20: assembled the real battletanxga.us.rev0.toml -- this project has an actual N64Recomp config file for the first time
+
+Merged rounds 13-19's pieces (the symbol table, the 71-entry ignored/
+renamed list, the 30 cop0/eret instruction patches, the 101 division
+hooks) into one file, `battletanxga.us.rev0.toml` at the repo root,
+matching `bdragoncore/battle-tanx-recomp`'s exact structure
+(`[input]` / `[patches]` / `[[patches.instruction]]` / `[[patches.hook]]`
+in one config). Validated it parses as well-formed TOML and that every
+section round-trips to the right counts (Python's `tomllib`: 71 ignored,
+71 renamed, 30 instruction patches, 101 hooks).
+
+This is the first time this project has had an actual config file to hand
+N64Recomp -- everything before this was symbol-table/patch-list pieces
+that hadn't been assembled into the thing the tool actually reads. Still
+only covers the first MB's code (see round 17 for why that's believed to
+be ~all of it), and still missing the by-inspection stubs
+`bdragoncore/battle-tanx-recomp`'s own list has a couple of (not found by
+name-matching, so not caught by anything done so far). Running this
+config through a real `N64Recomp` build is the natural next checkpoint,
+once the toolchain itself is built (`lib/N64ModernRuntime/N64Recomp` per
+`BUILDING.md` — not yet done this session, since the submodules aren't
+checked out).
+
 ## 2026-09-27, round 19: found the real ignored/renamed list -- 71 functions where this ROM's own copy should defer to librecomp
 
 Round 18 deliberately left `stubs`/`ignored`/`renamed` alone rather than
