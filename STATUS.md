@@ -3,6 +3,88 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 10: the ROM-to-RAM mapping every prior round used was wrong -- found and fixed
+
+**This is the most important entry in this file.** Every specific ROM
+file-offset claim in every entry below (main_probe's "confirmed 19KB
+block," the "overlay wall," `SUB_80087570`'s trampoline, everything in
+`syms/screenshot_recovered_funcs.txt`) was computed with the wrong
+rom<->vram formula. The *vram* addresses and the reasoning about what
+functions call what are mostly unaffected (they came from Ghidra
+screenshots or from `jal`/`j` instruction encodings, neither of which
+depends on this formula) -- what's wrong is specifically "which ROM file
+offset holds the bytes for vram X," which is exactly the thing splat needs
+right to disassemble anything correctly. See `syms/rom_info.md` for the
+corrected formula and `tools/splat.yaml` for the fixed segment config.
+
+**How this surfaced**: round 9's n64sym scan (built while checking the
+reference projects Matt pointed at) returned matches like `__osDisableInt
+= 0x80105DB0` -- the exact vram address round 7 had already probed and
+called "texture-like data, an overlay slot." Rather than trust either
+tool, checked the raw ROM bytes directly:
+
+- At the old-header rom offset for `0x80105DB0` (`vram - 0x7FFFF400` =
+  `0x1069B0`, what round 7 and round 8 both probed): genuinely garbage --
+  `33333335 6BCDF677 77888AAC ...`, the same repeating-nibble pattern
+  round 7 originally flagged. Round 7 wasn't wrong that this specific spot
+  is garbage.
+- At `vram - 0x80070000` = `0x95DB0` instead: `40086000 2401FFFE 01014824
+  40896000 31020001 00000000 03E00008 00000000` -- `mfc0 $t0,$12 / addiu
+  $at,$zero,-2 / and $t1,$t0,$at / mtc0 $t1,$12 / andi $v0,$t0,1 / nop /
+  jr $ra / nop`. That's not a plausible-looking coincidence; it's the
+  textbook compiled form of `__osDisableInt`, instruction-for-instruction.
+  `0x80105DD0` (`__osRestoreInt`) matches just as exactly at the
+  corresponding offset under the same header.
+
+Where `0x80070000` comes from: `shygoo/n64sym`'s own source
+(`src/n64sym.cpp:140`) computes ROM-mode header displacement as
+`entryPoint - 0x1000`, reading `entryPoint` from the ROM header itself
+(`0x80071000` here, per `syms/rom_info.md` -- not assumed). This game
+apparently doesn't use the "boot loads to a fixed 0x80000400" convention
+every round of this investigation (including the 2026-09-18 entry that
+found the original "crt0 stub") assumed without checking against the
+ROM's own header field.
+
+**Closing the loop -- re-examined the crt0 stub itself**: the exact same
+physical bytes at rom `0x1000` that round 1/2 originally read (stack
+setup, a BSS-clear loop, then `jal 0x8009ED9C`) decode identically under
+either header, since none of that depends on the rom<->vram formula --
+only the *label* attached to them changes. Under the corrected header
+those bytes are `lui $sp,0x8022 / addiu $sp,$sp,-0x1F48` (`$sp =
+0x8021E0B8`), a BSS-clear loop for `0x80127E30`-`0x803B17B0`, then `jal
+0x8009ED9C` -- and **that address's own first call, under the corrected
+header, resolves to `osInitialize`** (vram `0x80105B10`, matching n64sym's
+match for that address exactly). A very-first-boot-function calling
+`osInitialize` immediately is exactly what should happen; under the old
+header this same crt0 is still real (round 1/2 read it correctly), but
+its label was wrong -- it genuinely runs at vram `0x80071000`, this ROM's
+declared entry point, not `0x80000400`.
+
+**Scale check**: a broad splat scan of the first 320KB under the corrected
+header recovered 526 real function boundaries (spimdisasm re-syncing
+throughout) -- meaningfully denser than the ~1136-in-~1MB the old header
+produced, consistent with the corrected header actually being right rather
+than both being comparably-accidental.
+
+**What this means for everything else in this file**: round 7's "overlay
+wall" at `func_80105DB0`/`func_801055CC`/`func_80105DD0` is resolved --
+there was no overlay mystery there, splat was just being pointed at the
+wrong bytes the whole time. Round 8's specific findings about
+`SUB_80087570`, `func_800F81CC`, the object-pool functions, etc. all need
+to be re-derived from scratch under the corrected header before being
+trusted -- they may still turn out to be roughly right (the *vram*
+addresses came from Ghidra, independent of this bug), but their content
+was read from the wrong bytes, so treat every specific claim about what's
+*at* those addresses as unconfirmed again. `syms/screenshot_recovered_funcs.txt`
+carries a warning to this effect now.
+
+**Next step**: redo round 8's bounded-probe methodology under
+`tools/splat.yaml`'s now-corrected `resident` segment, starting with the
+genuinely still-open question -- what does `func_8009ED9C` (now confirmed
+to really be the game's first substantial function) actually do, and does
+tracing its real call graph (not the wrong-header one) lead anywhere near
+an actual overlay/asset-loading mechanism this time.
+
 ## 2026-09-27, round 9: checked reference projects Matt pointed at -- a real methodology gap, and the right splat feature for the overlay slot
 
 Matt asked to check the original BattleTanx's recomp repo for reusable

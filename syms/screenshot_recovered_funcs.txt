@@ -1,3 +1,13 @@
+# *** ROUND 10 WARNING: the "verified" content descriptions below (and in
+# STATUS.md's round-8 entry) were read using the WRONG rom<->vram mapping
+# (vram - 0x7FFFF400, not the correct vram - 0x80070000 -- see
+# syms/rom_info.md). The VRAM addresses themselves are still plausible
+# (Ghidra computed those independently, not from this formula), but what
+# round 8 says each one's *bytes* contain is suspect until re-checked under
+# the corrected header. Don't trust the round-8 function summaries below at
+# face value; re-probe with tools/splat.yaml's corrected `resident` segment
+# first. ***
+#
 # Function addresses recovered from Ghidra screenshots uploaded 2026-09-27,
 # later cross-checked against the ROM directly with bounded splat probes
 # (round 8, see STATUS.md). Same "name = 0xADDR;" format as

@@ -104,6 +104,37 @@ options:
 # overlay LOADER itself (almost certainly DMA/file-load calls) inside the
 # confirmed-resident block, which is a Ghidra job, not a splat-config one --
 # see STATUS.md.
+# *** CORRECTED 2026-09-27, round 10 ***
+# Every address below `resident`'s old vram (0x80000400) was computed with
+# the WRONG rom<->vram mapping. This ROM does not use the common
+# "IPL3 always loads to 0x80000400" convention every prior round assumed --
+# its actual header displacement is `entryPoint - 0x1000` = 0x80070000
+# (entryPoint = 0x80071000, this ROM's own declared header field, see
+# syms/rom_info.md), i.e. rom 0x1000 -> vram 0x80071000 directly, not
+# vram 0x80000400. Found via n64sym (github.com/shygoo/n64sym), whose
+# source computes exactly this formula for ROM-mode scans
+# (src/n64sym.cpp:140); confirmed independently three ways: (1) the crt0
+# stub's own `jal` target (0x8009ED9C, byte-identical either way -- a
+# jal's encoding doesn't depend on which theory is right) resolves under
+# the new header to a function whose own first call is `osInitialize`
+# (sensible), not garbage; (2) that same function's later call to
+# 0x80105DB0 resolves under the new header to a byte-exact, textbook
+# `__osDisableInt` (mfc0/andi/mtc0/jr -- not something that happens by
+# chance); (3) a broad scan under the new header recovers real functions
+# roughly 2x denser than the same scan under the old one. Full writeup in
+# STATUS.md's round-10 entry.
+#
+# CONSEQUENCE: every specific ROM-offset claim from rounds 1-9 below
+# (main_probe's "confirmed 19KB block" at old rom 0x9F99C, the "overlay
+# wall" functions' old rom offsets, SUB_80087570's trampoline analysis,
+# everything in syms/screenshot_recovered_funcs.txt) was working from the
+# wrong rom<->vram mapping and needs to be re-derived under the corrected
+# one before being trusted again. The *vram*-level reasoning (call graphs,
+# what a function's C-level logic does) mostly still stands since it never
+# depended on the rom offset -- it's specifically "where in the ROM FILE do
+# I find the bytes for vram X" that was wrong. Old segment defs kept below,
+# commented out, since the round-by-round narrative in their comments is
+# still a useful log of splat mechanics even though the addresses are stale.
 segments:
   - name: header
     type: header
@@ -116,7 +147,7 @@ segments:
   - name: resident
     type: code
     start: 0x1000
-    vram: 0x80000400
+    vram: 0x80071000
     # 2026-09-27 round 8: the whole first ~1MB (ROM 0x1000-0x101000) is what
     # the N64's IPL3 bootcode loads automatically before the game ever runs,
     # for the standard CIC chips -- so it's all potentially resident code,
@@ -134,45 +165,21 @@ segments:
     # Superseded: the old boot/unk_before_probe/main_probe/unk_after_probe
     # segments this replaces are still in version control history if the
     # per-segment framing is ever useful again.
+    # round 10: all the old individually-bounded probe subsegments that
+    # used to live here (probe_27df0, probe_2d40c, probe_48eb0, probe_87570,
+    # probe_87a80, probe_87ef0, probe_f81cc, and the separate probe_105cc/
+    # probe_105db segments below this one) were computed under the WRONG
+    # header -- their rom offsets are meaningless now and have been removed
+    # rather than left in place to avoid trusting stale numbers. Round 7's
+    # "func_80105DB0/func_801055CC/func_80105DD0 are texture-like data"
+    # finding is now understood to be exactly this header bug: under the
+    # corrected header they resolve to real, byte-exact libultra functions
+    # (__osDisableInt, __osEnqueueAndYield, __osRestoreInt -- see round 10 in
+    # STATUS.md). There was never a mysterious overlay wall at these three
+    # specific addresses; splat/spimdisasm were just being pointed at the
+    # wrong rom offset the whole time. Redo the round-8-style bounded
+    # probing here, under this corrected header, as the next real step.
     subsegments:
-      - [0x1000, c, resident_a]
-      # Round 8 continued: resident_a alone swallows into one giant
-      # never-returning "function" around rom 0x8000859C onward (see
-      # STATUS.md) -- 1136 real function boundaries did get recovered from
-      # inside that swallow by spimdisasm re-syncing partway through, but
-      # four addresses Ghidra found (FUN_8002d40c/4dc, FUN_80027df0,
-      # FUN_80048eb0) fall inside a ~455KB unresolved span
-      # (0x8000859C-0x80077C40) the re-sync never reached. Bounding each
-      # individually, same as round 3 originally did for main_probe, to get
-      # clean output instead of hand-reading raw .word bytes.
-      - [0x289F0, c, probe_27df0]      # FUN_80027DF0
-      - [0x28E00, bin, gap1]
-      - [0x2DE00, c, probe_2d40c]      # FUN_8002D40C and FUN_8002D4DC
-      - [0x2E200, bin, gap2]
-      - [0x49800, c, probe_48eb0]      # FUN_80048EB0
-      - [0x49C00, bin, gap3]
-      - [0x88170, c, probe_87570]      # SUB_80087570 itself, bounded exactly at its real start
-      - [0x88680, c, probe_87a80]      # SUB_80087A80, bounded exactly at its real start
-      - [0x88AF0, c, probe_87ef0]      # SUB_80087EF0, bounded exactly at its real start
-      - [0x89000, bin, gap4]
-      - [0xF8DCC, c, probe_f81cc]      # func_800F81CC, the SUB_80087570 trampoline's target
-      - [0xF9400, bin, rest_unanalyzed]
-
-  - name: probe_105cc
-    type: bin
-    start: 0x1061CC
-    vram: 0x801055CC
-    # Round 7: this jal target turned out to be texture/pixel data, not
-    # code -- overlay slot, most likely (see round 7 note above).
-
-  - name: probe_105db
-    type: bin
-    start: 0x1069B0
-    vram: 0x80105DB0
-    # Round 7: same story -- func_80105DB0/func_80105DD0 are also
-    # texture-like data, not code. Left as two named segments (rather than
-    # merging into the surrounding unk_after_probe) so these specific
-    # addresses stay easy to find later if the overlay loader investigation
-    # wants to check what SHOULD be here at runtime.
+      - [0x1000, c, resident]
 
   - [0x800000]   # end of ROM (8 MiB cart)
