@@ -43,11 +43,22 @@ found again from scratch by disassembling this game's binary.
 
 ## Blocking, needs more reverse engineering
 
-The ROM is in hand, the mapping is now correct, and splat runs against it
-cleanly (see `STATUS.md`) — but the bulk of the actual disassembly work is
-still ahead, the same scale of effort the original game's recomp needed
-(its symbol table alone runs ~1700 lines), and current progress covers
-~1MB of what's an 8MB ROM (a real fraction now, not a rounding error).
+**Updated framing (round 17):** this was scoped as "reverse-engineer an
+8MB ROM," matching the scale the original BattleTanx's ~1700-line symbol
+table implied. That's turned out not to be quite the right shape of the
+problem. Round 17 directly tested whether code exists past the first
+automatically-loaded MB (scanned the entire second MB, found ~95x fewer
+resync points than the first, all of which check out as false positives in
+asset data) and concluded this game's actual CPU code footprint is
+concentrated almost entirely in that first MB. The remaining ~7MB is very
+likely textures/audio/level data, not more code waiting to be found. If
+that holds up, the real remaining work splits into two different kinds:
+finishing the code-side symbol table for ~1MB (this section), and building
+asset-extraction tooling for the other ~7MB (a new, separate concern — not
+listed as a numbered item yet since no work has started on it, but real
+and necessary before a working port; N64 texture formats, VADPCM audio,
+and whatever this game's level-data format turns out to be are all
+well-trodden, mechanical problems compared to open-ended disassembly).
 
 1. ~~Identify the exact ROM revision~~ — done, see `syms/rom_info.md`.
 2. ~~Find the entrypoint and boot sequence~~ — entry point, the correct
@@ -58,19 +69,22 @@ still ahead, the same scale of effort the original game's recomp needed
    Assault needs its own version of the original game's
    `stock_runtime_compat.cpp`-style shims (item 7 below) — that depends on
    code not yet reached.
-3. ~~Full function boundary list (first MB)~~ — mostly done for the first
-   MB: 1321 code entries with real (gap-derived) sizes in
+3. ~~Full function boundary list (first MB)~~ — mostly done for what
+   matters: 1321 code entries with real (gap-derived) sizes in
    `BattleTanxGASyms/battletanxga.us.rev0.syms.toml`, the actual format
-   N64Recomp expects (`STATUS.md` rounds 13-14). A further 123 entries
-   (`syms/battletanx_ga_funcs_suspect.txt`) were caught and pulled out as
-   gap-guess artifacts — mostly absorbed RSP microcode or unfound
-   boundaries, not real functions — rather than left in the trusted table.
-   Still needed: properly re-split that suspect region (bounded probing
-   like round 8, now under the correct header), extend the same
-   corrected-header splat scan past the first MB to cover the remaining
-   ~7/8 of the ROM, and spot-check a sample of the trusted entries against
-   real disassembly, since sizes are still gap-derived rather than
-   independently confirmed one by one.
+   N64Recomp expects (`STATUS.md` rounds 13-14), covering essentially all
+   of this game's actual code (round 17 — the rest of the ROM is asset
+   data, not more functions to find). 71 entries
+   (`syms/battletanx_ga_funcs_suspect.txt`) are still unresolved gap-guess
+   artifacts; 52 more were identified as a real dispatch-table data
+   structure (`syms/battletanx_ga_data_table_0x8011a8.txt`, round 15) and
+   correctly excluded rather than miscounted as functions. Still needed:
+   properly re-split the 71 remaining suspects (bounded probing like round
+   8, now under the correct header) — mostly for completeness at this
+   point, not because anything suggests they hide new code elsewhere — and
+   spot-check a sample of the trusted entries against real disassembly,
+   since sizes are still gap-derived rather than independently confirmed
+   one by one.
 4. **libultra call identification** — largely done for the first MB: 430
    of the 1444 function entries already carry n64sym's real name instead
    of a `func_XXXXXXXX` placeholder (round 13). Remaining: decide which of

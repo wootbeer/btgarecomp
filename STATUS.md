@@ -3,6 +3,41 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 17: tested the "code mostly fits in the first MB" hypothesis directly against the second MB -- confirmed. This changes what "finishing the RE" even means for this project.
+
+Round 16 ended on a hypothesis rather than a fact: no evidence of code
+past `0x80171000`, so maybe the game's CPU code footprint just mostly fits
+in the first automatically-loaded MB. Tested it directly: ran the same
+splat/spimdisasm scan (no symbol seeding, since we have none there) across
+the entire second MB (rom `0x101000`-`0x201000`, vram `0x80171000`-
+`0x80271000`).
+
+**Result: 12 resync points in the whole MB**, versus 2388 in the first
+MB -- roughly a 95x drop in apparent code density. Spot-checked the first
+one (`func_8017BA38`): the exact same repeating-nibble texture/asset
+pattern (`0x6319`, `0x5AD7`, `0x4A53`, `0x4211`) seen everywhere else
+non-code data has turned up in this project. It's a false-positive resync
+inside pure data, not a real function, and there's no reason to expect the
+other 11 are different.
+
+**This confirms the hypothesis rather than just failing to falsify it**:
+this game's actual CPU code is concentrated almost entirely in the first
+automatically-loaded MB. The remaining ~7MB is overwhelmingly non-code
+asset data -- textures, audio samples, level/model data -- not more
+undiscovered game logic. Combined with rounds 14-16 (no overlay system, no
+DMA-triggered code loading found, PI DMA usage that does exist is
+ordinary), the picture that's emerged is a fairly conventional one for an
+N64 game of this era: one resident code segment, everything else is
+assets.
+
+**This reframes what's actually left to do on this project.** It was
+never "reverse-engineer 8MB of unknown code" -- it's "finish mapping
+~1MB of code" (already ~85% function-bounded) plus "build asset-extraction
+tooling for the other ~7MB" (textures, audio, levels), which is a
+different, generally more mechanical kind of work (known N64 texture/
+audio formats, not open-ended disassembly). See `PROGRESS.md` for the
+updated roadmap reflecting this.
+
 ## 2026-09-27, round 16: closed out the "does code reach outside the first MB" question -- no evidence found, likely because there isn't any (yet)
 
 Checked the rest of round 14's 71 remaining suspects. The large ones
