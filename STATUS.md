@@ -3,6 +3,66 @@
 Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-27, round 11: the "overlay" mystery itself may be a phantom -- two more pieces of convergent evidence
+
+Following up on round 10's header fix. `OverlayScan6.java` (never actually
+run, but its file header documents what `OverlayScan1-5` already found)
+places "the overlay blob" this whole investigation has been hunting a
+loader for at **VRAM `0x800F8000`-`0x80112000`** -- which is, almost
+exactly, the range round 9's n64sym scan identified as ordinary resident
+libultra: `rspbootTextStart`, the `Mus*`/`al*` audio library, `osViBlack`,
+`guMtxIdent`, `memcpy`, `sqrtf`, `osStartThread`, dozens more, all with
+clean signature matches under the corrected header. If that whole range is
+just the normal OS library (which round 10 already directly byte-verified
+for part of it -- `__osDisableInt`/`__osRestoreInt`), there was never
+custom game code there needing a loader in the first place. Worth treating
+"there's a custom overlay system in this game" itself as unconfirmed again,
+not just the specific addresses examined so far.
+
+**Second, independent thread: re-checked the "DMA hardware registers are
+confirmed unused" claim from the 2026-09-19 entry**, since `OverlayScan6`'s
+own file header repeats it as settled ("already confirmed the four real
+N64 hardware DMA-trigger registers... have ZERO references anywhere in
+this ROM"). Wrote a from-scratch, mapping-independent scanner (works
+directly on raw ROM bytes, no header assumption needed) for `lui`+`ori`/
+`addiu` pairs constructing a full 32-bit address, mirroring
+`OverlayScan6`'s own technique. Result matched their claim exactly at
+first: zero hits for `PI_DRAM_ADDR`/`PI_CART_ADDR`/`PI_RD_LEN`/`PI_WR_LEN`
+(the four DMA-trigger registers), five hits for `PI_STATUS` alone (the
+polling register, not a trigger).
+
+But then checked for just a bare `lui $reg, 0xA460` (a PI-register-space
+base pointer), **without** requiring an immediate second instruction
+completing the same register into one specific address -- and found **59**
+occurrences across the ROM, clustered in groups (e.g. seven around rom
+`0x4D0`-`0x6F8`, several around `0x95368`-`0x961F4`). This is exactly what
+compiled code looks like when it loads a PI-register-block base pointer
+once (`lui $t0, 0xA460`) and then hits `PI_DRAM_ADDR`/`CART_ADDR`/`RD_LEN`/
+`WR_LEN` via small fixed offsets from that one register (`sw $v0,
+0x0($t0)` / `sw $v1, 0x4($t0)`, etc.) -- a pattern the original
+lui+ori-pair search (both `OverlayScan6`'s and my own first attempt) is
+structurally blind to, since no single instruction pair completes a full
+address for those specific registers. **The "DMA is confirmed unused"
+conclusion looks like a false negative from a search technique that only
+checked one addressing pattern, not an actual absence.** Real PI hardware
+DMA is very likely used somewhere in this game after all (consistent with
+this ROM's OS library including `osPiStartDma`/`osEPiStartDma`/
+`osPiRawStartDma`, all real per round 9's n64sym scan) -- which reopens
+the possibility that ordinary `osPiStartDma`-style loading, not an exotic
+KSEG1 read-loop, is how any real overlay/asset system here works, if one
+exists at all.
+
+**Queued**: a corrected-header splat scan of the full first MB is running
+(background, started this round) to get a real function-boundary map like
+round 8 tried to build, but on the right bytes this time -- results not in
+as of this entry. Once it lands, the actual next step is tracing
+`func_8009ED9C`'s real call graph under the corrected header and checking,
+address by address, whether any of those `lui $reg, 0xA460` sites sit
+inside code that's actually reachable from the game's main loop (as
+opposed to, say, buried inside seldom-hit save/EEPROM code) -- that's what
+would distinguish "the game uses ordinary PI DMA for something mundane"
+from "this is how levels/assets get loaded."
+
 ## 2026-09-27, round 10: the ROM-to-RAM mapping every prior round used was wrong -- found and fixed
 
 **This is the most important entry in this file.** Every specific ROM
