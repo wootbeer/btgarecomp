@@ -36,6 +36,7 @@
 #include <mutex>
 #include <vector>
 #include <filesystem>
+#include <exception>
 
 #include "nfd.h"
 
@@ -254,7 +255,35 @@ std::vector<recomp::GameEntry> supported_games = {
     },
 };
 
+// std::terminate (any uncaught C++ exception, on any thread -- recomp::start
+// spawns several) leads straight into ucrtbase's fail-fast abort path, which
+// tears the process down without running atexit handlers or flushing stdio
+// buffers. That's why redirected runs (`... > run_output.txt 2>&1`) have
+// been showing up empty even when something threw and printed nothing --
+// this handler force-flushes and prints the exception's own message first
+// so it actually survives redirection.
+[[noreturn]] static void report_unhandled_exception_and_abort() {
+    if (std::exception_ptr eptr = std::current_exception()) {
+        try {
+            std::rethrow_exception(eptr);
+        } catch (const std::exception& e) {
+            fprintf(stderr, "UNHANDLED EXCEPTION: %s\n", e.what());
+        } catch (...) {
+            fprintf(stderr, "UNHANDLED EXCEPTION: (unrecognized exception type)\n");
+        }
+    } else {
+        fprintf(stderr, "std::terminate() called with no active exception.\n");
+    }
+    fflush(stdout);
+    fflush(stderr);
+    std::abort();
+}
+
 int main(int argc, char** argv) {
+    std::set_terminate(report_unhandled_exception_and_abort);
+    fprintf(stdout, "main() started\n");
+    fflush(stdout);
+
     recomp::Version project_version{};
     if (!recomp::Version::from_string(version_string, project_version)) {
         fprintf(stderr, "Invalid version string: %s\n", version_string.c_str());
