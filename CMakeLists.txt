@@ -290,7 +290,14 @@ if (WIN32)
             LINK_FLAGS_MINSIZEREL "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
     )
 
-    target_sources(BattleTanxGARecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.rc)
+    # icons/app.rc (the .exe icon resource) doesn't exist yet -- this
+    # project has no game art of its own yet (asset extraction from the ROM
+    # hasn't started, see PROGRESS.md). Same conditional-on-existence
+    # approach as icons/app.png below; add app.rc once there's an icon to
+    # embed.
+    if (EXISTS ${CMAKE_SOURCE_DIR}/icons/app.rc)
+        target_sources(BattleTanxGARecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.rc)
+    endif()
     target_link_libraries(BattleTanxGARecompiled PRIVATE SDL2 Winmm.lib)
 endif()
 

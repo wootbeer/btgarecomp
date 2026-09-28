@@ -44,7 +44,10 @@
 
 #define SDL_MAIN_HANDLED
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 #include "SDL.h"
+#include "SDL_syswm.h"
 #else
 #include "SDL2/SDL.h"
 #endif
@@ -116,6 +119,10 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
 #if defined(__APPLE__)
     flags |= SDL_WINDOW_METAL;
 #elif defined(RT64_SDL_WINDOW_VULKAN)
+    // Only defined on Linux (see CMakeLists.txt) -- Windows uses plume's
+    // D3D12 backend instead, which doesn't need an SDL window flag (it
+    // talks to the GPU through the raw HWND returned below), same as
+    // bdragoncore/battle-tanx-recomp's own create_window.
     flags |= SDL_WINDOW_VULKAN;
 #endif
 
@@ -124,10 +131,17 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
         exit_error("Failed to create window: %s", SDL_GetError());
     }
 
-#if defined(__linux__) || defined(__ANDROID__)
+#if defined(_WIN32)
+    SDL_SysWMinfo wm_info;
+    SDL_VERSION(&wm_info.version);
+    if (!SDL_GetWindowWMInfo(window, &wm_info)) {
+        exit_error("Failed to get window info: %s", SDL_GetError());
+    }
+    return ultramodern::renderer::WindowHandle{ wm_info.info.win.window, GetCurrentThreadId() };
+#elif defined(__linux__) || defined(__ANDROID__)
     return ultramodern::renderer::WindowHandle{ window };
 #else
-    static_assert(false && "Only Linux is set up in this file so far -- see PROGRESS.md.");
+    static_assert(false && "Only Linux and Windows are set up in this file so far -- see PROGRESS.md.");
 #endif
 }
 
