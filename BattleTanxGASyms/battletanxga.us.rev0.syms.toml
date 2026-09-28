@@ -1122,7 +1122,13 @@ functions = [
     { name = "func_800FF21C", vram = 0x800ff21c, size = 0x194 },
     { name = "func_800FF3B0", vram = 0x800ff3b0, size = 0xc },
     { name = "__OsSchedInstall", vram = 0x800ff3bc, size = 0x1a4 },
-    { name = "func_800FF560", vram = 0x800ff560, size = 0x2c0 },
+    # Round 42 (STATUS.md): same class of bug as rounds 39/41 -- one
+    # declared function (func_800FF560, size 0x2c0) is actually two, with
+    # 0xc bytes of zero-padding after them (already correctly excluded by
+    # the original boundary before func_800FF820). 0x138 + 0x17c + 0xc =
+    # 0x2c0, matching the original total exactly.
+    { name = "func_800FF560", vram = 0x800ff560, size = 0x138 },
+    { name = "func_800FF698", vram = 0x800ff698, size = 0x17c },
     { name = "func_800FF820", vram = 0x800ff820, size = 0xa4 },
     { name = "func_800FF8C4", vram = 0x800ff8c4, size = 0x8c },
     { name = "func_800FF950", vram = 0x800ff950, size = 0x4c },

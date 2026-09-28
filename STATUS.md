@@ -3,6 +3,17 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 42: third confirmed merged-function boundary
+
+Same bug class as rounds 39/41, found via the next runtime crash address
+(`0x800FF698`) after round 41's fix. `func_800FF560` (declared size
+`0x2c0`) disassembles to two complete functions back to back --
+`func_800FF560` (real size `0x138`) and `func_800FF698` (real size
+`0x17c`) -- followed by `0xc` bytes of zero-word padding already correctly
+excluded by the original boundary (the next declared function,
+`func_800FF820`, already started at the right place). `0x138 + 0x17c + 0xc
+= 0x2c0`, matching the original total exactly.
+
 ## 2026-09-28, round 41: second confirmed merged-function boundary, found once register_overlays() actually started working -- and a systematic scan attempt that didn't pan out
 
 Round 40's `register_overlays()` fix worked -- confirmed by a completely
