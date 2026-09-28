@@ -3,6 +3,65 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 48: root cause of round 47's hang found -- a real hardware-interrupt-dependent busy-wait is incompatible with ultramodern's purely-cooperative thread scheduler
+
+Continued from round 47. Two more pieces confirmed the actual mechanism:
+
+**The VI/AI event registration round 47 wondered about does happen.**
+Traced `func_800A1150`'s only caller: it's called from inside
+`func_8009D270` (`RecompiledFuncs/funcs_6.c:12616-12619`), on the exact
+same thread (entry point `func_8009EEA0`) that later reaches the
+`func_80098B40` spin, and *before* it gets there. `func_800A1150` itself
+(`RecompiledFuncs/funcs_7.c:11098+`) calls `osSetEventMesg_recomp` three
+times (message values `0x29B`/`0x29C`/`0x29E`) and `osViSetEvent_recomp`
+once (message value `0x29A`) -- exactly the message range
+`func_800988E8`'s dispatcher checks for. So VI/AI event registration is
+not the blocker; it already happened.
+
+**The real blocker: `func_80098B40` is a plain busy-wait with no yield,
+and ultramodern's N64-thread scheduler has no preemption.** Checked
+`ultramodern/src/timer.cpp` (the "Timer Thread" seen in every thread
+dump): it only exists to service game-requested `osSetTimer`/`osStopTimer`
+timers, not to time-slice between N64 threads. Cross-referencing every
+`resume_thread_and_wait`/`run_next_thread_and_wait`/`wait_for_resumed`
+call site confirms the cooperative model is entirely voluntary: an N64
+thread only ever hands off control at specific recognized library calls
+(`osRecvMesg`, `osSetThreadPri`, etc.). `func_80098B40` is a raw
+`while (*(int32_t*)0x80229230 != 0) {}` loop (`RecompiledFuncs/funcs_6.c`)
+-- it calls nothing recognized, so once its host thread becomes "the
+active N64 thread," no other N64 thread (including whichever one is
+supposed to write `0` to that address and let this one continue) can ever
+become active again. This also cleanly explains the steady ~10% CPU
+reported: one thread pegged at 100% on its own core on a multi-core
+machine, not intermittent scheduling -- a genuine hard wait, not a slow
+one.
+
+On real N64 hardware this same busy-wait pattern works because the
+SI/controller-read completion is delivered by an actual hardware
+interrupt, which preempts whatever's running unconditionally, regardless
+of whether the interrupted code "cooperates." Ultramodern's software
+model has no equivalent for this: nothing here preempts a thread that
+doesn't voluntarily yield. This is very likely not unique to this one spin
+site -- any similar `while (mem_flag) {}` polling pattern elsewhere in the
+recompiled code would hit the same wall.
+
+**Not yet resolved; two real options, neither of which is a quick fix:**
+1. Add genuine preemption to ultramodern's thread scheduler (e.g. a
+   periodic forced-yield check), which is a runtime-level change affecting
+   every N64Recomp project built on this fork, not something scoped to
+   this project alone.
+2. Find exactly which thread is supposed to write `0` to vram `0x80229230`
+   (search for the second write site beyond `func_80098B2C`'s `sw $v0` at
+   `funcs_5.c:8636` -- the clearing code around `funcs_5.c:8412`,
+   vram `0x80098A00`, is inside `func_800988E8`, itself currently blocked
+   on its own `osRecvMesg`) and understand precisely why *that* thread
+   hasn't run since the lock was set -- if it turns out to be reachable
+   from a thread that isn't itself downstream of the spin, a targeted
+   `[[patches.hook]]` TOML patch inserting a yield check inside the spin
+   loop's address range could resolve this one call site without touching
+   the shared runtime, but confirming that requires more thread-dependency
+   tracing than done so far.
+
 ## 2026-09-28, round 47: game now runs real multi-threaded N64 logic -- hangs waiting for VI/AI event registration that hasn't happened yet
 
 With round 46's fix in, the missing-function crashes stopped entirely.
