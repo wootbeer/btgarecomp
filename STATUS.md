@@ -3,6 +3,47 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 52 (part 4): the corrected diagnostic shows the queue is properly created; traced the full delivery chain and added a live VI-dispatch diagnostic
+
+The corrected (sign-extension-fixed) diagnostic printed `msgCount=2,
+msg=0x80217048` for mq `0x80217030` -- exactly matching `func_800985A0`'s
+`osCreateMesgQueue(0x80217030, 0x80217048, count=2)` call
+(`RecompiledFuncs/funcs_5.c:7717-7733`). So the queue is genuinely fine;
+it's just never receiving anything. Traced the actual sender by searching
+every `osSendMesg`/`osJamMesg` and `osSetEventMesg`/`osViSetEvent` call
+site in the whole recompiled codebase (grepping for the literal offset
+`0X7030` across all files, not just the known functions) rather than
+assuming: found `func_80098AFC` (`funcs_5.c:8613+`, right next to
+`func_80098B2C`, the flag-setter round 47 already identified) is the only
+place that calls `osSendMesg(0x80217030, ...)` anywhere in the ROM. Its
+only caller is `func_800A140C` (`RecompiledFuncs/funcs_8.c:300+`), whose
+only caller is `func_800A1290` -- the audio dispatcher thread that has
+shown up "correctly idle, blocked in osRecvMesg" in *every* debugger dump
+since round 47. Reading `func_800A1290` in full (`funcs_8.c:18+`) shows
+it's a message dispatcher: it blocks on `osRecvMesg` for mq `0x80222930`,
+then jumps through a 5-entry table keyed on `(msg - 0x29A)`; case 0
+(msg == `0x29A`, the VI event value registered via `func_800A1150`'s
+`osViSetEvent` call, round 48) calls exactly `func_800A140C` ->
+`func_80098AFC` -> sends to `0x80217030`.
+
+So the full chain is: ultramodern's VI thread enqueues an external message
+(`0x29A`) for mq `0x80222930` -> `func_800A1290` receives it and dispatches
+-> `func_800A140C` -> `func_80098AFC` -> `func_800988E8` finally unblocks.
+Round 52's drain-then-priority-drop fix should make this flow end-to-end,
+but `func_800A1290` still hasn't moved in any dump taken since. Rather than
+guess further, added a throttled (~1/sec) live diagnostic directly in
+`src/main/scheduler_workaround.cpp` (a real C++ file with direct access to
+`ultramodern::is_game_started()` and raw `rdram`, no sign-extension pitfall
+this time -- used plain `vram - 0x80000000` unsigned arithmetic instead of
+replicating `MEM_W`'s macro by hand) that prints `is_game_started()` plus
+mq `0x80222930`'s live `validCount`/`msgCount` on every call to
+`btga_yield_via_priority_drop`, throttled so it doesn't flood. This will
+show empirically whether the VI thread is even sending anything yet, or
+whether messages are arriving but something else is preventing
+`func_800A1290` specifically from ever being scheduled to consume them.
+Verified: full `ninja BattleTanxGARecompiled` build succeeded end-to-end.
+Not yet confirmed against a real run.
+
 ## 2026-09-28, round 52 (part 3): the first diagnostic read was garbage -- fixed a sign-extension bug in my own patch, and traced the real creator function
 
 The round 52 part 2 diagnostic printed all-zero fields for the queue at
