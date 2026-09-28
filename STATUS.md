@@ -3,6 +3,56 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 27: round 26's fix worked too -- next failure was a silent 32-bit build, not a code bug
+
+The user's next attempt got past `RecompiledFuncs` and reached `librecomp`
+(`config_option.cpp`, `eep.cpp`, `config.cpp`), failing with:
+
+```
+recomp.h(62): error: use of undeclared identifier '_mul128'
+recomp.h(66): error: use of undeclared identifier '_umul128'
+mods.hpp(54): error: static assertion failed due to requirement 'sizeof(unsigned int) == 8'
+    static_assert(sizeof(std::size_t) == 8);
+```
+
+Both are symptoms of one root cause, not two separate bugs: the build was
+compiling for **32-bit x86, not 64-bit x64**. `_mul128`/`_umul128` are
+128-bit-multiply intrinsics that only exist for x64 targets -- on x86 they
+are genuinely undeclared, by design, not a missing include. `size_t` being
+4 bytes only happens on a 32-bit target. Corroborating evidence: the
+compiler path in this failing log was
+`...\VC\Tools\Llvm\bin\clang-cl.exe` (no `\x64\`), whereas round 25/26's
+working steps used `...\VC\Tools\Llvm\x64\bin\clang-cl.exe`. Visual Studio
+ships both a 32-bit-hosted and a 64-bit-hosted clang-cl.exe under
+`VC\Tools\Llvm\`; which one wins on PATH -- and what target architecture it
+defaults to without an explicit `--target=`/`-m64` -- isn't fully pinned
+down by running in an "x64 Native Tools Command Prompt" alone, at least not
+reliably enough to trust across a whole multi-hundred-target build.
+
+Fixed at the CMake level rather than by telling the user to pass yet more
+manual flags: `CMakeLists.txt` now sets `CMAKE_C_COMPILER_TARGET` /
+`CMAKE_CXX_COMPILER_TARGET` to `x86_64-pc-windows-msvc` on `WIN32`, **before**
+the `project()` call. This has to be before `project()` -- that's where
+CMake runs its own compiler ABI detection (`CMAKE_SIZEOF_VOID_P`), and this
+repo's own `CMakeLists.txt` already branches on
+`CMAKE_SIZEOF_VOID_P EQUAL 8` in a couple of places (the `-march=nehalem
+-fms-extensions` block, and the Linux/Vulkan compile-definitions block) --
+setting the target only via `CMAKE_CXX_FLAGS` after `project()` would have
+fixed the actual compiled output's architecture while leaving CMake's own
+internal ABI bookkeeping (and anything gated on it) still thinking it's a
+32-bit build. Explicitly forcing the target this way is a no-op when the
+correct x64 clang-cl was already being used, so it's safe either way.
+
+This is a CMake **cache** issue too, not just a source fix: the user's
+existing `build/` directory has stale (wrong-architecture) ABI detection
+results baked into its `CMakeCache.txt`, generated before this fix existed.
+Told the user to delete `build/` entirely and reconfigure from scratch
+rather than relying on ninja's automatic incremental reconfigure, since
+that wouldn't redo compiler ABI detection on its own.
+
+Not yet confirmed against an actual Windows build -- same standing caveat
+as rounds 25-26.
+
 ## 2026-09-28, round 26: round 25's fix worked -- and surfaced the same clang-cl `-include` bug a second time, on `RecompiledFuncs`
 
 After round 25's `/FI cstdint` fix, the user's next Windows build attempt got

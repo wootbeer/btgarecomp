@@ -1,5 +1,19 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Force a 64-bit target unconditionally on Windows, before project()/enable_language() run their
+# compiler ABI detection. This project requires clang-cl on Windows (see BUILDING.md), but Visual
+# Studio ships two clang-cl.exe copies (Tools\Llvm\bin and Tools\Llvm\x64\bin) whose default
+# target architecture depends on which one PATH resolves first -- even from an "x64 Native Tools"
+# prompt, the wrong one can silently produce a 32-bit build. That breaks x64-only intrinsics like
+# _umul128/_mul128 (recomp.h) and anything assuming sizeof(size_t) == 8 (librecomp/mods.hpp), with
+# confusing "undeclared identifier"/static_assert errors rather than an architecture complaint.
+# Setting this before project() keeps CMake's own ABI detection (CMAKE_SIZEOF_VOID_P and the
+# CMAKE_SIZEOF_VOID_P-gated flags below) consistent with what actually gets compiled.
+if (WIN32)
+    set(CMAKE_C_COMPILER_TARGET "x86_64-pc-windows-msvc")
+    set(CMAKE_CXX_COMPILER_TARGET "x86_64-pc-windows-msvc")
+endif()
+
 if (APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum OS X deployment version")
 endif()
