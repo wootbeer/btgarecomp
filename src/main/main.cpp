@@ -56,6 +56,7 @@
 #include "recompui/recompui.h"
 #include "recompui/program_config.h"
 #include "recompui/renderer.h"
+#include "recompui/config.h"
 #include "util/file.h"
 
 #include "recompinput/input_state.h"
@@ -344,6 +345,26 @@ int main(int argc, char** argv) {
 
     recompinput::players::set_single_player_mode(true);
     BTGA_CHECKPOINT("after set_single_player_mode");
+
+    // recompui::config::init_modal() (called from UIState::create_menus(),
+    // itself called from inside RT64::Application::setup() on the gfx
+    // thread) hard-requires recompui::config::finalize() to have already
+    // run -- without it, "loaded_configs" stays false and/or the config
+    // system is left in a state RT64/recompui doesn't expect, which was
+    // crashing startup entirely (see STATUS.md). Every other N64Recomp
+    // project using this same RecompFrontend runtime (e.g. BanjoRecomp's
+    // banjo::init_config(), src/game/config.cpp) creates its config tabs
+    // and calls finalize() before recomp::start() for exactly this reason.
+    // No game-specific options exist yet (PROGRESS.md item 8), so this
+    // registers only the library's own prefab tabs with default options.
+    recompui::config::GeneralTabOptions general_tab_options{};
+    recompui::config::create_general_tab(general_tab_options);
+    recompui::config::create_graphics_tab();
+    recompui::config::create_controls_tab();
+    recompui::config::create_sound_tab();
+    recompui::config::create_mods_tab();
+    recompui::config::finalize();
+    BTGA_CHECKPOINT("after config tabs + finalize");
 
     recomp::rsp::callbacks_t rsp_callbacks{
         .get_rsp_microcode = get_rsp_microcode,
