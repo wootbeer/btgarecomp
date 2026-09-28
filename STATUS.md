@@ -3,6 +3,50 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 51: round 50 confirmed working via debugger; found and fixed a second, structurally identical scheduler gap
+
+Round 50's priority-drop fix genuinely resolved the `func_80098B40` spin --
+confirmed via a fresh debugger dump: that thread's call stack no longer
+shows `func_80098B40` at all. The same two threads remain correctly idle
+(`func_800A1290` and `func_800977DC`/`func_800FF698`, both blocked in
+`osRecvMesg` on their own queues, unchanged from before), one thread is
+still normally parked after a self-directed `osSetThreadPri`
+(`func_8009EE08`, same as every prior round), and `func_800988E8`'s thread
+is still sitting at the exact same `osRecvMesg` (line 8301) it was at
+before round 50 -- meaning it genuinely hasn't progressed yet, consistent
+with it still waiting on a VI/AI message rather than on the flag round 50
+fixed.
+
+The game still hangs (same `AppHangB1`), but the *active* thread moved to a
+new call site: `func_800A1384` (`RecompiledFuncs/funcs_8.c:206`), called via
+`func_800BF80C` -> `func_8009D3A4` -> `func_8009EEA0` (same overall thread
+as before). This is a different code shape from `func_80098B40`'s plain
+`while (flag != 0) {}`, but the same underlying bug: it copies a 0x208-byte
+struct from a fixed shared address (vram `0x80222930` -- the same "plain
+data accessor" pointer round 46 identified next to the audio DMA callback
+thread `func_800A1290`) into a stack buffer, then re-loops back to the copy
+start if fields inside the just-copied data (offsets `0x1F4`/`0x1FC`)
+haven't reached an expected value -- i.e. polling another thread's write via
+a copy-and-recheck pattern instead of a plain `while`, with no OS call
+inside it, so it never gives the scheduler a chance either. Exactly the
+"not unique to this one spin site" risk round 48 flagged.
+
+**Fix:** factored round 50's priority-drop logic out of the inline
+`[[patches.hook]]` text into a real shared helper
+(`src/main/scheduler_workaround.cpp`, `btga_yield_via_priority_drop`, plain
+`extern "C"`) instead of duplicating it per site, since this is now used in
+two places and will likely be needed again. Both `func_80098B40` and the
+new `func_800A1384` site (`battletanxga.us.rev0.toml`, `before_vram =
+0x800A1398` -- the outer loop's own re-entry label, so it runs every full
+copy pass but not inside the bounded 32-iteration inner copy) now just
+forward-declare and call it. Verified: regenerated via the local
+`N64RecompCLI`, confirmed both call sites landed correctly in the generated
+source, and a full `cmake -S . -B build && ninja BattleTanxGARecompiled`
+succeeded end-to-end -- including linking the final executable, confirming
+the new helper resolves correctly against `osGetThreadPri`/`osSetThreadPri`
+across translation units. Not yet confirmed against a real run (still
+pending the user's machine).
+
 ## 2026-09-28, round 50: round 49 confirmed insufficient via debugger -- real fix: drop the spinning thread's own priority to force the swap
 
 Round 49's `yield_self_1ms` injection did not resolve the hang (user report:

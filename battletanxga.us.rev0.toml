@@ -1206,16 +1206,38 @@ text = """
 # actually changes (threads.cpp:314-322) -- which makes the strict `>`
 # check trivially true for essentially any other ready thread, then restore
 # the original priority once control returns.
+#
+# Round 51: this logic is now shared (src/main/scheduler_workaround.cpp,
+# `btga_yield_via_priority_drop`) instead of inlined per-site, since round
+# 51 found a second unrelated polling loop needing the exact same fix (see
+# the func_800A1384 patch below) -- confirmed via debugger that round 50
+# genuinely fixed *this* spin (a different thread/address showed up as the
+# new active hang site on the next test run, not this one again).
 [[patches.hook]]
 func = "func_80098B40"
 before_vram = 0x80098B40
 text = """
-    {
-        extern int32_t osGetThreadPri(uint8_t *rdram, int32_t t);
-        extern void osSetThreadPri(uint8_t *rdram, int32_t t, int32_t pri);
-        int32_t btga_saved_pri = osGetThreadPri(rdram, 0);
-        osSetThreadPri(rdram, 0, 0);
-        osSetThreadPri(rdram, 0, btga_saved_pri);
-    }
+    { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
+"""
+
+# Round 51 (STATUS.md): after round 50 fixed func_80098B40's spin, the game
+# progressed further and hit a second, structurally identical scheduler gap
+# at func_800A1384 -- confirmed via debugger call stack (this function
+# directly on top, no OS call beneath it). It's not an integer flag spin
+# like func_80098B40; it copies a 0x208-byte struct from a fixed shared
+# address (vram 0x80222930 -- the same "plain data accessor" pointer round
+# 46 identified next to the audio DMA callback thread func_800A1290) into a
+# stack buffer, then re-loops from scratch (back to L_800A1398) if fields
+# inside the just-copied data (offsets 0x1F4/0x1FC) haven't reached an
+# expected state -- i.e. polling another thread's write via a copy-and-check
+# pattern instead of a plain while loop, but the same underlying bug: no OS
+# call inside it, so it never gives the scheduler a chance. Same fix,
+# applied once per outer pass (before_vram = the outer loop's own re-entry
+# label) rather than inside the bounded 32-iteration inner copy.
+[[patches.hook]]
+func = "func_800A1384"
+before_vram = 0x800A1398
+text = """
+    { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
 """
 
