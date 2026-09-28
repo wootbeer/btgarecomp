@@ -17,10 +17,10 @@
 //     it submits an M_AUDTASK, printing which task type was unhandled.
 //   - `GameEntry::save_type` is `AllowAll` (accepts EEPROM/SRAM/FlashRAM)
 //     rather than this ROM's real save type, which hasn't been determined.
-//   - No font is registered (`register_primary_font` is commented out --
-//     RmlUi has nothing to render UI text with until a font file exists
-//     under `assets/`, e.g. an SIL-licensed one like Inter). The launcher
-//     menu will very likely be visually broken until then.
+//   - The registered primary font (`LatoLatin-Regular.ttf`, under
+//     `assets/`) is a bootstrap placeholder, not the game's real UI
+//     typeface -- see STATUS.md round 33 for why one has to be registered
+//     at all (RmlUi hard-requires it; recompui::start throws otherwise).
 //   - Audio playback uses a plain SDL_QueueAudio push -- no resampling or
 //     jitter smoothing. Good enough to hear whether audio works at all,
 //     not tuned for it to sound clean.
@@ -271,9 +271,13 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Continuing without sound.\n");
     }
 
-    // TODO: register a font once one exists under assets/ -- RmlUi has
-    // nothing to render UI text with otherwise. See file-level comment.
-    // recompui::register_primary_font("InterVariable.ttf", "Inter Variable");
+    // Lato (SIL Open Font License 1.1, assets/FONT_LICENSE.txt), reused from
+    // RmlUi's own bundled sample assets -- see the file-level comment. This
+    // is a bootstrap placeholder to get recompui::start past its hard
+    // requirement for *some* primary font (UIState's constructor throws
+    // std::runtime_error otherwise -- see STATUS.md round 33), not a
+    // considered choice of the game's real UI typeface.
+    recompui::register_primary_font("LatoLatin-Regular.ttf", "Lato");
 
     recomp::register_config_path(recompui::file::get_app_folder_path());
 

@@ -3,6 +3,53 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 34: found the black-window crash -- the long-flagged missing-font gap, hit for the first time now that a real display exists
+
+Got a real crash location via Visual Studio's debugger (`devenv.exe
+/debugexe build\BattleTanxGARecompiled.exe`), since the exe links
+`/SUBSYSTEM:WINDOWS` and produces no visible console output at all even
+when run from a terminal: an unhandled `std::runtime_error`, thrown about a
+second after launch, right after two "Failed to load font face ...
+could not open file" log lines for `assets\NotoEmoji-Regular.ttf` and
+`assets\promptfont/promptfont.ttf`.
+
+Traced to `lib/RecompFrontend/recompui/src/base/ui_state.cpp:263-265`:
+`UIState`'s constructor throws `std::runtime_error("No primary font was
+registered with recompui::register_primary_font")` if
+`recompui::register_primary_font(...)` was never called before
+`recomp::start()`. It never was -- `src/main/main.cpp` has had this
+exact line commented out with a TODO since round 23, and the file-level
+comment has said so explicitly the whole time ("No font is registered...
+The launcher menu will very likely be visually broken until then"). This
+isn't a Windows bug, a regression, or anything round 25-33's toolchain
+fixes touched -- `UIState`'s constructor runs as part of window/renderer
+creation, which is the exact point every single earlier run in this
+session (the display-less cloud sandbox) already failed at for unrelated
+reasons (no GPU). This is genuinely the first time this line has ever
+executed, on any platform, in this project's history -- round 33's black
+window *was* the missing-font gap turning from "visually broken" (the old,
+too-optimistic prediction) into "hard crash" the moment there was finally
+a real window for it to matter in.
+
+Fixed as a bootstrap placeholder, not final game UI work: copied
+`LatoLatin-Regular.ttf` and `NotoEmoji-Regular.ttf` (both already vendored
+under `lib/RecompFrontend/recompui/lib/RmlUi/Samples/assets/`, SIL Open
+Font License 1.1) into this project's own `assets/` directory, alongside
+their license text (`assets/FONT_LICENSE.txt`, required by OFL's
+attribution terms), and uncommented/filled in the
+`recompui::register_primary_font("LatoLatin-Regular.ttf", "Lato")` call
+`main.cpp` already had a slot for. `assets/promptfont/promptfont.ttf` (a
+controller-button icon font) is still missing and will still log its
+"could not open file" warning -- that one was always tolerated gracefully
+(only the *primary* font is a hard requirement) and isn't part of this fix.
+
+Not yet confirmed against an actual run -- this needs only a rebuild (no
+CMake reconfigure: `main.cpp` is already a tracked source, and asset files
+aren't part of any glob), not a full pipeline redo. If this clears the
+crash, the real next signal is whether a launcher menu actually renders
+and is interactive -- the first opportunity in this project's history to
+find out.
+
 ## 2026-09-28, round 33: first successful Windows build and run, ever -- BattleTanxGARecompiled.exe launches, shows a black window instead of a crash
 
 After round 32's `N64RecompCLI` target fix and one more full reconfigure
