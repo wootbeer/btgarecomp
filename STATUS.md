@@ -3,6 +3,53 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 25: first real Windows build attempt -- found and fixed a clang-cl/PCH bug in our own `-include cstdint` workaround
+
+The user attempted the actual Windows build for the first time (this project
+had only ever been built on Linux before this). Two Windows-specific bugs
+found earlier by code review alone (missing `SDL_SysWMinfo`-based HWND path
+in `src/main/main.cpp`, unconditional reference to the nonexistent
+`icons/app.rc`) did NOT surface as build errors, i.e. those fixes held.
+
+A new, real error did surface, at the very first C++ file to build:
+`rmlui_core`'s CMake-generated `cmake_pch.cxx`, with clang-cl reporting
+`error: no such file or directory: 'cstdint'`. Traced to our own
+`CMakeLists.txt` fix (added earlier this project, for a *different*,
+Linux-side problem: upstream RmlUi 6.0 uses `uint32_t`/`uint8_t` etc.
+without including `<cstdint>`, which a current libstdc++ rejects under
+Clang) -- `target_compile_options(... "-include cstdint")` on
+`rmlui_core`/`rmlui_debugger`/`recompui`.
+
+That GNU-style `-include <bare-name>` flag apparently doesn't reliably
+resolve a standard-library header by name under clang-cl specifically while
+it's *also* generating a precompiled header (`/Yc`) in the same invocation --
+even though the same command's `/FI` flag (MSVC-native forced-include,
+already used by CMake's own PCH machinery to force-include `cmake_pch.hxx`
+in that exact command) presumably works fine, and even though plain
+`#include <...>` resolution elsewhere in the same build (e.g. `lunasvg`'s
+`svgelement.cpp`, which uses `std::unique_ptr`) was never a problem. The two
+other `-include` usages in this repo's own `CMakeLists.txt` (the
+`btga_recomp_hooks.h` force-include on `RecompiledFuncs`, and the
+`rsp_stock_compat.hpp` force-include for stock RSP microcode source files)
+were not touched -- both pass a full absolute path rather than a bare
+standard-library header name, so they don't route through the same
+name-lookup path and aren't expected to hit this.
+
+Fix: made the force-include compiler-aware. When `MSVC` is true (CMake sets
+this for clang-cl too, via its MSVC-compatible frontend variant, not just
+real `cl.exe`), use `/FI cstdint` instead of `-include cstdint`; keep the
+GNU spelling for GCC/Clang on Linux, where it was already working.
+
+This was found and fixed from the user's pasted build log alone -- no
+Windows machine available in this session either, so the fix is reasoned
+from the evidence (the failing flag, and the working `/FI` flag right next
+to it in the same failing command) rather than confirmed by a green
+Windows build yet. If the next attempt gets further, that's the confirmation;
+if `/FI cstdint` itself turns out not to work the same way, the fallback is
+to drop precompiled headers for these three targets on Windows entirely
+(`set(RMLUI_PRECOMPILED_HEADERS OFF)` before `add_subdirectory(RecompFrontend)`)
+rather than fighting the force-include mechanism further.
+
 ## 2026-09-28, round 24: wrote the 12 stock-runtime compat shims -- BattleTanxGARecompiled links, launches, and fails exactly where this sandbox's missing GPU says it should
 
 Wrote `src/game/stock_runtime_compat.cpp` (COP0 status read, the 4 thread-

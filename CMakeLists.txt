@@ -380,10 +380,18 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/lib/RecompFrontend)
 
 # Upstream RmlUi 6.0 uses uint32_t and friends without including <cstdint>, which clang with a
 # current libstdc++ rejects, and recompui includes those headers. Add the include from here
-# rather than patching the submodule.
+# rather than patching the submodule. clang-cl (MSVC frontend variant, incl. Windows) needs the
+# native /FI spelling instead of GNU -include: the latter's quote-style header lookup fails to
+# resolve bare STL header names (e.g. "cstdint") when clang-cl is generating a precompiled header,
+# such as RmlUi's own cmake_pch.cxx, even though INCLUDE-based system search works everywhere else.
+if(MSVC)
+    set(BTGA_CSTDINT_FORCE_INCLUDE "/FI cstdint")
+else()
+    set(BTGA_CSTDINT_FORCE_INCLUDE "-include cstdint")
+endif()
 foreach(_btx_rml_target rmlui_core rmlui_debugger recompui)
     if(TARGET ${_btx_rml_target})
-        target_compile_options(${_btx_rml_target} PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:CXX>:-include cstdint>")
+        target_compile_options(${_btx_rml_target} PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:CXX>:${BTGA_CSTDINT_FORCE_INCLUDE}>")
     endif()
 endforeach()
 
