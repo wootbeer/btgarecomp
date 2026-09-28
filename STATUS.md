@@ -3,6 +3,76 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 47: game now runs real multi-threaded N64 logic -- hangs waiting for VI/AI event registration that hasn't happened yet
+
+With round 46's fix in, the missing-function crashes stopped entirely.
+Clicking "Play" now runs the game far enough to spawn multiple real N64
+`osCreateThread` threads (seen in the debugger as "Game 1"/"Game 2"/
+"Game 3" x2/"Game 5" -- the `t->id`-based naming from `get_game_thread_name`
+in `main.cpp`) and hang instead of crash, with the whole process sitting at
+a steady ~10% CPU.
+
+Diagnosed by attaching the debugger, Break All, and walking every non-pool
+thread's call stack (same technique used throughout this session):
+
+- Two threads are legitimately idle, correctly blocked in `osRecvMesg`
+  inside `func_800A1290` (round 46's split -- confirmed to be the audio
+  driver's `__CallBackDmaNew`-adjacent worker thread, its own entry point)
+  and `func_800988E8` (round 45's split), each waiting on their own message
+  queue. Nothing wrong with these on their own -- they're supposed to sit
+  idle until something sends them a message.
+- One thread (entry point `func_8009EEA0`, round 39's split) is the one
+  actually consuming CPU: it's spinning in a tight busy-wait loop,
+  `func_80098B40` (`RecompiledFuncs/funcs_6.c`), on a flag at vram
+  `0x80229230` (`while (*(int32_t*)0x80229230 != 0) {}`). That flag is set
+  by `func_80098B2C` (called from 4 sites across the recompiled game code)
+  and is supposed to be cleared after `osContGetReadData` (`vram
+  0x80103254`, a real libultra function, correctly identified by name in
+  `syms.toml`) completes -- i.e. this is a mutex protecting a synchronous
+  controller-read, not something that should ever spin for long.
+
+Traced the likely root cause one level further: `func_800988E8`'s own main
+loop (`RecompiledFuncs/funcs_5.c:8244+`) starts by blocking on *two*
+sequential `osRecvMesg` calls (queues at vram `0x80217030` and
+`0x80217010`) before it ever reaches the controller-read/lock-clear code
+further down -- and this thread is the one currently sitting in the first
+of those two `osRecvMesg` calls. Those two queues are almost certainly the
+game's own VI (frame tick) and AI (audio) event queues. Ultramodern's VI
+thread (`ultramodern/src/events.cpp` `vi_thread_func`, lines 236-255) only
+sends VI/AI messages once `ultramodern::is_game_started()` is true (which
+it is, confirmed via `recomp::start_game()`/`game_status`) *and* the
+target `OSMesgQueue` has actually been registered via `osSetEventMesg`/
+`osViSetEvent` (`events.cpp:149-177`, both correctly implemented as
+native functions here) -- so if the game's own startup code hasn't yet
+called those to register its VI/AI queues, this thread will wait forever,
+exactly matching what's observed.
+
+**Not yet resolved.** The open question is *why* that registration hasn't
+happened -- almost certainly because whichever game thread is supposed to
+call `osSetEventMesg`/`osViSetEvent` hasn't been scheduled yet in the
+cooperative (single-thread-active-at-a-time) emulated threading model,
+possibly entangled with the controller-read spinlock above. This is
+qualitatively different from every fix in rounds 39-46: those were
+concrete, one-shot infrastructure/decompilation bugs found by following a
+crash address to its exact cause; this needs mapping out this specific
+game's own multi-thread startup order (which thread runs first, what each
+one is blocked on, and why the registration thread either hasn't run or
+silently failed) -- open-ended reverse engineering, not a quick fix.
+
+Next steps for whoever picks this up:
+1. Find where in the recompiled code `osSetEventMesg`/`osViSetEvent` are
+   actually called from (search `RecompiledFuncs/*.c` for
+   `osSetEventMesg_recomp`/`osViSetEvent_recomp` call sites), and trace
+   backwards to find which thread/function is supposed to reach that call
+   and why it hasn't yet.
+2. Consider whether the controller-read spinlock (`func_80098B2C`/
+   `func_80098B40`) is itself blocking that registration (e.g. if the
+   registering code is gated behind the same lock, or scheduled after it).
+3. Worth checking `ultramodern::run_next_thread_and_wait`/the cooperative
+   scheduler's thread-priority ordering (several `osSetThreadPri` calls
+   were seen in these same call stacks) in case a priority-ordering bug is
+   preventing the right thread from ever getting scheduled.
+
 ## 2026-09-28, round 46: sixth confirmed merged-function boundary
 
 Same bug class as rounds 39/41/42/44/45, found via the next runtime crash
