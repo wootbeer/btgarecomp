@@ -3,6 +3,74 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 54: the scheduler deadlock is fully resolved -- new bug class, a "shared tail code" merged-function variant that needs a manual_funcs registration (and a required local N64Recomp source patch)
+
+Round 53's second yield fix worked: the game got past the entire rounds
+47-53 threading deadlock and crashed with a *new* error --
+`Failed to find function at 0x8009F02C` (`librecomp/src/overlays.cpp:368`'s
+`get_function()`, the runtime resolver for genuinely indirect calls) --
+confirming real forward progress into new code.
+
+This looked like the same merged-function-boundary bug as rounds 39-46 at
+first, but it isn't. `0x8009F02C` sits mid-instruction-stream inside the
+already-declared `func_8009EFD4` (it's literally the delay slot right after
+`j 0x8009F048` at `0x8009F028`). Tried the normal fix (a `syms.toml` split)
+and N64Recomp itself refused it outright: `func_8009EFD4`'s own internal
+control flow branches to `0x8009F030` *and* jumps to `0x8009F048` -- two
+different interior offsets of what the split would have carved out --
+("branching outside of the function" / "Unhandled branch"). This is a
+genuinely different bug shape: real shared/reused tail code, reachable both
+as a normal fallthrough continuation of `func_8009EFD4` *and* as an
+independent external entry point via an indirect call elsewhere in the ROM
+-- not a case of the decompiler mis-drawing one function's boundary.
+
+**The right tool turned out to already exist in N64Recomp**: `manual_funcs`,
+a top-level config array (`N64Recomp/src/config.cpp`'s `get_manual_funcs`)
+that registers an *additional*, independently-compiled function at a given
+vram+size, coexisting with an already-declared overlapping function rather
+than replacing it (`N64Recomp/src/main.cpp`'s `add_manual_functions`) --
+exactly the "same bytes, reachable from two different entry addresses"
+case here. Added it (`battletanxga.us.rev0.toml`'s `[input]` table):
+```
+manual_funcs = [
+    { name = "func_8009F02C", section = ".resident_first_mb", vram = 0x8009f02c, size = 0x38 },
+]
+```
+(size 0x38 chosen by disassembling forward from `0x8009F02C` to its own
+clean `jr $ra` at `0x8009F05C` -- straight-line code, no branches leaving
+that range, so it compiles as a fully self-contained unit on its own.)
+
+**Caught by testing before telling the user, not by inspection**: adding
+this to the TOML alone did nothing (`Function count` stayed at 1310,
+identical with or without the entry) -- traced it to `add_manual_functions`
+only being called from the *ELF-input* branch of `N64Recomp/src/main.cpp`
+(guarded by `if (!config.elf_path.empty())`), never from the *ROM +
+symbols-file* branch this project actually uses. Since N64RecompCLI is a
+pure local codegen tool in this sandbox -- only the `RecompiledFuncs/*.c`
+it generates gets committed/built, never the tool's own source -- patched
+`N64Recomp/src/main.cpp` locally to also call `add_manual_functions` in the
+ROM branch, rebuilt N64RecompCLI locally, regenerated, and confirmed
+`Function count` went 1310 -> 1311 with `func_8009F02C` now present in
+both `RecompiledFuncs/funcs_23.c` (a clean, self-contained translation
+matching the hand-disassembled bytes exactly) and `recomp_overlays.inl`'s
+lookup table. Full `ninja BattleTanxGARecompiled` build succeeded
+end-to-end. Reverted the local `N64Recomp/src/main.cpp` patch afterward
+(`RecompiledFuncs/` is gitignored -- nothing from this sandbox's own
+regeneration gets committed either way).
+
+**This local patch is required for the user's own regeneration too** --
+their `N64Recomp.exe` is built from the same unmodified upstream submodule
+source, so without this same source change, their build would silently
+ignore `manual_funcs` exactly like this sandbox did on the first attempt,
+and they'd hit the identical crash again. Gave them the equivalent
+PowerShell script (same idempotent, marker-checked pattern used for the
+RT64 submodule edits earlier in this project) to apply locally before
+regenerating, since `lib/N64ModernRuntime` (and its nested `N64Recomp`) are
+real git submodules whose edits can't be committed/pushed through this
+project's normal workflow.
+
+Not yet confirmed against a real run.
+
 ## 2026-09-28, round 53: found the real reason func_800A1290 never runs -- round 51's yield only covered one of func_800A1384's two loop-back paths
 
 The round 52 (part 4) VI-dispatch diagnostic printed once

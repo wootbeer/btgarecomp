@@ -448,6 +448,14 @@ functions = [
     { name = "func_8009EEE0", vram = 0x8009eee0, size = 0x50 },
     { name = "func_8009EF30", vram = 0x8009ef30, size = 0x1c },
     { name = "func_8009EF4C", vram = 0x8009ef4c, size = 0x88 },
+    # Round 54 (STATUS.md): 0x8009F02C -- the "Failed to find function"
+    # runtime error's target -- turned out NOT to be a clean second-function
+    # boundary the way every earlier round's fix was: func_8009EFD4's own
+    # internal control flow branches to 0x8009F030 and jumps to 0x8009F048,
+    # both DIFFERENT interior offsets of what would have been this split,
+    # so N64Recomp itself refuses the split ("branching outside of the
+    # function"/"Unhandled branch"). See STATUS.md for the real
+    # investigation before attempting a different fix here.
     { name = "func_8009EFD4", vram = 0x8009efd4, size = 0xbc },
     { name = "func_8009F090", vram = 0x8009f090, size = 0x164 },
     { name = "func_8009F1F4", vram = 0x8009f1f4, size = 0x94 },

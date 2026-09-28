@@ -10,6 +10,31 @@ output_func_path = "RecompiledFuncs"
 rom_file_path = "BattleTanx Global Assault (USA).z64"
 symbols_file_path = "BattleTanxGASyms/battletanxga.us.rev0.syms.toml"
 
+# Round 54 (STATUS.md): func_8009F02C is reached by a genuinely indirect
+# call at runtime ("Failed to find function at 0x8009F02C",
+# librecomp/src/overlays.cpp:368's get_function()), but it is NOT a clean
+# second-function boundary the way every earlier merged-function fix was --
+# it sits mid-instruction-stream inside func_8009EFD4 (the delay slot right
+# after `j 0x8009F048` at 0x8009F028), and func_8009EFD4's own internal
+# control flow branches to 0x8009F030 and jumps to 0x8009F048, two
+# DIFFERENT interior offsets of what a syms.toml split would have carved
+# out. N64Recomp refused that split outright ("branching outside of the
+# function"/"Unhandled branch"), confirming this is real shared/reused
+# tail code (both a fallthrough continuation of func_8009EFD4 AND a
+# separate external entry point), not decompiler mis-boundary-detection.
+# `manual_funcs` (N64Recomp's mechanism for registering an *additional*,
+# independent compiled unit at a given vram+size, coexisting with an
+# already-declared overlapping function rather than replacing it -- see
+# N64Recomp/src/main.cpp add_manual_functions) is exactly the right tool:
+# func_8009EFD4 stays fully intact (0xbc bytes, unsplit) for its own
+# direct callers, and this registers the self-contained tail
+# (0x8009F02C-0x8009F064, ends in a plain `jr $ra` with no branches
+# leaving that range) as its own separately-addressable function for the
+# indirect caller that reaches it independently.
+manual_funcs = [
+    { name = "func_8009F02C", section = ".resident_first_mb", vram = 0x8009f02c, size = 0x38 },
+]
+
 # NOTE (round 21): this used to list all 71 libultra/audio names we'd
 # cross-referenced against librecomp as [patches] ignored/renamed. Every one
 # of them turned out to already be in N64Recomp's own built-in
