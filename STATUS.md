@@ -3,6 +3,65 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 50: round 49 confirmed insufficient via debugger -- real fix: drop the spinning thread's own priority to force the swap
+
+Round 49's `yield_self_1ms` injection did not resolve the hang (user report:
+"same sort of result as before"). Confirmed why by attaching the debugger to
+`build-dbg\` (the Release `build\` exe shows no Call Stack symbols -- a
+recurring gotcha in this session, always use `build-dbg\` for debugging) and
+walking every Game N thread's call stack while hung:
+
+- Three threads are correctly idle, blocked in `wait_for_resumed`/
+  `Semaphore::wait()` after a normal `osRecvMesg` (`func_800A1290`,
+  `func_800988E8` -- the same thread round 47/48 identified as the one that
+  needs to run to clear the `0x80229230` flag, still blocked on its VI/AI
+  message queue) or after a self-directed `osSetThreadPri` call inside
+  `func_8009EE08` (which *did* correctly trigger a real swap-and-park --
+  confirming `osSetThreadPri`'s priority-change-triggers-`check_running_queue`
+  path genuinely works).
+- One thread's stack has `func_80098B40` directly at the top with nothing
+  above it (`func_8009EEA0` -> `func_8009D3A4` -> `func_8009D270` ->
+  `func_80098B40`) -- proof it's still spinning: it already returned from
+  the injected `yield_self_1ms()` call and is back in the busy-wait, exactly
+  the failure mode round 49's entry flagged as a risk.
+
+Root cause confirmed by reading the runtime directly: `check_running_queue`
+(`ultramodern/src/scheduling.cpp:24`) only swaps when
+`next_thread->priority > self->priority` (strictly greater). Real libultra's
+`osYieldThread` -- which round-robins to an *equal*-or-higher-priority ready
+thread, not just a strictly-higher one -- is entirely unimplemented in this
+runtime fork: `librecomp/src/ultra_translation.cpp:31-34`'s
+`osYieldThread_recomp` just `assert(false)`s with the real call commented
+out, and `ultramodern::osYieldThread` (declared in `ultra64.h:272`) has no
+definition anywhere in the tree. So `yield_self_1ms` alone can never hand
+off to a same-or-lower-priority thread, which is exactly the situation here.
+
+**Fix (`battletanxga.us.rev0.toml`, same `[[patches.hook]]` site,
+`before_vram = 0x80098B40`):** replaced the `yield_self_1ms()` call with a
+temporary self-priority drop using only public, already-proven-working
+functions (`osGetThreadPri`/`osSetThreadPri`, both plain `extern` forward
+declarations, no runtime/submodule edit needed): save the current priority,
+set it to 0 (`osSetThreadPri(rdram, 0, 0)` -- `t_ == 0` means "self" per
+`threads.cpp:309-311`), which triggers `check_running_queue` via the
+priority-actually-changed path (`threads.cpp:314-322`) and makes the strict
+`>` check trivially true for virtually any other ready thread, then restore
+the saved priority once control returns. Verified: regenerated via the
+locally-built `N64RecompCLI` in this sandbox, confirmed the patch text lands
+correctly right after the loop's label (`RecompiledFuncs/funcs_6.c:7-14`,
+wrapped in `{ }` same as round 49 for the label/declaration C rule), passed
+a clean `clang -fsyntax-only`, and built the real `RecompiledFuncs` ninja
+target end-to-end with zero errors (only pre-existing unrelated warnings).
+
+**Not yet confirmed against a real run** (this sandbox has no GPU/display).
+If this still doesn't resolve it, the next things to check: whether
+`func_800988E8`'s thread is even in `running_queue` yet at all when
+`func_80098B40`'s thread yields (if it hasn't been inserted there -- e.g.
+still blocked on the VI/AI message itself rather than ready -- no priority
+trick helps, and the real question becomes why the VI thread's message
+hasn't reached it), and whether `thread_queue_insert`'s priority-based
+ordering could still starve the now-lowered-priority spinning thread longer
+than expected once it's the one waiting to be resumed.
+
 ## 2026-09-28, round 49: attempted fix for round 48's deadlock -- inject a scheduler-yield call into the spin loop via [[patches.hook]]
 
 Round 48 identified two real paths forward; this is an attempt at the
