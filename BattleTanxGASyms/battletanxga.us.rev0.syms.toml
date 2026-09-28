@@ -1091,7 +1091,19 @@ functions = [
     { name = "func_800FBDBC", vram = 0x800fbdbc, size = 0xf4 },
     { name = "func_800FBEB0", vram = 0x800fbeb0, size = 0x64 },
     { name = "func_800FBF14", vram = 0x800fbf14, size = 0x80 },
-    { name = "player_text_1AE0", vram = 0x800fbf94, size = 0x388 },
+    # Round 55 (STATUS.md): player_text_1AE0 (declared 0x388) is really two
+    # functions back to back -- a small div-with-overflow-guard helper
+    # (player_text_1AE0 itself, 0x98) ending in a clean jr $ra/addiu
+    # $sp,$sp,0x18, immediately followed by an unrelated, unnamed function
+    # (func_800FC02C, 0x2f0) ending in its own jr $ra/addiu $sp,$sp,0x30.
+    # 0x98 + 0x2f0 = 0x388, matching the original declared size exactly;
+    # no internal branch in either half crosses outside its own range (the
+    # only cross-boundary references are proper jal calls to other already-
+    # declared functions). Found via the runtime's "Failed to find function
+    # at 0x800FC02C" indirect-call-resolution error, the next crash after
+    # round 54's func_8009F02C fix.
+    { name = "player_text_1AE0", vram = 0x800fbf94, size = 0x98 },
+    { name = "func_800FC02C", vram = 0x800fc02c, size = 0x2f0 },
     { name = "func_800FC31C", vram = 0x800fc31c, size = 0x548 },
     { name = "func_800FC864", vram = 0x800fc864, size = 0x7c },
     { name = "func_800FC8E0", vram = 0x800fc8e0, size = 0x154 },

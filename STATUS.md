@@ -3,6 +3,27 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 55: seventh confirmed merged-function boundary, same class as rounds 39-46
+
+Round 54's `func_8009F02C` `manual_funcs` fix confirmed working (that
+specific crash stopped happening). Next crash: `Failed to find function at
+0x800FC02C`. Unlike round 54, this one *is* the ordinary merged-function
+pattern: `player_text_1AE0` (declared `0x388`, an n64sym signature-match
+name per the syms.toml file's own caveat that such names aren't
+necessarily real function starts) disassembles to two complete, clean
+functions back to back -- itself (`0x98`, a small div-with-overflow-guard
+helper ending in `jr $ra`/`addiu $sp,$sp,0x18`) and an unnamed
+`func_800FC02C` (`0x2f0`, ending in its own `jr $ra`/`addiu $sp,$sp,0x30`)
+-- `0x98 + 0x2f0 = 0x388`, matching the original declared size exactly,
+with every internal branch in both halves staying inside its own range.
+Fixed via the normal `syms.toml` split (`BattleTanxGASyms/
+battletanxga.us.rev0.syms.toml`), no `manual_funcs`/N64Recomp source patch
+needed this time. Verified: regenerated via the local `N64RecompCLI`,
+confirmed both `player_text_1AE0` and `func_800FC02C` compile as separate
+functions (`RecompiledFuncs/funcs_17.c:7476` and `:7586`), and a full
+`ninja BattleTanxGARecompiled` build succeeded end-to-end. Not yet
+confirmed against a real run.
+
 ## 2026-09-28, round 54: the scheduler deadlock is fully resolved -- new bug class, a "shared tail code" merged-function variant that needs a manual_funcs registration (and a required local N64Recomp source patch)
 
 Round 53's second yield fix worked: the game got past the entire rounds
