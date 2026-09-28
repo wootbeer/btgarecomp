@@ -1323,6 +1323,19 @@ text = """
     { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
 """
 
+# Round 60 (STATUS.md): after rounds 50-59 cleared everything downstream,
+# the same spinning thread (entry point func_8009EEA0) progressed further
+# and hit a third bare unyielding poll loop, same class as func_80098B40/
+# func_800A1384: func_80079FF0 is a plain
+# `while (*(int32_t*)(0x800114F8 + 0xC4) == 0) {}` (L_8007A014's own
+# re-entry label), no OS call inside it at all. Same fix, same call.
+[[patches.hook]]
+func = "func_80079FF0"
+before_vram = 0x8007A014
+text = """
+    { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
+"""
+
 # Round 52 diagnostic (STATUS.md): func_800988E8 has been stuck at its very
 # first osRecvMesg (mq vram 0x80217030) since round 47, unmoved by rounds
 # 50-52's fixes. Reading source traced this queue's registration to

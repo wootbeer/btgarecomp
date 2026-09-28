@@ -3,6 +3,19 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 60: third unyielding poll loop found, same fix applied
+
+After rounds 50-59 cleared every downstream blocker, the same thread
+(entry point `func_8009EEA0`) progressed further and hit a third bare
+unyielding poll loop -- same class as `func_80098B40`/`func_800A1384`:
+`func_80079FF0` is a plain `while (*(int32_t*)(0x800114F8 + 0xC4) == 0)
+{}` (its own loop label `L_8007A014`), no OS call inside it at all.
+Applied the same proven fix: a `[[patches.hook]]` calling
+`btga_yield_via_priority_drop` at the loop's own label. Verified:
+regenerated via the local `N64RecompCLI`, confirmed the hook lands
+correctly right after the label, and a full `ninja BattleTanxGARecompiled`
+build succeeded end-to-end. Not yet confirmed against a real run.
+
 ## 2026-09-28, round 59: ninth confirmed merged-function boundary -- a seven-way split
 
 Round 58's audio-chain short-circuit worked (no more access violations
