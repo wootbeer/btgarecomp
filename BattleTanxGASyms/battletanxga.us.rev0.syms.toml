@@ -711,7 +711,22 @@ functions = [
     { name = "func_800BF798", vram = 0x800bf798, size = 0x74 },
     { name = "func_800BF80C", vram = 0x800bf80c, size = 0x2e0 },
     { name = "func_800BFAEC", vram = 0x800bfaec, size = 0x1b8 },
-    { name = "func_800BFCA4", vram = 0x800bfca4, size = 0x1f0 },
+    # Round 59 (STATUS.md): func_800BFCA4 (declared 0x1f0) is really seven
+    # small functions back to back -- itself plus six tiny accessor-style
+    # functions (0x24/0x20/0x10/0x10/0xa8/0x48). Found via the runtime's
+    # "Failed to find function at 0x800BFD40" error, the next crash after
+    # round 58's audio-chain fix. Verified with an automated scan (every
+    # jr $ra found, boundaries proposed right after each, then confirmed
+    # no branch/jump crosses any proposed boundary) rather than eyeballing
+    # a 7-way split by hand. 0x9c+0x24+0x20+0x10+0x10+0xa8+0x48 = 0x1f0,
+    # matching the original declared size exactly.
+    { name = "func_800BFCA4", vram = 0x800bfca4, size = 0x9c },
+    { name = "func_800BFD40", vram = 0x800bfd40, size = 0x24 },
+    { name = "func_800BFD64", vram = 0x800bfd64, size = 0x20 },
+    { name = "func_800BFD84", vram = 0x800bfd84, size = 0x10 },
+    { name = "func_800BFD94", vram = 0x800bfd94, size = 0x10 },
+    { name = "func_800BFDA4", vram = 0x800bfda4, size = 0xa8 },
+    { name = "func_800BFE4C", vram = 0x800bfe4c, size = 0x48 },
     { name = "func_800BFEA0", vram = 0x800bfea0, size = 0x85c },
     { name = "__udiv_w_sdiv", vram = 0x800c06fc, size = 0x370 },
     { name = "func_800C0A6C", vram = 0x800c0a6c, size = 0x1ac },

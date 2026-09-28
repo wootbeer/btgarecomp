@@ -3,6 +3,22 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 59: ninth confirmed merged-function boundary -- a seven-way split
+
+Round 58's audio-chain short-circuit worked (no more access violations
+there). Next crash: `Failed to find function at 0x800BFD40`.
+`func_800BFCA4` (declared `0x1f0`) turned out to be seven small functions
+back to back -- itself plus six tiny accessor-style functions (sizes
+`0x24`/`0x20`/`0x10`/`0x10`/`0xa8`/`0x48`). Verified with the same
+automated approach as round 56's three-way split (every `jr $ra` found,
+boundaries proposed right after each, confirmed no branch/jump crosses
+any proposed boundary), scaled up for a 7-way split. Sizes sum to
+`0x1f0`, matching the original exactly. Fixed via the normal `syms.toml`
+split, no `manual_funcs`/`ignored` needed. Verified: regenerated via the
+local `N64RecompCLI`, confirmed all seven functions compile separately,
+and a full `ninja BattleTanxGARecompiled` build succeeded end-to-end. Not
+yet confirmed against a real run.
+
 ## 2026-09-28, round 58: short-circuited the whole audio-command-list chain at its entry point instead of chasing internal DSP crashes one at a time
 
 Round 57's `n_alEnvmixerPull` fix (pass the output pointer through
