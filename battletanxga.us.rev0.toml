@@ -70,21 +70,31 @@ manual_funcs = [
 # Their existing cop0/mfc0 instruction patches above are left in place
 # (harmless once stubbed) rather than removed, to keep the derivation
 # history intact.
-#  - n_alEnvmixerPull: N64Recomp's static analysis couldn't determine the
-#    size of a computed jump table this function uses ("Failed to determine
-#    size of jump table at 0x80077720 for instruction at 0x80100120") -- the
-#    table it's reading isn't in this function's own byte range at all,
-#    which the analysis pass requires. This is CPU-side audio envelope-
-#    mixing code (the software counterpart to what the RSP audio microcode
-#    normally does); stubbed for now to get a build, but this one is a
-#    real gap to revisit once real audio is being worked on, not dead code
-#    like the others in this list.
 #  - func_801000B0: round 22's automated cross-function-branch split (see
 #    STATUS.md) split this out of n_alEnvmixerPull's own byte range, since
 #    something else branches directly into it. It still contains the same
 #    jump table at 0x80100120 that made n_alEnvmixerPull itself
-#    unanalyzable, so it needs the same treatment for the same reason.
-stubs = ["func_8007919C", "func_80079260", "__osException_80104FB0", "n_alEnvmixerPull", "func_801000B0"]
+#    unanalyzable (N64Recomp couldn't determine the jump table's size --
+#    "Failed to determine size of jump table at 0x80077720 for instruction
+#    at 0x80100120", the table it reads isn't in this function's own byte
+#    range at all), so it needs the same treatment for the same reason.
+stubs = ["func_8007919C", "func_80079260", "__osException_80104FB0", "func_801000B0"]
+
+# n_alEnvmixerPull (round 57, STATUS.md): moved out of stubs and into
+# ignored -- a plain empty stub left its return value ($v0/ctx->r2) holding
+# a stale, garbage value (since the stub touches nothing), which its own
+# caller (func_800FFA90) uses directly as an advanced output-buffer
+# pointer, propagating into a write address two calls further up
+# (func_80101320) and crashing with an access violation once real audio
+# processing code actually got reached. "ignored" (unlike "stubbed") skips
+# N64Recomp's decompilation of this function entirely, so the same
+# unanalyzable jump table that originally forced stubbing it isn't a
+# problem here -- the project supplies its own hand-written C
+# implementation instead (src/game/n_alEnvmixerPull_stub.cpp), which at
+# least keeps the pointer chain valid (passes the output pointer through
+# unchanged -- no real mixing yet, a real gap to revisit along with real
+# audio, but no longer a crash).
+ignored = ["n_alEnvmixerPull"]
 
 # Instruction patches: cop0 writes and eret (nothing is emulated) -- round 18.
 

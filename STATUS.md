@@ -3,6 +3,56 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 57: real crash (access violation) -- the long-known n_alEnvmixerPull audio gap finally got exercised; fixed by switching it from `stubbed` to `ignored` with a hand-written pass-through
+
+Round 56's fix got the game past every "Failed to find function" merged-
+boundary crash and into a genuinely different failure: a Windows access
+violation (`0xc0000005`) inside `func_80101320` (the very function round 56
+just split out), caught live via the debugger at
+`MEM_W(0X0, ctx->r3) = ctx->r7;` -- a write through a corrupted pointer.
+
+Traced the corruption back two call levels: `func_80101320` calls
+`func_800FFA90`, which loops calling `n_alEnvmixerPull` and uses its
+return value (`$v0`/`ctx->r2`) as an advanced output-buffer pointer for
+the next iteration (and as its own return value). `n_alEnvmixerPull` has
+been in the `stubs` list since round 21-22 (N64Recomp can't statically
+decompile it -- a computed jump table whose size it can't determine) --
+but a `stubs` entry generates a completely *empty* function body that
+touches nothing, so `$v0` after the "call" just retains whatever it held
+beforehand (a small loop-count integer from earlier in `func_800FFA90`,
+not a pointer). That stale garbage value propagates up as the return
+value and gets used as a write address two calls later, crashing. Round
+21-22's own note already flagged this as "a real gap to revisit once real
+audio is being worked on, not dead code like the others in this list" --
+this is exactly that moment, now that the audio thread's real processing
+loop is actually being reached.
+
+**Fix:** moved `n_alEnvmixerPull` out of `stubs` and into a new `ignored`
+list (`battletanxga.us.rev0.toml`'s `[patches]` table) -- unlike
+`stubbed`, an `ignored` function skips N64Recomp's decompilation (and the
+jump-table analysis that made it unanalyzable) entirely, expecting the
+project to supply its own native implementation. Added
+`src/game/n_alEnvmixerPull_stub.cpp`: `extern "C" void n_alEnvmixerPull(...)
+{ ctx->r2 = ctx->r6; }` -- passes the output-buffer pointer through
+unchanged (silence/no mixing instead of real audio, but the pointer chain
+stays valid, matching "wrote zero bytes" rather than a guessed-and-possibly-
+wrong advance amount). This is purely project-owned code, no submodule
+patch needed this time. `func_801000B0` (round 22's other stub, sharing
+the same unanalyzable jump table) is left untouched in `stubs` -- it's
+reached only via a direct branch-into-interior from within
+`n_alEnvmixerPull`'s own byte range, a different situation not currently
+exercised by any live crash.
+
+Verified: regenerated via the local `N64RecompCLI` (no jump-table error
+this time, confirming `ignored` genuinely skips that analysis), confirmed
+`n_alEnvmixerPull` no longer has a generated body/declaration
+(`RecompiledFuncs/funcs.h`, `funcs_19.c` -- only the call site remains),
+and a full `cmake -S . -B build && ninja BattleTanxGARecompiled` build
+succeeded end-to-end, including linking the final executable (confirming
+the hand-written symbol resolves correctly against the implicit-
+declaration call site in the generated C). Not yet confirmed against a
+real run.
+
 ## 2026-09-28, round 56: eighth confirmed merged-function boundary -- this one a three-way split
 
 Next crash after round 55's fix: `Failed to find function at 0x80101320`.
