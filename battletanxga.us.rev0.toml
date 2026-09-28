@@ -1256,6 +1256,17 @@ text = """
 # confirm empirically whether it was ever properly initialized
 # (osCreateMesgQueue call) and whether anything has ever been sent to it,
 # rather than continuing to guess from static analysis alone.
+# Round 52 diagnostic v2: v1 misread garbage memory. MEM_W's address math
+# (recomp.h) requires its "reg" operand to be a *sign-extended* 64-bit KSEG0
+# address (upper 32 bits all 1s, e.g. 0xFFFFFFFF80217030) -- every real call
+# site gets this by assigning through S32() into a 64-bit `gpr`, which
+# sign-extends automatically. v1 passed the bare literal 0x80217030 directly,
+# which C types as a positive 32-bit `unsigned int` (never sign-extended),
+# so the macro's `- 0xFFFFFFFF80000000` subtraction landed on a wildly wrong
+# address (off by ~4GB) instead of the real queue -- explaining the
+# all-zero read, which was therefore meaningless, not a real finding. Fixed
+# by routing the constant through S32() into a `gpr` local first, exactly
+# like the generated code does for every other address.
 [[patches.hook]]
 func = "func_800988E8"
 before_vram = 0x800988E8
@@ -1266,13 +1277,14 @@ text = """
             btga_mq_dumped = 1;
             extern int printf(const char *fmt, ...);
             extern int fflush(void *stream);
-            int32_t bor = MEM_W(0, 0x80217030);
-            int32_t bos = MEM_W(4, 0x80217030);
-            int32_t validCount = MEM_W(8, 0x80217030);
-            int32_t first = MEM_W(12, 0x80217030);
-            int32_t msgCount = MEM_W(16, 0x80217030);
-            int32_t msgbuf = MEM_W(20, 0x80217030);
-            printf("[BTGA DEBUG] mq 0x80217030: blocked_on_recv=0x%08X blocked_on_send=0x%08X validCount=%d first=%d msgCount=%d msg=0x%08X\\n",
+            gpr mq_addr = S32(0x80217030);
+            int32_t bor = MEM_W(0, mq_addr);
+            int32_t bos = MEM_W(4, mq_addr);
+            int32_t validCount = MEM_W(8, mq_addr);
+            int32_t first = MEM_W(12, mq_addr);
+            int32_t msgCount = MEM_W(16, mq_addr);
+            int32_t msgbuf = MEM_W(20, mq_addr);
+            printf("[BTGA DEBUG v2] mq 0x80217030: blocked_on_recv=0x%08X blocked_on_send=0x%08X validCount=%d first=%d msgCount=%d msg=0x%08X\\n",
                 (unsigned)bor, (unsigned)bos, validCount, first, msgCount, (unsigned)msgbuf);
             fflush(0);
         }

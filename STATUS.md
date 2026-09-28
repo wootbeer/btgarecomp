@@ -3,6 +3,41 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 52 (part 3): the first diagnostic read was garbage -- fixed a sign-extension bug in my own patch, and traced the real creator function
+
+The round 52 part 2 diagnostic printed all-zero fields for the queue at
+`0x80217030`, which looked like confirmation it was never initialized --
+but before trusting that, traced its actual creator to rule out a race:
+`func_800985A0` (`RecompiledFuncs/funcs_5.c:7683+`) calls
+`osCreateMesgQueue(0x80217010, ...)`, then `osCreateMesgQueue(0x80217030,
+...)` (exactly this queue), then `osCreateThread`+`osStartThread` targeting
+entry point `0x800988E8` -- i.e. `func_800988E8` itself. Its sole caller,
+`func_8009D270` (`RecompiledFuncs/funcs_6.c:12551`), calls it unconditionally
+and synchronously, strictly *before* the already-confirmed-working
+`func_800A1150` call later in the same straight-line function -- so by
+construction the queue must already be initialized before this thread's
+own recv could ever run. That contradiction meant the diagnostic itself was
+suspect, not the queue.
+
+Found the bug: `MEM_W`'s address math (`recomp.h`) requires its address
+operand to be a *sign-extended* 64-bit KSEG0 address (upper 32 bits all 1s) --
+every real call site gets this by assigning through the `S32()` macro into a
+64-bit `gpr`, which sign-extends automatically in C. The diagnostic instead
+passed the bare literal `0x80217030` directly, which C types as a positive
+32-bit `unsigned int` that never gets sign-extended, so `MEM_W`'s internal
+`- 0xFFFFFFFF80000000` subtraction landed roughly 4GB off from the real
+queue and silently read unrelated (zeroed) memory. The "never initialized"
+finding was an artifact of my own patch, not a real result.
+
+**Fix:** route the address constant through `S32()` into a `gpr` local
+first (`battletanxga.us.rev0.toml`, same hook site), exactly matching how
+the generated code builds every other address. Verified: regenerated,
+confirmed the fixed version lands correctly
+(`RecompiledFuncs/funcs_5.c:8244-8264`), passed `clang -fsyntax-only`
+clean, and a full `ninja BattleTanxGARecompiled` build succeeded end-to-end.
+Still purely diagnostic -- waiting on the corrected printout from a real
+run before drawing any conclusion about why this thread is actually stuck.
+
 ## 2026-09-28, round 52 (part 2): traced func_800988E8's stuck queue to a missing osCreateViManager implementation; added a one-shot diagnostic print to confirm before writing a fix
 
 After the drain-then-priority-drop fix (round 52 part 1), the game still
