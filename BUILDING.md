@@ -109,24 +109,36 @@ cmake -S lib/N64ModernRuntime/N64Recomp -B lib/N64ModernRuntime/N64Recomp/build 
 cmake --build lib/N64ModernRuntime/N64Recomp/build --target N64Recomp -j$(nproc)
 ```
 
-**Windows** (from an x64 Native Tools Command Prompt for VS 2022):
+**Windows** (from an x64 Native Tools Command Prompt, or Developer
+PowerShell, for VS 2022 — both work, just match the syntax below to
+whichever one you actually have open):
 
 Visual Studio ships *two* `clang-cl.exe` copies — a 32-bit-hosted one under
 `VC\Tools\Llvm\bin\` and a 64-bit-hosted one under `VC\Tools\Llvm\x64\bin\`.
 Passing bare `-DCMAKE_C_COMPILER=clang-cl` lets Windows' PATH search pick
 whichever one comes first, and that has turned out to be inconsistent even
-from the correct "x64 Native Tools" prompt — the wrong one produces a build
-that fails in confusing ways deep into compiling or linking (see STATUS.md
-round 27 for what that looked like). Set the full path explicitly instead,
-so there's no ambiguity (adjust `Community` to `Professional`/`Enterprise`
-and the drive/path if your Visual Studio install differs):
+from the correct x64 dev environment — the wrong one produces a build that
+fails in confusing ways deep into compiling or linking (see STATUS.md round
+27 for what that looked like). Set the full path explicitly instead, so
+there's no ambiguity (adjust `Community` to `Professional`/`Enterprise` and
+the drive/path if your Visual Studio install differs):
 
+Developer PowerShell:
+```powershell
+$env:BTGA_CLANGCL = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe"
+cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER="$env:BTGA_CLANGCL" -DCMAKE_CXX_COMPILER="$env:BTGA_CLANGCL"
+cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64Recomp
+```
+
+x64 Native Tools Command Prompt (cmd.exe):
 ```bat
 set "BTGA_CLANGCL=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe"
 cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER="%BTGA_CLANGCL%" -DCMAKE_CXX_COMPILER="%BTGA_CLANGCL%"
 cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64Recomp
 ```
-(Ninja parallelizes automatically using all cores — no `-j` flag needed.)
+(Ninja parallelizes automatically using all cores — no `-j` flag needed.
+`$env:BTGA_CLANGCL`/`%BTGA_CLANGCL%` don't carry over to a new shell window
+— re-set it, or just re-paste the full path, if you closed and reopened.)
 
 Then, from the repo root, with the ROM in place from step 3:
 
@@ -135,8 +147,8 @@ Then, from the repo root, with the ROM in place from step 3:
 ./lib/N64ModernRuntime/N64Recomp/build/N64Recomp battletanxga.us.rev0.toml
 ```
 
-**Windows:**
-```bat
+**Windows** (PowerShell or cmd.exe — same command either way):
+```
 lib\N64ModernRuntime\N64Recomp\build\N64Recomp.exe battletanxga.us.rev0.toml
 ```
 
@@ -152,12 +164,24 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target BattleTanxGARecompiled -j$(nproc)
 ```
 
-**Windows** (same Native Tools Command Prompt — reuse `%BTGA_CLANGCL%` from
-step 4, or re-set it if this is a new shell session):
+**Windows** (same shell as step 4, reusing the `BTGA_CLANGCL` variable set
+there — re-set it first if this is a new window):
+
+Developer PowerShell:
+```powershell
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$env:BTGA_CLANGCL" -DCMAKE_CXX_COMPILER="$env:BTGA_CLANGCL"
+cmake --build build --target BattleTanxGARecompiled
+```
+
+x64 Native Tools Command Prompt (cmd.exe):
 ```bat
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="%BTGA_CLANGCL%" -DCMAKE_CXX_COMPILER="%BTGA_CLANGCL%"
 cmake --build build --target BattleTanxGARecompiled
 ```
+
+If you need to wipe a stale `build\` directory first (e.g. after switching
+which compiler binary gets used), in PowerShell that's `Remove-Item -Recurse
+-Force build`, not `rmdir /s /q build` (that's cmd.exe-only syntax).
 
 This also builds `PatchesLib` as an empty placeholder for now (no
 `patches/*.c` content or `patches.toml` exist yet — PROGRESS.md item 8) and
