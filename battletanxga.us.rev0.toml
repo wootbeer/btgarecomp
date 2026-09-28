@@ -1179,3 +1179,25 @@ text = """
 # See STATUS.md round 21 and the deleted entry in
 # BattleTanxGASyms/battletanxga.us.rev0.syms.toml.
 
+# Round 49 (STATUS.md): func_80098B40 is a bare `while (flag != 0) {}` spin
+# (polling vram 0x80229230 -- a real N64 controller-read lock, meant to be
+# cleared once another thread's synchronous osContGetReadData call
+# finishes). On real hardware this works because the clearing thread's SI
+# interrupt preempts the spinning CPU unconditionally; ultramodern's N64
+# thread scheduler is purely cooperative (see ultramodern/src/scheduling.cpp)
+# with no equivalent preemption, so once this thread becomes "active" no
+# other N64 thread -- including whichever one needs to clear the flag --
+# can ever run again, hanging the whole game (confirmed via debugger thread
+# dumps, STATUS.md round 48). yield_self_1ms (scheduling.cpp:45-48,
+# extern "C", not in a public header hence the inline forward declaration
+# below) already implements exactly the check needed: wait briefly for an
+# external message, then switch to a higher-priority ready thread if one
+# exists. Inserting a call to it at the top of the spin loop gives the
+# scheduler a chance every iteration instead of pure busy-waiting.
+[[patches.hook]]
+func = "func_80098B40"
+before_vram = 0x80098B40
+text = """
+    { extern void yield_self_1ms(uint8_t *rdram); yield_self_1ms(rdram); }
+"""
+

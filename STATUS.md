@@ -3,6 +3,40 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 49: attempted fix for round 48's deadlock -- inject a scheduler-yield call into the spin loop via [[patches.hook]]
+
+Round 48 identified two real paths forward; this is an attempt at the
+scoped one (option 2), avoiding a shared-runtime change. Ultramodern
+already has exactly the primitive needed:
+`yield_self_1ms` (`ultramodern/src/scheduling.cpp:45-48`, `extern "C"`,
+not exposed in a public header) waits briefly for an external message, then
+calls `check_running_queue` to switch to a higher-priority ready thread if
+one exists -- precisely the "give the scheduler a chance" operation the
+bare `while (flag != 0) {}` in `func_80098B40` never does.
+
+Added a `[[patches.hook]]` entry (`battletanxga.us.rev0.toml`) at
+`func_80098B40`'s `before_vram = 0x80098B40` (the loop's own re-entry
+label, so it runs every iteration including the first) that calls it:
+```
+{ extern void yield_self_1ms(uint8_t *rdram); yield_self_1ms(rdram); }
+```
+Wrapped in a compound statement because a label in C can't be directly
+followed by a declaration pre-C23 (first attempt without the braces
+compiled only via a clang extension, `-Wc23-extensions`; confirmed clean
+under a real `-fsyntax-only` check once wrapped). Verified the patch
+applies and the generated code is both syntactically correct and
+positioned exactly where intended by regenerating with a locally-built
+`N64RecompCLI` in this cloud sandbox (this session has the ROM staged
+locally too, same as previous rounds) -- something previous rounds always
+had to defer to the user's machine for.
+
+**Not yet confirmed against a real run.** If `yield_self_1ms` only
+switches when a strictly higher-priority thread is ready
+(`check_running_queue`'s condition, `scheduling.cpp:24`), and the thread
+that needs to clear the flag isn't higher-priority than this one, this
+specific fix won't be enough on its own -- worth checking thread
+priorities if this doesn't resolve it.
+
 ## 2026-09-28, round 48: root cause of round 47's hang found -- a real hardware-interrupt-dependent busy-wait is incompatible with ultramodern's purely-cooperative thread scheduler
 
 Continued from round 47. Two more pieces confirmed the actual mechanism:
