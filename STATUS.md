@@ -3,6 +3,61 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 35: same story, next asset -- missing recomp.rcss crashes with std::length_error via an unguarded resize(tellg())
+
+Round 34's font fix got past the `std::runtime_error`, but immediately hit
+a new, different unhandled exception -- `std::length_error` -- right after
+`UIState`'s constructor finished (confirmed by the console output: the
+crash now comes right after "Loaded font face 'LatoLatin'..."). Visual
+Studio's debugger never actually produced a symbolized call stack for this
+one despite multiple attempts at a `RelWithDebInfo` rebuild (kept resolving
+to "Module was built without symbols" for `BattleTanxGARecompiled.exe`, and
+even a build that visibly reconfigured with symbols didn't get devenv to
+load them) -- not worth chasing further, since reading the source directly
+from the last known-good point (right after `UIState`'s constructor) found
+the real bug first anyway.
+
+`create_menus()` (called immediately after `UIState` is constructed, per
+`ui_state.cpp`) starts with
+`recompui::init_styling(recompui::file::get_asset_path("recomp.rcss"))`.
+`init_styling` (`lib/RecompFrontend/recompui/src/core/ui_context.cpp:238-241`):
+
+```cpp
+std::ifstream style_stream{rcss_file};
+style_stream.seekg(0, std::ios::end);
+style.resize(style_stream.tellg());
+style_stream.seekg(0, std::ios::beg);
+```
+
+`assets/recomp.rcss` doesn't exist in this project either (same missing-
+asset class as round 34's fonts). `std::ifstream` doesn't throw on a
+missing file by default -- it just opens in a failed state. `seekg` on a
+failed stream is a no-op, and `tellg()` on a failed stream returns
+`streampos(-1)` per the standard. That `-1` gets passed straight into
+`std::string::resize()`, which takes an unsigned `size_t` -- so `-1`
+becomes `SIZE_MAX`, and `resize(SIZE_MAX)` throws exactly
+`std::length_error`. This is a real, reproducible bug in recompui's own
+`init_styling` (no existence check, no `std::ifstream::failbit` handling),
+not anything specific to this project or to Windows -- it would hit any
+recompui-based project that doesn't ship this exact file. Not patching the
+vendored submodule for it, consistent with this project's existing
+practice (e.g. the cstdint/RmlUi PCH fix in `CMakeLists.txt` was done from
+this project's side rather than editing the submodule) -- the missing
+input is what's actually ours to fix.
+
+Fixed the same way as round 34: supplied the missing asset rather than
+patching the library. Added `assets/recomp.rcss` as an empty placeholder
+(with a comment explaining why it exists and pointing back here) -- an
+empty stylesheet is valid RCSS and merges cleanly with recompui's own base
+styling via `MergeStyleSheetContainer`, so this doesn't silently break
+anything, it just means this game has no styling on top of recompui's
+defaults yet (unsurprising, since no UI assets have been extracted from
+the ROM at all).
+
+Not yet confirmed against an actual run. If this clears the crash, the
+next real signal is still the same one round 34 was waiting on: does an
+actual launcher menu render and respond to input.
+
 ## 2026-09-28, round 34: found the black-window crash -- the long-flagged missing-font gap, hit for the first time now that a real display exists
 
 Got a real crash location via Visual Studio's debugger (`devenv.exe
