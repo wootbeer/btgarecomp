@@ -3,6 +3,15 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 45: fifth confirmed merged-function boundary
+
+Same bug class as rounds 39/41/42/44, found via the next runtime crash
+address (`0x800988E8`) after round 44's fix. `func_800985A0` (declared size
+`0x55c`) disassembles to two complete functions back to back --
+`func_800985A0` (`0x348`) and `func_800988E8` (`0x214`, the missing
+address) -- ending exactly at the original declared boundary.
+`0x348 + 0x214 = 0x55c`, matching the original total exactly.
+
 ## 2026-09-28, round 44: fourth confirmed merged-function boundary
 
 Same bug class as rounds 39/41/42, found via the next runtime crash address
