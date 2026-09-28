@@ -66,6 +66,17 @@ target_include_directories(rt64 PRIVATE ${CMAKE_BINARY_DIR}/rt64/src)
 # RecompiledFuncs - Library containing the primary recompiler output
 add_library(RecompiledFuncs STATIC)
 
+# clang-cl silently drops bare GNU-style "-include <file>" (two tokens) with just a warning,
+# then misparses the orphaned path token as a second input source file, which is a hard error
+# ("cannot specify /Fo... when compiling multiple source files") rather than a missing include.
+# The MSVC-native spelling is a single "/FI<file>" token. -falign-functions has no MSVC/clang-cl
+# equivalent and is dropped too, but only as a (harmless, alignment-only) warning, so it's left
+# as-is rather than special-cased.
+if(MSVC)
+    set(BTGA_RECOMP_HOOKS_FORCE_INCLUDE "SHELL:/FI${CMAKE_SOURCE_DIR}/include/btga_recomp_hooks.h")
+else()
+    set(BTGA_RECOMP_HOOKS_FORCE_INCLUDE "SHELL:-include ${CMAKE_SOURCE_DIR}/include/btga_recomp_hooks.h")
+endif()
 target_compile_options(RecompiledFuncs PRIVATE
     # -Wno-unused-but-set-variable
     -fno-strict-aliasing
@@ -73,7 +84,7 @@ target_compile_options(RecompiledFuncs PRIVATE
     -Wno-implicit-function-declaration
     -falign-functions=16
     # Declarations for the [[patches.hook]] text in battletanx.us.rev0.toml.
-    -include ${CMAKE_SOURCE_DIR}/include/btga_recomp_hooks.h
+    ${BTGA_RECOMP_HOOKS_FORCE_INCLUDE}
 )
 
 target_include_directories(RecompiledFuncs PRIVATE
@@ -193,8 +204,15 @@ else()
         # cmake/check_stock_funcs.cmake and battletanx.us.rev0.toml for the shape of this on that
         # project) -- not yet meaningful here since that config doesn't exist yet.
         if(EXISTS ${CMAKE_SOURCE_DIR}/rsp/battletanx_audio.cpp)
+            # See the BTGA_RECOMP_HOOKS_FORCE_INCLUDE comment above: clang-cl needs "/FI<file>",
+            # not GNU "-include;<file>", or it misparses the header path as a second source file.
+            if(MSVC)
+                set(BTGA_RSP_COMPAT_FORCE_INCLUDE "/FI${CMAKE_SOURCE_DIR}/include/rsp_stock_compat.hpp")
+            else()
+                set(BTGA_RSP_COMPAT_FORCE_INCLUDE "-include;${CMAKE_SOURCE_DIR}/include/rsp_stock_compat.hpp")
+            endif()
             set_source_files_properties(${CMAKE_SOURCE_DIR}/rsp/battletanx_audio.cpp ${CMAKE_SOURCE_DIR}/rsp/f3dex.cpp
-                PROPERTIES COMPILE_OPTIONS "-include;${CMAKE_SOURCE_DIR}/include/rsp_stock_compat.hpp")
+                PROPERTIES COMPILE_OPTIONS "${BTGA_RSP_COMPAT_FORCE_INCLUDE}")
         endif()
     endif()
 endif()

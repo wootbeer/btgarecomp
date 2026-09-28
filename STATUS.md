@@ -3,6 +3,49 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 26: round 25's fix worked -- and surfaced the same clang-cl `-include` bug a second time, on `RecompiledFuncs`
+
+After round 25's `/FI cstdint` fix, the user's next Windows build attempt got
+past `rmlui_core`'s PCH entirely (confirming that fix) and reached a new,
+different failure at `RecompiledFuncs`'s own placeholder source:
+
+```
+clang-cl: warning: unknown argument ignored in clang-cl: '-include'
+clang-cl: error: cannot specify '/Fo...' when compiling multiple source files
+```
+
+Same root cause as round 25, different symptom. `CMakeLists.txt`'s
+`target_compile_options(RecompiledFuncs ...)` force-includes
+`include/btga_recomp_hooks.h` (declarations for `[[patches.hook]]` entries)
+via bare GNU-style `-include <path>` passed as two separate command-line
+tokens. clang-cl doesn't recognize that two-token form at all -- it emits a
+non-fatal "unknown argument ignored" warning for the bare `-include` token,
+then treats the now-orphaned path token (`.../btga_recomp_hooks.h`) as a
+second **input source file** rather than part of an include flag, which
+makes it a genuine second source file on the command line alongside
+`recompiled_funcs_placeholder.c` -- and clang-cl refuses to combine an
+explicit `/Fo<output>` with multiple inputs. Round 25's case looked
+different (a missing-file error, not a multiple-inputs error) only because
+that flag was a single SHELL-quoted token (`-include cstdint`) rather than
+two separate tokens; the underlying incompatibility (clang-cl not
+understanding GNU `-include` at all) is the same.
+
+Fixed the same way as round 25: `/FI<path>` (single token, no space needed
+since a full path has no spaces to worry about here) when `MSVC` is set,
+keeping `-include <path>` on GCC/Clang. Also proactively applied the same
+fix to the other, currently-dormant `-include` usage in `CMakeLists.txt`
+(the `rsp_stock_compat.hpp` force-include on `rsp/battletanx_audio.cpp` and
+`rsp/f3dex.cpp` -- guarded by `if(EXISTS .../rsp/battletanx_audio.cpp)`,
+which doesn't exist yet per PROGRESS.md item 6, so it wasn't hit in this
+build, but it's the identical pattern and would have hit the identical bug
+the moment RSP microcode work starts).
+
+Not yet confirmed against an actual Windows build -- same caveat as round
+25, this session has no Windows machine, so this is reasoned from the exact
+same evidence pattern (a working `/FI` flag for the PCH header sitting right
+next to a broken `-include` flag in round 25's failing command) rather than
+verified directly. Next Windows build attempt is the real test.
+
 ## 2026-09-28, round 25: first real Windows build attempt -- found and fixed a clang-cl/PCH bug in our own `-include cstdint` workaround
 
 The user attempted the actual Windows build for the first time (this project
