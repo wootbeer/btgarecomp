@@ -3,6 +3,47 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 30: round 29's revert changed nothing -- this isn't a repo bug, it's the user's local toolchain/environment
+
+Pulled round 29's revert, reconfigured. Identical failure, and this time
+the compile command shows `--target=` is genuinely gone
+(`clang-cl.exe  /nologo   /DWIN32 /D_WINDOWS  /Zi /Ob0 /Od /RTC1 -MDd ...`,
+no target triple at all) -- yet `lld-link: error: <root>: undefined symbol:
+mainCRTStartup` reproduces byte-for-byte identically. That rules out every
+`CMakeLists.txt` change made in rounds 27-29: none of them were ever the
+actual cause. This failure is happening entirely inside CMake's own
+minimal one-.c-file "Check for working C compiler" self-test, which uses
+none of this repository's own compile flags, include paths, or link
+settings -- it's generated fresh by CMake itself every time, using only
+`/DWIN32 /D_WINDOWS /Zi /Ob0 /Od /RTC1 -MDd` (CMake's fixed default ABI-
+check flags) against a trivial `int main()`. There is nothing left in this
+repo's build configuration that could be causing this.
+
+Working theory, not yet confirmed: this is a local Visual Studio
+installation/environment problem, not a code or CMakeLists.txt problem.
+Two candidates flagged for the user to check directly (this session has no
+Windows machine to check them on):
+1. Whether `LIB` is actually populated in that shell (`$env:LIB` in
+   PowerShell / `%LIB%` in cmd) -- if it's empty or missing the VC Tools
+   MSVC lib directory specifically, the CRT import libraries that supply
+   `mainCRTStartup` (`msvcrtd.lib`, `vcruntimed.lib`, etc.) wouldn't
+   resolve even though they're normally pulled in automatically via a
+   `/DEFAULTLIB:` directive clang-cl embeds for `-MDd`, rather than being
+   named explicitly on the link line (the actually-named libs in the
+   failing command -- kernel32.lib, user32.lib, etc. -- come from the
+   Windows SDK, a separate component, and those aren't failing).
+2. Whether the base "MSVC v143 - VS 2022 C++ x64/x86 build tools"
+   component (not just "C++ Clang Compiler for Windows") is actually
+   installed -- clang-cl doesn't ship its own copies of the CRT import
+   libraries; it relies on the co-installed MSVC toolset's
+   `VC\Tools\MSVC\<version>\lib\x64\` for those. If that base component
+   didn't get installed alongside the Clang one, the referenced default
+   libs may not exist on disk anywhere, causing exactly this failure
+   pattern with no "cannot open file" diagnostic (since the reference
+   itself may not even be getting embedded/considered, vs. embedded-but-
+   unresolvable -- both would look similar from the outside without
+   further isolation, e.g. a bare clang-cl+lld-link repro outside CMake).
+
 ## 2026-09-28, round 29: round 27's --target forcing was itself the bug -- reverted now that round 28's exact-path pin is the real fix
 
 The user pulled round 28's fix (explicit full path to the x64-hosted
