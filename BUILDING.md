@@ -49,11 +49,29 @@ paru -S mips64-elf-gcc mips64-elf-binutils mips64-elf-newlib mips-linux-gnu-binu
 
 ### Windows
 
-Visual Studio 2022 with "Desktop development with C++", the C++ Clang
-compiler for Windows, and C++ CMake tools for Windows. Also install `make`
-(e.g. via `choco install make`). Untested against this project's actual
-CMakeLists.txt as of round 24 — the build has only been exercised on Linux
-so far; if something Windows-specific breaks, it hasn't been hit yet.
+Visual Studio 2022 with the "Desktop development with C++" workload,
+including its "C++ Clang Compiler for Windows" and "C++ CMake tools for
+Windows" optional components. Also install `make` (e.g. `choco install
+make`) — only needed once `patches/*.c` has real content to cross-compile
+for MIPS (PROGRESS.md item 8, not started yet), skip it for now if you just
+want to build and run.
+
+No separate Vulkan SDK install needed: on Windows this project's renderer
+(`plume`, RT64's GPU backend layer) builds against **D3D12**, not Vulkan
+(`CMakeLists.txt` only turns Vulkan on for Linux) — D3D12 ships with
+Windows/the Windows SDK already. SDL2 is fetched automatically by CMake on
+Windows (`FetchContent`), so there's nothing to install for it either.
+
+Run all commands below from an **x64 Native Tools Command Prompt for VS
+2022** (or equivalent Developer PowerShell), so `clang-cl`/`ninja` resolve
+correctly. This project has only actually been built and run on Linux so
+far in this session (no Windows machine available) — the code has been
+read through carefully for Windows-specific issues (two real ones were
+found and fixed just from that review: a missing Windows window-handle
+path in `src/main/main.cpp`, and a `CMakeLists.txt` reference to an icon
+resource file that doesn't exist yet), but there has been no actual
+Windows build to confirm against. If something else breaks, report the
+exact error back and it can very likely be fixed the same way.
 
 ### macOS
 
@@ -85,15 +103,29 @@ step always has to happen locally, on every machine.
 
 Build `N64Recomp` from `lib/N64ModernRuntime/N64Recomp`:
 
+**Linux/macOS:**
 ```bash
 cmake -S lib/N64ModernRuntime/N64Recomp -B lib/N64ModernRuntime/N64Recomp/build -G Ninja
 cmake --build lib/N64ModernRuntime/N64Recomp/build --target N64Recomp -j$(nproc)
 ```
 
+**Windows** (from an x64 Native Tools Command Prompt for VS 2022):
+```bat
+cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64Recomp
+```
+(Ninja parallelizes automatically using all cores — no `-j` flag needed.)
+
 Then, from the repo root, with the ROM in place from step 3:
 
+**Linux/macOS:**
 ```bash
 ./lib/N64ModernRuntime/N64Recomp/build/N64Recomp battletanxga.us.rev0.toml
+```
+
+**Windows:**
+```bat
+lib\N64ModernRuntime\N64Recomp\build\N64Recomp.exe battletanxga.us.rev0.toml
 ```
 
 This produces `RecompiledFuncs/` (1300 recompiled functions as of round 22 —
@@ -102,9 +134,16 @@ table/config).
 
 ## 5. Build
 
+**Linux/macOS:**
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target BattleTanxGARecompiled -j$(nproc)
+```
+
+**Windows** (same Native Tools Command Prompt):
+```bat
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+cmake --build build --target BattleTanxGARecompiled
 ```
 
 This also builds `PatchesLib` as an empty placeholder for now (no
@@ -112,14 +151,16 @@ This also builds `PatchesLib` as an empty placeholder for now (no
 `src/main/main.cpp`/`src/game/*.cpp` (the entry point and stock-runtime
 compat shims written in round 23/24).
 
-Run the resulting `build/BattleTanxGARecompiled` from the repo root (so it
+Run the resulting binary — `build/BattleTanxGARecompiled` on Linux/macOS,
+`build\BattleTanxGARecompiled.exe` on Windows — from the repo root (so it
 can find the ROM and, once one exists, an `assets/` folder next to it).
 This has only been run in a display-less cloud sandbox so far, where it
 correctly falls back through "no audio device" to a clean failure at
 window/renderer creation (no GPU there) — on a real machine with a display,
 this is the point where whether the launcher menu appears and the game
-actually boots becomes testable for the first time. If you hit a crash or
-hang past that point, check STATUS.md's round 24 entry first — the
-stock-runtime compat shims and RSP microcode gap (PROGRESS.md items 6-7) are
-the most likely places for a real bug to be hiding, and several of the
-choices there are explicitly flagged as unverified against a running game.
+actually boots becomes testable for the first time, on Windows for the
+first time ever in this project's history. If you hit a crash or hang past
+that point, check STATUS.md's round 24 entry first — the stock-runtime
+compat shims and RSP microcode gap (PROGRESS.md items 6-7) are the most
+likely places for a real bug to be hiding, and several of the choices there
+are explicitly flagged as unverified against a running game.
