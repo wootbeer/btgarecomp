@@ -3,6 +3,19 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 46: sixth confirmed merged-function boundary
+
+Same bug class as rounds 39/41/42/44/45, found via the next runtime crash
+address (`0x800A1290`) after round 45's fix. `__CallBackDmaNew` (declared
+size `0xcc`) is really two functions: itself, a tiny 4-instruction
+trampoline (`lui/addiu/jr/nop`, real size `0x10`) that returns some other
+constant data pointer (`0x80222930`, not code -- just a plain accessor,
+not a function-pointer-table entry like some of the earlier trampolines
+found), and a separate jump-table dispatcher function right after it at
+`0x800A1290` (real size `0xbc`, named `func_800A1290` -- no known original
+symbol) ending exactly at the existing `func_800A134C` boundary.
+`0x10 + 0xbc = 0xcc`, matching the original total exactly.
+
 ## 2026-09-28, round 45: fifth confirmed merged-function boundary
 
 Same bug class as rounds 39/41/42/44, found via the next runtime crash
