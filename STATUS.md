@@ -3,6 +3,25 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 56: eighth confirmed merged-function boundary -- this one a three-way split
+
+Next crash after round 55's fix: `Failed to find function at 0x80101320`.
+`n_alResampleParam` (declared `0x524`) turned out to be *three* clean
+functions back to back: itself (`0x24`, a tiny trampoline that just calls
+another function and returns 0), an unnamed `func_80101320` (`0x310`, the
+runtime's actual failing lookup target), and an unnamed `func_80101630`
+(`0x1f0`, ending exactly at the original declared boundary with no
+leftover padding). `0x24+0x310+0x1f0 = 0x524`, matching the original
+exactly. Verified with an automated boundary-crossing scan (parsed every
+`beq`/`bne`/`bgez`/etc. and `j` target in the full disassembly range and
+confirmed none crosses from one proposed function into another) rather
+than eyeballing it, given this was a 3-way split instead of the usual 2.
+Fixed via the normal `syms.toml` split, no `manual_funcs` needed. Verified:
+regenerated via the local `N64RecompCLI`, confirmed all three functions
+compile separately (`RecompiledFuncs/funcs_19.c:3887`, `:3915`, `:4401`),
+and a full `ninja BattleTanxGARecompiled` build succeeded end-to-end. Not
+yet confirmed against a real run.
+
 ## 2026-09-28, round 55: seventh confirmed merged-function boundary, same class as rounds 39-46
 
 Round 54's `func_8009F02C` `manual_funcs` fix confirmed working (that

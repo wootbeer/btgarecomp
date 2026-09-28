@@ -1220,7 +1220,18 @@ functions = [
     { name = "n_load_text_0674", vram = 0x80101094, size = 0xac },
     { name = "n_alResamplePull", vram = 0x80101140, size = 0x19c },
     { name = "n_resample_text_019C", vram = 0x801012dc, size = 0x20 },
-    { name = "n_alResampleParam", vram = 0x801012fc, size = 0x524 },
+    # Round 56 (STATUS.md): n_alResampleParam (declared 0x524) is really
+    # three functions back to back -- itself (0x24, a tiny trampoline that
+    # just calls another function and returns 0), an unnamed func_80101320
+    # (0x310, the runtime's actual "Failed to find function" target, the
+    # next crash after round 55's fix), and an unnamed func_80101630
+    # (0x1f0, ending exactly at the original declared boundary with no
+    # leftover padding). 0x24+0x310+0x1f0 = 0x524, matching exactly.
+    # Verified via an automated scan that every branch/jump in all three
+    # ranges stays within its own function -- no cross-boundary branches.
+    { name = "n_alResampleParam", vram = 0x801012fc, size = 0x24 },
+    { name = "func_80101320", vram = 0x80101320, size = 0x310 },
+    { name = "func_80101630", vram = 0x80101630, size = 0x1f0 },
     { name = "_n_loadOutputBuffer", vram = 0x80101820, size = 0x1e0 },
     { name = "n_reverb_text_06E0", vram = 0x80101a00, size = 0x30 },
     { name = "_n_loadBuffer", vram = 0x80101a30, size = 0xf0 },
