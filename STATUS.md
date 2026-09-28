@@ -3,6 +3,17 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 44: fourth confirmed merged-function boundary
+
+Same bug class as rounds 39/41/42, found via the next runtime crash address
+(`0x80097794`) after round 43's entrypoint sign-extension fix got past
+`do_rom_read` and into real gameplay code. `func_800976AC` (declared size
+`0x260`) disassembles to four complete functions back to back --
+`func_800976AC` (`0xe8`), `func_80097794` (`0x48`, the missing address),
+`func_800977DC` (`0x68`), and `func_80097844` (`0xc8`) -- ending exactly at
+the original declared boundary with no leftover padding.
+`0xe8+0x48+0x68+0xc8 = 0x260`, matching the original total exactly.
+
 ## 2026-09-28, round 43: entrypoint_address wasn't sign-extended -- crashed on the very first RDRAM write in do_rom_read(), immediately after the game actually started
 
 With rounds 39-42 clearing every startup/render/lookup-table bug, clicking

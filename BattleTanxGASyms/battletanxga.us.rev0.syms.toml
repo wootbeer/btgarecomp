@@ -317,7 +317,14 @@ functions = [
     { name = "func_80097530", vram = 0x80097530, size = 0x30 },
     { name = "func_80097560", vram = 0x80097560, size = 0x100 },
     { name = "func_80097660", vram = 0x80097660, size = 0x4c },
-    { name = "func_800976AC", vram = 0x800976ac, size = 0x260 },
+    # Round 44 (STATUS.md): same class of bug as rounds 39/41/42 -- one
+    # declared function (func_800976AC, size 0x260) is actually four back
+    # to back, each a complete standalone function. 0xe8 + 0x48 + 0x68 +
+    # 0xc8 = 0x260, matching the original total exactly.
+    { name = "func_800976AC", vram = 0x800976ac, size = 0xe8 },
+    { name = "func_80097794", vram = 0x80097794, size = 0x48 },
+    { name = "func_800977DC", vram = 0x800977dc, size = 0x68 },
+    { name = "func_80097844", vram = 0x80097844, size = 0xc8 },
     { name = "func_8009790C", vram = 0x8009790c, size = 0x94 },
     { name = "func_800979A0", vram = 0x800979a0, size = 0x54 },
     { name = "func_800979F4", vram = 0x800979f4, size = 0x78 },
