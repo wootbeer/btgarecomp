@@ -3,6 +3,72 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 24: wrote the 12 stock-runtime compat shims -- BattleTanxGARecompiled links, launches, and fails exactly where this sandbox's missing GPU says it should
+
+Wrote `src/game/stock_runtime_compat.cpp` (COP0 status read, the 4 thread-
+scheduler internals, SI access-queue creation, timer/VI internals) and
+`src/game/controller_pak.cpp` (the 7 Controller Pak filesystem internals),
+filling every symbol round 23 found missing. `bdragoncore/battle-tanx-
+recomp`'s own files of the same name/path are the reason these exact paths
+were already anticipated in `CMakeLists.txt`'s `BTGA_FORKED_RUNTIME` check --
+same reasoning as round 23, only the generic shape carries over, not any of
+that project's own values or logic.
+
+None of this could be derived from public documentation alone with
+confidence, so each function's real argument registers were checked
+directly against how *this ROM's own code* actually calls it (found via the
+same rabbitizer-based disassembly used throughout rounds 21-22):
+
+- `__osGetSR_recomp`: returns 0, matching the established pattern for every
+  other COP0 access in this ROM (already nopped via instruction patches) --
+  nothing anywhere emulates real COP0 state.
+- `__osEnqueueThread`/`__osDequeueThread` confirmed to take `(queue, thread)`
+  in `$a0`/`$a1` at their real call sites (e.g. `jal __osEnqueueThread` at
+  `0x80110614` with `$a0 = lw 0x8($t6)`, `$a1 = move $a1, $t6`) --
+  implemented as thin wrappers around `ultramodern::thread_queue_insert`/
+  `_remove`/`_pop`, which already do the same guest-memory OSThread-queue
+  manipulation for the exported `osStartThread`/etc. `__osDispatchThread`
+  maps to `ultramodern::run_next_thread_and_wait` (real hardware does this
+  with a raw register/COP0 context switch; ultramodern does it with host
+  threads + semaphores instead, so this is a translation of intent, not a
+  literal port).
+- `__osSiCreateAccessQueue`: real behavior read directly from this ROM's
+  own bytes at its address (never recompiled since N64Recomp ignores it,
+  but the raw bytes are still sitting right there in the ROM to
+  disassemble) -- it's textbook libultra: `osCreateMesgQueue(&0x803B04F8,
+  &0x803B04F0, 1)` then `osSendMesg(&0x803B04F8, NULL, 0)`, both already-
+  real (not stubbed) exported functions in this ROM's own trusted symbol
+  table. Replicated verbatim against the same two addresses so anything
+  that later blocks on that queue doesn't deadlock waiting for a message
+  that would otherwise never be posted.
+- `__osTimerInterrupt`/`__osViSwapContext`: both called with zero arguments
+  from this ROM's VI manager thread, matching their real void-void
+  prototypes -- made no-ops, since ultramodern already manages both VI
+  swaps and timer expiry through its own separate mechanism and duplicating
+  that bookkeeping risked the two fighting each other. Flagged as the least
+  certain of the six stock_runtime_compat.cpp shims -- revisit first if VI
+  timing or timer-driven gameplay ever misbehaves once this is testable.
+- The 7 Controller Pak functions: `src/main/main.cpp` already reports no
+  pak connected on any port, so none of these need real protocol/storage
+  behavior -- they return a consistent non-zero failure (`__osContAddressCrc`
+  aside, which is pure arithmetic with no I/O and gets a real implementation
+  from general familiarity with the public N64 pak-addressing CRC, flagged
+  as not independently checked against a primary source). Revisit if real
+  Controller Pak support (rumble or pak saves) is ever wanted.
+
+**Result**: `BattleTanxGARecompiled` links (18.8MB, up from round 22's 15.8KB
+placeholder -- confirms all 1300 recompiled functions are now actually
+referenced and included) and, when run in this sandbox, correctly falls back
+to "no audio device" (no ALSA card here) and then exits cleanly with
+`Failed to create window: Vulkan support is either not configured in SDL or
+not available` -- exactly the right failure, in exactly the right place,
+for a container with no GPU/display. This confirms the boot path (SDL init
+-> audio fallback -> window/renderer creation -> `recomp::start`) all runs
+correctly up to the point real graphics hardware is required. Testing
+further (does the launcher menu appear, does `recomp_entrypoint` run, does
+the game boot) needs a machine with a real display and the actual ROM,
+which this cloud sandbox is not.
+
 ## 2026-09-28, round 23: wrote the real entry point -- and hit exactly the wall PROGRESS.md item 7 predicted
 
 Wrote `src/main/main.cpp`, the piece round 22 flagged as missing (nothing

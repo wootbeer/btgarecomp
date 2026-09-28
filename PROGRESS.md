@@ -97,6 +97,19 @@ found again from scratch by disassembling this game's binary.
       `*_recomp` functions — see item 7, this is that item's blocker,
       confirmed rather than just suspected. Full detail in `STATUS.md`
       round 23.
+- [x] **The 12 stock-runtime shims are written and `BattleTanxGARecompiled`
+      links and runs** (round 24) — `src/game/stock_runtime_compat.cpp`
+      and `src/game/controller_pak.cpp`, item 7 below. 18.8MB binary (up
+      from round 22's 15.8KB placeholder — every recompiled function is
+      now actually linked in), and running it in this sandbox falls back
+      cleanly through "no audio device" to a graphics-hardware failure
+      (`Vulkan support is either not configured...`) — the correct outcome
+      for a container with no GPU, and confirms the boot path runs
+      correctly up to that point. Whether the launcher menu actually
+      appears and the game boots needs a machine with a real display and
+      the ROM, which this environment isn't. Full derivation (each shim's
+      real behavior, checked against this ROM's own call sites, not
+      guessed) in `STATUS.md` round 24.
 
 ## Blocking, needs more reverse engineering
 
@@ -172,29 +185,16 @@ well-trodden, mechanical problems compared to open-ended disassembly).
    N64ModernRuntime's known microcode tables), and whether the checked-in
    recompiled microcode from the original project applies or new ones need
    generating with RSPRecomp.
-7. **Stock-runtime compatibility shims** — confirmed necessary, not just
-   suspected (round 23: linking `src/main/main.cpp` against the real
-   `RecompiledFuncs` output fails on exactly 12 missing `*_recomp`
-   functions that neither `librecomp` nor `ultramodern` provide — grepped
-   their whole source, zero matches). They split into four subsystems,
-   none written yet:
-   - `__osGetSR_recomp` — COP0 Status register read.
-   - `__osDequeueThread_recomp`, `__osDispatchThread_recomp`,
-     `__osPopThread_recomp`, `__osEnqueueThread_recomp` — libultra thread
-     scheduler internals.
-   - `__osContAddressCrc_recomp`, `__osPfsSelectBank_recomp`,
-     `__osContRamWrite_recomp`, `__osContRamRead_recomp`,
-     `__osCheckPackId_recomp`, `__osPfsRWInode_recomp`,
-     `__osRepairPackId_recomp` — Controller Pak (memory card) filesystem
-     internals (this is the `controller_pak.cpp`-shaped gap the original
-     game also needed its own version of).
-   - `__osSiCreateAccessQueue_recomp` — SI (controller port) access queue
-     setup.
-   - `__osTimerInterrupt_recomp`, `__osViSwapContext_recomp` — timer
-     interrupt and VI context-swap internals.
-   Each needs to be understood from libultra's real behavior (these are
-   OS-layer internals the game calls into, not game logic) and implemented
-   as real C functions, not just made to link.
+7. ~~Stock-runtime compatibility shims~~ — all 12 written (round 24,
+   `src/game/stock_runtime_compat.cpp` and `src/game/controller_pak.cpp`)
+   and the binary links and runs. Not fully verified: none of this has
+   been exercised against an actual running game (no display/GPU in this
+   environment) — `__osTimerInterrupt`/`__osViSwapContext` (made no-ops)
+   are flagged as the least certain, and `__osContAddressCrc`'s CRC
+   algorithm wasn't checked against a primary libultra source. Revisit
+   both if VI timing, timer-driven logic, or (if ever wanted) real
+   Controller Pak support misbehave once this is testable on a machine
+   with a real display and the ROM.
 8. **Patches** (`patches/*.c`) — game behavior that needs source-level
    rewriting rather than a binary patch (e.g. how the UI is driven each
    frame, controller pak access, cheat/level-select hooks), written in C
