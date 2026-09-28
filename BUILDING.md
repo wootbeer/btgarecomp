@@ -110,8 +110,20 @@ cmake --build lib/N64ModernRuntime/N64Recomp/build --target N64Recomp -j$(nproc)
 ```
 
 **Windows** (from an x64 Native Tools Command Prompt for VS 2022):
+
+Visual Studio ships *two* `clang-cl.exe` copies — a 32-bit-hosted one under
+`VC\Tools\Llvm\bin\` and a 64-bit-hosted one under `VC\Tools\Llvm\x64\bin\`.
+Passing bare `-DCMAKE_C_COMPILER=clang-cl` lets Windows' PATH search pick
+whichever one comes first, and that has turned out to be inconsistent even
+from the correct "x64 Native Tools" prompt — the wrong one produces a build
+that fails in confusing ways deep into compiling or linking (see STATUS.md
+round 27 for what that looked like). Set the full path explicitly instead,
+so there's no ambiguity (adjust `Community` to `Professional`/`Enterprise`
+and the drive/path if your Visual Studio install differs):
+
 ```bat
-cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+set "BTGA_CLANGCL=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe"
+cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER="%BTGA_CLANGCL%" -DCMAKE_CXX_COMPILER="%BTGA_CLANGCL%"
 cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64Recomp
 ```
 (Ninja parallelizes automatically using all cores — no `-j` flag needed.)
@@ -140,9 +152,10 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target BattleTanxGARecompiled -j$(nproc)
 ```
 
-**Windows** (same Native Tools Command Prompt):
+**Windows** (same Native Tools Command Prompt — reuse `%BTGA_CLANGCL%` from
+step 4, or re-set it if this is a new shell session):
 ```bat
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="%BTGA_CLANGCL%" -DCMAKE_CXX_COMPILER="%BTGA_CLANGCL%"
 cmake --build build --target BattleTanxGARecompiled
 ```
 

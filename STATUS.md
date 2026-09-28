@@ -3,6 +3,50 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 28: round 27's --target fix wasn't enough on its own -- the wrong clang-cl binary needs to be avoided, not compensated for
+
+After deleting `build/` and reconfiguring fresh (picking up round 27's
+`CMAKE_C_COMPILER_TARGET`/`CMAKE_CXX_COMPILER_TARGET` forcing), CMake's own
+"Check for working C compiler" step got further -- the test object file
+compiled fine this time with `--target=x86_64-pc-windows-msvc` visibly in
+the command line -- but then failed at **link**:
+
+```
+lld-link: error: <root>: undefined symbol: mainCRTStartup
+```
+
+The compiler CMake resolved for bare `-DCMAKE_C_COMPILER=clang-cl` was, once
+again, `VC\Tools\Llvm\bin\clang-cl.exe` (the 32-bit-hosted copy), not
+`VC\Tools\Llvm\x64\bin\clang-cl.exe`. Forcing the target triple (round 27)
+was necessary but not sufficient: it fixed the actual code generation
+(hence the successful compile), but apparently that 32-bit-hosted binary's
+default-CRT-library selection (the `/DEFAULTLIB:` directive normally
+embedded into the object file based on the `/MDd`/`/MD` flag, which is what
+tells the linker which CRT startup object provides `mainCRTStartup`) either
+isn't emitted correctly, or isn't the x64 variant, when that particular
+binary is forced to cross-target x64 via `--target=`. Whatever the exact
+mechanism, compensating for the wrong binary via flags is fragile; the real
+fix is to not invoke that binary at all.
+
+Changed course: instead of relying on PATH to resolve bare `clang-cl` (which
+has now picked the wrong one on this exact machine at least twice, in two
+different shell sessions, despite both allegedly being launched from an
+"x64 Native Tools Command Prompt for VS 2022"), `BUILDING.md`'s Windows
+section now has the user set `CMAKE_C_COMPILER`/`CMAKE_CXX_COMPILER` to the
+literal full path of `VC\Tools\Llvm\x64\bin\clang-cl.exe`, removing the
+ambiguity entirely rather than trying to out-flag it. Left round 27's
+`CMAKE_C_COMPILER_TARGET`/`CMAKE_CXX_COMPILER_TARGET` forcing in
+`CMakeLists.txt` in place too, as a harmless (no-op when the right binary is
+already used) second line of defense.
+
+Not yet confirmed against an actual Windows build -- same standing caveat
+as rounds 25-27. If explicitly pointing at the x64-hosted binary doesn't
+clear this on the next attempt, the next thing to check is whether `LIB`
+(the environment variable that tells `link.exe`/`lld-link.exe` where the
+CRT/Windows SDK import libraries live) is actually set in that shell --
+`vcvarsall.bat`/the Native Tools shortcut should set it, but if the user's
+shortcut or script is stale or was edited, it might not be.
+
 ## 2026-09-28, round 27: round 26's fix worked too -- next failure was a silent 32-bit build, not a code bug
 
 The user's next attempt got past `RecompiledFuncs` and reached `librecomp`
