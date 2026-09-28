@@ -3,6 +3,43 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 53: found the real reason func_800A1290 never runs -- round 51's yield only covered one of func_800A1384's two loop-back paths
+
+The round 52 (part 4) VI-dispatch diagnostic printed once
+(`is_game_started=1`, `mq 0x80222930: validCount=0 msgCount=8`) and then
+never printed again even after 15-20+ seconds of the game genuinely
+running (confirmed debugger-free, confirmed CPU still pegged at ~10%
+i.e. one core, so something was still actively spinning). That combination
+-- still spinning, but our own diagnostic (inside
+`btga_yield_via_priority_drop`) never firing again -- meant the active
+code had stopped calling our yield helper entirely, despite still being in
+`func_800A1384` (confirmed via a fresh debugger stack: still
+`func_800A1384` -> `func_800BF80C` -> `func_8009D3A4` -> `func_8009EEA0`,
+same as every round since 51).
+
+Root cause: `func_800A1384` has a second loop-back path round 51 missed.
+After the bounded 32-iteration inner copy (`L_800A139C`,
+`RecompiledFuncs/funcs_8.c`) finishes one pass, a field check at vram
+`0x800A13F8` (`sp+0x1F0 < 5`) can jump directly back to `L_800A139C`
+*without* ever passing back through `L_800A1398` (the outer label round 51
+put the only yield at) -- so once this specific branch starts getting
+taken repeatedly, the function falls into a tight, entirely un-yielding
+cycle that our round 51 fix never touches again. That's a "not unique to
+this one spin site" case within a single already-patched function, not
+a new function.
+
+**Fix:** added a second `[[patches.hook]]` for `func_800A1384`, this time
+at `before_vram = 0x800A139C` (the inner loop's own label) -- both loop-back
+paths converge on this exact address, so there's no way to target only the
+bypass path; the yield now also fires on every 16-byte inner-copy
+iteration (up to 32x per outer pass) rather than just once. That's a real
+per-pass slowdown on this one copy loop, but negligible next to hanging
+indefinitely, and it stops firing at all once whatever this loop polls for
+is finally satisfied. Verified: regenerated via the local `N64RecompCLI`,
+confirmed both hooks land correctly at their respective labels
+(`funcs_8.c:219-226`), and a full `ninja BattleTanxGARecompiled` build
+succeeded end-to-end. Not yet confirmed against a real run.
+
 ## 2026-09-28, round 52 (part 4): the corrected diagnostic shows the queue is properly created; traced the full delivery chain and added a live VI-dispatch diagnostic
 
 The corrected (sign-extension-fixed) diagnostic printed `msgCount=2,

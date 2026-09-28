@@ -1241,6 +1241,30 @@ text = """
     { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
 """
 
+# Round 53 (STATUS.md): round 51's yield at L_800A1398 (the outer loop's
+# re-entry point) doesn't cover every loop-back path in this function.
+# After the bounded 32-iteration inner copy (L_800A139C) finishes a pass,
+# a field check (vram 0x800A13F8, `sp+0x1F0 < 5`) can jump directly back to
+# L_800A139C *without* ever passing through L_800A1398 again -- bypassing
+# our only yield entirely. Confirmed via debugger: func_800A1384 stayed
+# active with zero further calls into btga_yield_via_priority_drop (no
+# repeat prints from its own throttled diagnostic) while CPU stayed pegged
+# at the same one-core-spinning ~10% -- i.e. it fell into this un-yielding
+# inner-only cycle. Since before_vram matches on an exact address and both
+# entry paths converge on the same vram (0x800A139C), there's no way to
+# hook only the bypass path -- so add the same yield at L_800A139C's own
+# address, accepting that it now also fires on every 16-byte inner-copy
+# iteration (up to 32x per outer pass) instead of just once. That's a
+# real slowdown on this one copy loop, but harmless compared to hanging
+# indefinitely, and it stops being called at all once the condition this
+# loop is polling for is finally satisfied.
+[[patches.hook]]
+func = "func_800A1384"
+before_vram = 0x800A139C
+text = """
+    { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
+"""
+
 # Round 52 diagnostic (STATUS.md): func_800988E8 has been stuck at its very
 # first osRecvMesg (mq vram 0x80217030) since round 47, unmoved by rounds
 # 50-52's fixes. Reading source traced this queue's registration to
