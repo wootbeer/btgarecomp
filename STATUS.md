@@ -3,6 +3,71 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 40: round 39's fix didn't actually take -- recomp::overlays::register_overlays() was never called at all, so the function lookup table was never wired up in the first place
+
+Round 39's `syms.toml` split was correct (confirmed: regenerating produced
+`func_8009EE08` with the right offset/size in
+`RecompiledFuncs/recomp_overlays.inl`), but the exact same
+`"Failed to find function at 0x8009EE08"` error persisted anyway, even
+against a freshly-deleted-and-rebuilt exe. Root cause was one level up:
+`recomp::overlays::register_overlays()` (`librecomp/src/overlays.cpp`) --
+which populates the `func_map` that `get_function()` searches -- was never
+called anywhere in this project at all. Confirmed by grepping the entire
+repo for the call and finding only the declaration/definition in the
+library itself.
+
+N64Recomp generates `RecompiledFuncs/recomp_overlays.inl` (a `static
+SectionTableEntry section_table[]` plus per-section function/reloc arrays)
+on every run, but that file is meant to be `#include`d and wired up by the
+*game project's own code* -- N64Recomp itself never does this, and this
+project never had that glue. It mostly didn't matter: N64Recomp resolves
+direct `jal` calls into direct C function calls at recompile time, so only
+genuinely *indirect* calls (function pointers, jump tables) ever needed the
+runtime `func_map` lookup at all -- and this is apparently the first (or
+one of very few) indirect calls the game makes, which is why everything up
+to this point ran fine despite the lookup table being permanently empty.
+
+Confirmed via `BanjoRecomp` (github.com/BanjoRecomp/BanjoRecomp, same
+toolchain) that this glue is expected to be hand-written per-project: its
+`src/main/register_overlays.cpp` `#include`s its own generated
+`recomp_overlays.inl` and calls `register_overlays()` with the resulting
+`section_table`/`num_sections`/`overlay_sections_by_index` symbols, called
+from `main()` before `recomp::start()`.
+
+Added the same pattern here: `src/main/register_overlays.cpp` (declares
+`void register_btga_overlays()`, `#include`s
+`../../RecompiledFuncs/recomp_overlays.inl`, calls
+`recomp::overlays::register_overlays(...)`), called from `main()` before
+anything else. Since `recomp_overlays.inl` doesn't exist on a fresh clone
+before the ROM/N64Recomp step (same as the rest of `RecompiledFuncs/`),
+gated the real implementation behind a new `BTGA_HAS_RECOMPILED_FUNCS`
+compile definition (`CMakeLists.txt`, set when
+`RecompiledFuncs/recomp_overlays.inl` exists at configure time) with a
+no-op fallback, so the existing "builds fine without the ROM yet" placeholder
+path still works.
+
+Also found and fixed, same debugging session: the "RT64 Idle" GPU
+power-throttling-prevention thread
+(`lib/rt64/src/hle/rt64_workload_queue.cpp:1179`, `WorkloadQueue::
+idleThreadLoop`) crashed with an access violation deep inside
+`amdxc64.dll`'s driver code specifically on the user's AMD Radeon RX 5700 XT
+(RDNA1) -- not covered by RT64's existing AMD driver workaround table in
+`rt64_application.cpp`, which only handles RDNA3/RDNA4-era cards. It's
+explicitly an optional feature (its own comment: "not required if the
+driver is configured to be at the Max Performance power state"), so
+disabled it via a one-line local edit to `set_application_user_config`
+(`RecompFrontend/recompui/src/renderer/rt64_render_context.cpp`,
+`application->userConfig.idleWorkActive = false;`) rather than debugging
+the driver crash itself. This is a submodule edit and can't be pushed
+through this repo's normal git flow (`RecompFrontend` is a real git
+submodule pointing at N64Recomp's own upstream repo) -- it needs to be
+reapplied locally after any fresh clone/submodule reset until a better
+place for it is found (a project-level patch-on-configure step, or
+upstreaming a fix to RT64's own AMD workaround table).
+
+**Not yet confirmed fixed against a real run** -- both changes need a
+rebuild and test on the user's machine.
+
 ## 2026-09-28, round 39: first real function-boundary bug found and fixed -- func_8009ED9C was actually three separate functions merged into one
 
 With rounds 37-38's fixes in, the game finally boots, opens a responsive

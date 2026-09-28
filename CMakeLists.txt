@@ -188,6 +188,17 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/src/game/*.cpp
     ${CMAKE_SOURCE_DIR}/rsp/*.cpp
 )
+
+# src/main/register_overlays.cpp #includes RecompiledFuncs/recomp_overlays.inl,
+# which (like the rest of RecompiledFuncs/) doesn't exist yet on a fresh
+# clone before the ROM is in place and N64Recomp has been run -- see the
+# RecompiledFuncs placeholder handling above. Gate its real content behind
+# this so that case still configures and builds (as a no-op) rather than
+# failing on a missing header.
+if (EXISTS ${CMAKE_SOURCE_DIR}/RecompiledFuncs/recomp_overlays.inl)
+    target_compile_definitions(BattleTanxGARecompiled PRIVATE BTGA_HAS_RECOMPILED_FUNCS)
+endif()
+
 if (NOT SOURCES)
     message(STATUS "src/ and rsp/ are empty - building BattleTanxGARecompiled as a placeholder only.")
     file(WRITE ${CMAKE_BINARY_DIR}/battletanxga_placeholder.cpp

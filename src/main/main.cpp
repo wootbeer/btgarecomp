@@ -72,6 +72,12 @@
 // [input] entrypoint in that file).
 extern "C" void recomp_entrypoint(uint8_t* rdram, recomp_context* ctx);
 
+// register_overlays.cpp -- wires N64Recomp's generated function-address
+// lookup table into librecomp's runtime overlay system. Without this,
+// indirect calls (function pointers/jump tables) fail with "Failed to find
+// function at 0x..." -- see that file's own comment for the full story.
+void register_btga_overlays();
+
 static const std::string program_name = "BattleTanx: Global Assault Recompiled";
 static const std::u8string program_id = u8"btgarecomp";
 static const std::string version_string = "0.1.0";
@@ -320,6 +326,9 @@ int main(int argc, char** argv) {
     }
 
 #define BTGA_CHECKPOINT(name) do { fprintf(stdout, "checkpoint: %s\n", name); fflush(stdout); } while (0)
+
+    register_btga_overlays();
+    BTGA_CHECKPOINT("after register_btga_overlays");
 
     BTGA_CHECKPOINT("before NFD_Init");
     NFD_Init();
