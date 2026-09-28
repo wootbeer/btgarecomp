@@ -3,6 +3,41 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 36: round 35's placeholder was too empty -- comment-only RCSS parses as failure, not success, crashing the same unguarded dereference from the other side
+
+The user hit a `RelWithDebInfo` build regression while chasing a symbolized
+stack trace for round 35's fix (several files -- rabbitizer, rmlui_debugger,
+N64Recomp/cgenerator.cpp -- failed with "cannot use 'throw' with exceptions
+disabled" under that build type specifically; not investigated further,
+since it's an unrelated build-type quirk, not the actual bug). Went back to
+`Release`, which doesn't have this problem, and later did a full clean
+`build/` wipe to rule out object-file inconsistency from having switched
+build types mid-stream on the same build directory.
+
+With that clean Release build, the crash after "Loaded font face
+'LatoLatin'..." changed from round 35's `std::length_error` to a genuine
+access violation (`0xC0000005`, reading address `0x8` -- a null-pointer-plus-
+small-offset pattern). Root cause, one call further into the same code path:
+`Rml::Factory::InstanceStyleSheetStream` (`.../RmlUi/Source/Core/Factory.cpp:572-580`)
+returns `nullptr` when parsing fails, and `init_styling`
+(`ui_context.cpp:249`) dereferences that return value directly --
+`MergeStyleSheetContainer(*Rml::Factory::InstanceStyleSheetStream(...))` --
+with no null check. Same missing-defensive-check bug class as round 35's
+`resize(tellg())` issue, in the very next line of the same function.
+
+Why parsing failed: round 35's placeholder `assets/recomp.rcss` was
+comment-only, and RmlUi's `StyleSheetParser::Parse`
+(`StyleSheetParser.cpp:758`) returns `!style_sheets.empty()` -- a stylesheet
+that never contained an actual rule block (only a `/* ... */` comment)
+produces an empty `style_sheets` list, which counts as a parse *failure*,
+not an empty-but-valid success. A truly empty or comment-only RCSS file is
+not a safe placeholder here, contrary to what round 35 assumed.
+
+Fixed by adding one trivial real rule (`body {}`) to `assets/recomp.rcss`,
+which is enough for the parser to close out a non-empty stylesheet and
+return `true`, avoiding the null dereference. Not yet confirmed against an
+actual run.
+
 ## 2026-09-28, round 35: same story, next asset -- missing recomp.rcss crashes with std::length_error via an unguarded resize(tellg())
 
 Round 34's font fix got past the `std::runtime_error`, but immediately hit
