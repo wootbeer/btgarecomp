@@ -60,6 +60,7 @@
 #include "util/file.h"
 
 #include "recompinput/input_state.h"
+#include "recompinput/input_events.h"
 #include "recompinput/profiles.h"
 #include "recompinput/players.h"
 
@@ -166,7 +167,16 @@ static void update_gfx(void*) {
     if (first_call.exchange(false)) {
         checkpoint("update_gfx: first call");
     }
-    recompinput::poll_inputs();
+    // poll_inputs() only reads already-buffered SDL state (SDL_GetKeyboardState,
+    // etc.) -- it never calls SDL_PollEvent, so it never pumps the window's
+    // message queue. That's handle_events()'s job (see recompinput's
+    // input_events.cpp): without calling it here, the window's message loop
+    // is never serviced, and Windows marks it "Not Responding" even though
+    // nothing has actually crashed or deadlocked. poll_inputs() is already
+    // correctly wired as the ultramodern input_callbacks_t::poll_input
+    // callback and doesn't need to run again from here too (matches
+    // BanjoRecomp's own update_gfx, which calls only handle_events()).
+    recompinput::handle_events();
 }
 
 // --- Audio ----------------------------------------------------------------
