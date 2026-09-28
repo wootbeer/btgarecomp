@@ -64,14 +64,36 @@ Windows (`FetchContent`), so there's nothing to install for it either.
 
 Run all commands below from an **x64 Native Tools Command Prompt for VS
 2022** (or equivalent Developer PowerShell), so `clang-cl`/`ninja` resolve
-correctly. This project has only actually been built and run on Linux so
-far in this session (no Windows machine available) — the code has been
-read through carefully for Windows-specific issues (two real ones were
-found and fixed just from that review: a missing Windows window-handle
-path in `src/main/main.cpp`, and a `CMakeLists.txt` reference to an icon
-resource file that doesn't exist yet), but there has been no actual
-Windows build to confirm against. If something else breaks, report the
-exact error back and it can very likely be fixed the same way.
+correctly. **Before running anything else, verify the shell is actually
+x64**, not x86 — the name of the shortcut you clicked isn't enough proof
+(see STATUS.md round 30/31: a shell here resolved to x86 CRT library paths
+despite being opened as an "x64" prompt/shortcut, and the resulting
+failure — `lld-link: undefined symbol: mainCRTStartup` — didn't obviously
+point at architecture at all):
+
+```powershell
+$env:LIB
+```
+```bat
+echo %LIB%
+```
+This must contain `...\lib\x64`, `...\ucrt\x64`, and `...\um\x64` segments.
+If you see `\x86` instead anywhere in there, you're in the wrong shell —
+close it and specifically open **"x64 Native Tools Command Prompt for VS
+2022"** from the Start menu (not "x86 Native Tools...", and not the plain,
+unqualified "Developer Command Prompt for VS 2022", which can default to
+x86). If you're using Developer PowerShell and it keeps landing on x86, use
+the x64 Native Tools **Command Prompt** for this project instead — its
+cmd.exe command variants above work identically.
+
+This project has only actually been built and run on Linux so far in this
+session (no Windows machine available) — the code has been read through
+carefully for Windows-specific issues (two real ones were found and fixed
+just from that review: a missing Windows window-handle path in
+`src/main/main.cpp`, and a `CMakeLists.txt` reference to an icon resource
+file that doesn't exist yet), but there has been no actual Windows build to
+confirm against. If something else breaks, report the exact error back and
+it can very likely be fixed the same way.
 
 ### macOS
 

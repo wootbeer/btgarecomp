@@ -3,6 +3,41 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 31: found it -- the dev shell itself was initialized for x86, not x64
+
+Asked the user to check `$env:LIB` and confirm the base MSVC v143 build
+tools component was installed (it was). The `LIB` answer was the whole
+story:
+
+```
+...\VC\Tools\MSVC\14.44.35207\ATLMFC\lib\x86;...\VC\Tools\MSVC\14.44.35207\lib\x86;
+...\Windows Kits\10\lib\10.0.26100.0\ucrt\x86;...\Windows Kits\10\lib\10.0.26100.0\um\x86
+```
+
+Every single entry ends in `\x86`, not `\x64`. The shell this whole session
+had been troubleshooting in was never actually an x64 dev environment,
+regardless of which shortcut or prompt name the user believed they'd
+opened. That single fact explains the `mainCRTStartup` failure completely
+and rules out every theory from rounds 27-30: `clang-cl` correctly resolved
+to the x64-hosted binary (round 28's fix), correctly compiled and asked
+`lld-link` for a `/machine:x64` link (visible in every failing log), and
+`-MDd` correctly requested the debug CRT -- but `LIB` only listed the
+**x86** copies of `msvcrtd.lib`/`vcruntimed.lib`/etc, so lld-link's
+`/DEFAULTLIB:`-driven search for the x64 CRT import libraries found
+nothing byte-compatible with a `/machine:x64` object and silently
+contributed nothing, rather than erroring with an explicit architecture
+mismatch. Every prior fix in this saga (rounds 25-29) was real and correct
+for the bug it targeted, but none of them could have fixed this, because
+none of them touched which dev-environment script had run.
+
+No repo change for this one -- it's purely about which Start Menu shortcut
+gets launched. Added a `BUILDING.md` sanity-check step (verify `$env:LIB`/
+`%LIB%` contains `\x64` segments, not `\x86`, before doing anything else)
+so a future reader hits this fast instead of chasing it through five
+misleading compiler/linker errors the way this session did. If the user's
+`build\` directory picks up a working x64 dev shell from here, the next
+real signal is whether `BattleTanxGARecompiled` actually finishes linking.
+
 ## 2026-09-28, round 30: round 29's revert changed nothing -- this isn't a repo bug, it's the user's local toolchain/environment
 
 Pulled round 29's revert, reconfigured. Identical failure, and this time
