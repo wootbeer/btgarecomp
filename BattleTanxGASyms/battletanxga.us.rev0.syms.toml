@@ -1109,7 +1109,16 @@ functions = [
     { name = "func_800FEEBC", vram = 0x800feebc, size = 0x44 },
     { name = "ChangeCustomEffect", vram = 0x800fef00, size = 0x60 },
     { name = "func_800FEF60", vram = 0x800fef60, size = 0x174 },
-    { name = "func_800FF0D4", vram = 0x800ff0d4, size = 0x148 },
+    # Round 41 (STATUS.md): same class of bug as round 39 -- one declared
+    # function (func_800FF0D4, size 0x148) is actually three back to back.
+    # The middle one, func_800FF1A4, is a tiny 3-instruction trampoline
+    # (lui/jr/addiu computing a constant address into $v0) -- exactly the
+    # shape of a jump-table/function-pointer-table entry, consistent with
+    # it being reached only by an indirect call. Sizes 0xd0 + 0xc + 0x6c =
+    # 0x148, matching the original total exactly.
+    { name = "func_800FF0D4", vram = 0x800ff0d4, size = 0xd0 },
+    { name = "func_800FF1A4", vram = 0x800ff1a4, size = 0xc },
+    { name = "func_800FF1B0", vram = 0x800ff1b0, size = 0x6c },
     { name = "func_800FF21C", vram = 0x800ff21c, size = 0x194 },
     { name = "func_800FF3B0", vram = 0x800ff3b0, size = 0xc },
     { name = "__OsSchedInstall", vram = 0x800ff3bc, size = 0x1a4 },

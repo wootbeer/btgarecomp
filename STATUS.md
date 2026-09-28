@@ -3,6 +3,36 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 41: second confirmed merged-function boundary, found once register_overlays() actually started working -- and a systematic scan attempt that didn't pan out
+
+Round 40's `register_overlays()` fix worked -- confirmed by a completely
+different crash address (`0x800FF1A4`, not `0x8009EE08`) on the very next
+run, meaning the lookup table is genuinely live now. Same bug class as
+round 39: `func_800FF0D4` (declared size `0x148`) disassembles to three
+functions back to back -- `func_800FF0D4` (real size `0xd0`), a tiny
+3-instruction trampoline at `func_800FF1A4` (size `0xc`, just
+`lui $v0, HI / jr $ra / addiu $v0, $v0, LO` -- computes a constant address
+into `$v0`, exactly the shape of a jump-table/function-pointer-table
+entry, consistent with being reached only by an indirect call) and
+`func_800FF1B0` (size `0x6c`), matching the original total exactly
+(`0xd0 + 0xc + 0x6c = 0x148`).
+
+Tried writing a systematic scanner (`scan_merged_funcs.py`, not checked in)
+to find more of these across all 1304 declared functions at once rather
+than one crash at a time: flag any function containing a `jr $ra` +
+delay-slot pair followed by what looks like another function's own
+prologue (`addiu $sp, $sp, -N`) before the declared end. Produced 313
+candidates out of 1304 functions -- far too high a rate to be trustworthy;
+almost certainly mostly false positives from inline jump-table data whose
+raw words coincidentally decode as a matching instruction pattern. Both
+confirmed splits so far were found by following the actual runtime crash
+address as ground truth, not by static heuristic guessing, so abandoned
+the batch approach and went back to fixing these reactively as the user
+hits them -- slower per-instance but far more reliable, and the process
+itself (disassemble the declared range, find the real `jr $ra`/prologue
+boundaries, split the `syms.toml` entry, regenerate, rebuild) is now fast
+and well-practiced.
+
 ## 2026-09-28, round 40: round 39's fix didn't actually take -- recomp::overlays::register_overlays() was never called at all, so the function lookup table was never wired up in the first place
 
 Round 39's `syms.toml` split was correct (confirmed: regenerating produced
