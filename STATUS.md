@@ -3,6 +3,36 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 33: first successful Windows build and run, ever -- BattleTanxGARecompiled.exe launches, shows a black window instead of a crash
+
+After round 32's `N64RecompCLI` target fix and one more full reconfigure
+(needed because the `build/` directory that finally linked successfully had
+been configured *before* `RecompiledFuncs/` was regenerated with real
+content -- CMake's `file(GLOB ...)` is configure-time-only, so the stale
+empty-placeholder result was still in effect until a fresh `cmake -S . -B
+build` re-ran the glob against the now-populated directory), the user got a
+real `BattleTanxGARecompiled.exe`, ran it, and it launched: a window opened
+instead of crashing or failing to start. This is the very first time this
+project has run on an actual display anywhere -- everything through round
+32 was validated only up to "fails cleanly at window/renderer creation" in
+this session's own display-less cloud sandbox.
+
+The window shows solid black rather than a launcher menu or the game.
+Investigating next: whether this is the known RSP microcode gap
+(PROGRESS.md item 6 -- `get_rsp_microcode` in `src/main/main.cpp` returns
+`nullptr` unconditionally, so nothing this ROM's own display lists reference
+is recognized, though RT64 ships generic F3D-family GBI fallback walkers
+that may or may not cover this game without it) versus something more basic
+failing in the recompui/RmlUi launcher UI itself (which should render
+independently of any in-game RSP work). Asked the user whether the black
+window persists (renderer running, nothing drawn) or exits/crashes shortly
+after, and whether any console/diagnostic text is visible anywhere, before
+narrowing further -- `BattleTanxGARecompiled.exe` links with
+`/SUBSYSTEM:WINDOWS` (see the round-27-33 link commands), so this may be a
+genuinely silent failure with no stderr visible at all regardless of cause,
+which would itself need addressing before this is debuggable further from
+the outside.
+
 ## 2026-09-28, round 32: real BUILDING.md bug, unrelated to Windows -- step 4 was building the wrong CMake target this whole time
 
 With the x64 shell finally sorted (round 31), the Windows build got all the
