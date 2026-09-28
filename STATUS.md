@@ -3,6 +3,45 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 58: short-circuited the whole audio-command-list chain at its entry point instead of chasing internal DSP crashes one at a time
+
+Round 57's `n_alEnvmixerPull` fix (pass the output pointer through
+unchanged) wasn't enough by itself: the very next test hit another access
+violation, one call deeper, inside `_n_saveBuffer` -- a fully real,
+successfully-decompiled function (not a stub), part of the same call
+chain: `func_801025C0` -> `func_801028B0` -> `func_80102900` -> a
+per-voice-type indirect dispatch -> `func_80101320` ->
+`n_alEnvmixerPull`/`_n_saveBuffer`. Every step in this chain follows the
+same pattern -- write a typed command header, advance a running buffer
+pointer, return the new position for the next step -- building what's
+almost certainly an RSP audio command list. Continuing to patch each
+internal function's pointer arithmetic one crash at a time risked an
+open-ended number of further crashes in genuinely undocumented,
+bit-packed DSP internals this project has no real implementation of.
+
+Instead, found and used the chain's own existing "nothing to do" contract
+at its entry point. Disassembly of `func_801025C0` shows an early check
+that, when false, just writes `0` to an output parameter (`a1`, a pointer
+to a caller-local "command count") and returns -- and its caller
+(`RecompiledFuncs/funcs_18.c`, around the `0x800FF788` call site) reads
+that count back afterward and skips submitting anything further when it's
+`0`. This isn't a guessed replacement -- it's the game's own real
+no-audio-this-frame behavior, confirmed by reading both sides of the call.
+
+**Fix:** added `func_801025C0` to the `ignored` list alongside
+`n_alEnvmixerPull` (`battletanxga.us.rev0.toml`), and wrote
+`src/game/func_801025C0_stub.cpp`: `extern "C" void func_801025C0(...) {
+MEM_W(0, ctx->r5) = 0; }` -- unconditionally takes the real "nothing to
+process" path rather than only when the original condition happened to be
+false. Result: no audio commands get built this frame (silence, same as
+round 57's gap), but the entire deep DSP chain underneath it is bypassed
+rather than needing to be individually verified safe. Verified: regenerated
+via the local `N64RecompCLI`, confirmed `func_801025C0` no longer has a
+generated body (only the call site remains, matching the `ignored`
+pattern), and a full `cmake -S . -B build && ninja BattleTanxGARecompiled`
+build succeeded end-to-end including linking. Not yet confirmed against a
+real run.
+
 ## 2026-09-28, round 57: real crash (access violation) -- the long-known n_alEnvmixerPull audio gap finally got exercised; fixed by switching it from `stubbed` to `ignored` with a hand-written pass-through
 
 Round 56's fix got the game past every "Failed to find function" merged-

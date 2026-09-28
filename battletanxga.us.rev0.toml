@@ -94,7 +94,30 @@ stubs = ["func_8007919C", "func_80079260", "__osException_80104FB0", "func_80100
 # least keeps the pointer chain valid (passes the output pointer through
 # unchanged -- no real mixing yet, a real gap to revisit along with real
 # audio, but no longer a crash).
-ignored = ["n_alEnvmixerPull"]
+
+# func_801025C0 (round 58, STATUS.md): round 57's n_alEnvmixerPull fix
+# wasn't enough on its own -- the very next crash was another access
+# violation one call deeper, inside _n_saveBuffer, a *real* (not stubbed)
+# function that's part of the same "build an RSP audio command list,
+# each step advancing a running buffer pointer and returning it" chain
+# (func_801025C0 -> func_801028B0 -> func_80102900 -> [polymorphic
+# per-voice-type dispatch] -> func_80101320 -> n_alEnvmixerPull/
+# _n_saveBuffer). Patching each internal step one at a time risks an
+# unbounded number of further crashes in genuinely undocumented DSP
+# internals (bit-packed command headers, buffer stride math) this project
+# has no real implementation of yet.
+#
+# func_801025C0 itself already has a legitimate "nothing to process" fast
+# path in the real ROM code (checked via disassembly and confirmed by its
+# caller's own behavior, funcs_18.c:7123-7136): it takes an output pointer
+# (a1) to a caller-local "command count" variable, and when there's
+# nothing to do, just writes 0 there and returns -- the caller then reads
+# that count back and skips submitting anything further when it's 0. This
+# is real, already-correct game logic, not a guess: forcing that same
+# path unconditionally (rather than only when the original condition
+# happens to be false) is safe and gives "no audio processed this frame"
+# instead of a crash, using the game's own no-op contract.
+ignored = ["n_alEnvmixerPull", "func_801025C0"]
 
 # Instruction patches: cop0 writes and eret (nothing is emulated) -- round 18.
 
