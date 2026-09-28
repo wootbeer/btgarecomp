@@ -3,6 +3,52 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 52 (part 2): traced func_800988E8's stuck queue to a missing osCreateViManager implementation; added a one-shot diagnostic print to confirm before writing a fix
+
+After the drain-then-priority-drop fix (round 52 part 1), the game still
+hangs -- confirmed via debugger this is genuine progress-then-restall, not
+a no-op: the active thread now visibly cycles between `func_80098B40` and
+`func_800A1384` (both caught mid-`btga_yield_via_priority_drop`, not bare
+spinning), but `func_800988E8` -- the thread that needs to run to actually
+clear things -- remains frozen at its very first `osRecvMesg` (mq vram
+`0x80217030`), completely unmoved across all of rounds 47-52.
+
+Traced this queue's likely registration path by reading `func_800A1150`
+(`RecompiledFuncs/funcs_7.c:11098+`, the function round 48 already
+identified as doing all of this thread's startup registration) in full:
+it creates an `OSMesgQueue` at vram `0x80222930`, then calls
+`osCreateViManager(0xFE)` -- and `osCreateViManager_recomp`
+(`librecomp/src/vi.cpp:13-15`) is a complete no-op, same as
+`osCreatePiManager_recomp` (`pi.cpp:60-62`). Real libultra's VI/PI Manager
+threads exist specifically to fan a single hardware event out to *multiple*
+application-registered queues, since raw `osSetEventMesg`/`osViSetEvent`
+only support one global consumer each (confirmed by reading
+`ultramodern/src/events.cpp` in full: `vi_thread_func` only ever sends to
+`events_context.vi`/`.ai`'s single registered queue, nothing else). If this
+game relies on the Manager pattern to route ticks to `0x80217030` (a
+separate, per-thread queue, distinct from `0x80222930`), it would never
+receive anything now that the Manager is a stub -- which exactly matches
+what's observed. (Ruled out PI DMA completion as a factor: `osPiStartDma`/
+`osEPiStartDma`, `pi.cpp:312-344`, deliver directly to a queue passed
+per-call via `do_dma`, entirely independent of the broken
+`osSetEventMesg(OS_EVENT_PI, ...)` path, so that part is *not* broken.)
+
+Rather than keep guessing from static analysis, added a one-shot diagnostic
+(`battletanxga.us.rev0.toml`, `[[patches.hook]]` on `func_800988E8` at its
+own entry, guarded by a `static` so it only ever prints once) that dumps
+the real `OSMesgQueue` struct fields at `0x80217030` (`blocked_on_recv`,
+`blocked_on_send`, `validCount`, `first`, `msgCount`, `msg`) to stdout the
+first time this function runs -- before it hits the blocking recv. This
+will confirm empirically whether the queue was ever initialized
+(`osCreateMesgQueue`, i.e. `msgCount` nonzero) and whether anything has
+ever been sent to it (`validCount` nonzero at any point), rather than
+continuing to infer from source alone. Verified: regenerated via the local
+`N64RecompCLI`, confirmed the patch landed at the very top of
+`func_800988E8` (`RecompiledFuncs/funcs_5.c:8244-8263`, before the register
+save even completes), and a full `ninja BattleTanxGARecompiled` build
+succeeded end-to-end. Purely diagnostic -- no behavior change yet, pending
+the printed values from a real run.
+
 ## 2026-09-28, round 52: found why round 50/51's fix still hangs -- it never drains the external-message queue that VI/AI event delivery depends on
 
 Round 51's fix built and ran, but the game still hung (same `AppHangB1`).
