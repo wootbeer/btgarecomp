@@ -87,6 +87,16 @@ found again from scratch by disassembling this game's binary.
       — writing the real entry point (item 7 below, and
       `bdragoncore/battle-tanx-recomp`'s `src/main/*.cpp` for the shape of
       it) is what makes the game itself start running.
+- [x] **`src/main/main.cpp` written — the game code is now actually
+      referenced and the link runs into a real, well-defined wall**
+      (round 23). Registers this ROM's `GameEntry` (real entry point and
+      ROM hash; save type is `AllowAll` since the real one isn't known),
+      wires up SDL-based graphics/audio/input using RecompFrontend's own
+      library functions, and fixes a real `CMakeLists.txt` static-link
+      ordering bug it surfaced. The link now fails on exactly 12 missing
+      `*_recomp` functions — see item 7, this is that item's blocker,
+      confirmed rather than just suspected. Full detail in `STATUS.md`
+      round 23.
 
 ## Blocking, needs more reverse engineering
 
@@ -162,14 +172,29 @@ well-trodden, mechanical problems compared to open-ended disassembly).
    N64ModernRuntime's known microcode tables), and whether the checked-in
    recompiled microcode from the original project applies or new ones need
    generating with RSPRecomp.
-7. **Stock-runtime compatibility shims** — the original game needed
-   hand-written compat code (`stock_runtime_compat.cpp`,
-   `rsp_stock_compat.hpp`) to run on stock N64ModernRuntime instead of a
-   game-specific fork: SP status bit translation, bounds-checked RSP DMA,
-   a `cop0_status_write` shim, and a yield wrapper. Global Assault will
-   very likely need its own version of some of these, but which ones and
-   what they need to do can only be determined by reading its actual
-   disassembly.
+7. **Stock-runtime compatibility shims** — confirmed necessary, not just
+   suspected (round 23: linking `src/main/main.cpp` against the real
+   `RecompiledFuncs` output fails on exactly 12 missing `*_recomp`
+   functions that neither `librecomp` nor `ultramodern` provide — grepped
+   their whole source, zero matches). They split into four subsystems,
+   none written yet:
+   - `__osGetSR_recomp` — COP0 Status register read.
+   - `__osDequeueThread_recomp`, `__osDispatchThread_recomp`,
+     `__osPopThread_recomp`, `__osEnqueueThread_recomp` — libultra thread
+     scheduler internals.
+   - `__osContAddressCrc_recomp`, `__osPfsSelectBank_recomp`,
+     `__osContRamWrite_recomp`, `__osContRamRead_recomp`,
+     `__osCheckPackId_recomp`, `__osPfsRWInode_recomp`,
+     `__osRepairPackId_recomp` — Controller Pak (memory card) filesystem
+     internals (this is the `controller_pak.cpp`-shaped gap the original
+     game also needed its own version of).
+   - `__osSiCreateAccessQueue_recomp` — SI (controller port) access queue
+     setup.
+   - `__osTimerInterrupt_recomp`, `__osViSwapContext_recomp` — timer
+     interrupt and VI context-swap internals.
+   Each needs to be understood from libultra's real behavior (these are
+   OS-layer internals the game calls into, not game logic) and implemented
+   as real C functions, not just made to link.
 8. **Patches** (`patches/*.c`) — game behavior that needs source-level
    rewriting rather than a binary patch (e.g. how the UI is driven each
    frame, controller pak access, cheat/level-select hooks), written in C

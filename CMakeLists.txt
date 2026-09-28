@@ -380,7 +380,30 @@ foreach(_btx_rml_target rmlui_core rmlui_debugger recompui)
     endif()
 endforeach()
 
+# These libraries reference each other's symbols in both directions (e.g.
+# recompinput's player-assignment code calls into recompui's
+# ConfigPageControls, RecompiledFuncs calls into librecomp/ultramodern's
+# os*_recomp reimplementations) without CMake knowing about the cycle at
+# the target level, so a single left-to-right archive scan can leave real,
+# resolvable symbols undefined depending on which .o a given archive
+# happens to pull in first. --start-group/--end-group makes the linker
+# keep re-scanning this whole set until nothing new resolves, same fix as
+# for any other circular static-library dependency. This has to be a single
+# target_link_libraries call with the group flags as literal arguments --
+# CMake collects link *options* (target_link_options) and link
+# *libraries* into separate lists and concatenates them at fixed positions
+# in the final command line regardless of call order, so two separate
+# target_link_options calls do NOT end up wrapping the libraries below.
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT APPLE)
+    set(BTGA_LINK_GROUP_START "-Wl,--start-group")
+    set(BTGA_LINK_GROUP_END "-Wl,--end-group")
+else()
+    set(BTGA_LINK_GROUP_START "")
+    set(BTGA_LINK_GROUP_END "")
+endif()
+
 target_link_libraries(BattleTanxGARecompiled PRIVATE
+    ${BTGA_LINK_GROUP_START}
     # PatchesLib must come before RecompiledFuncs. Both define the functions that a RECOMP_PATCH
     # replaces (for example the patched func_80079530) as weak symbols, and the linker keeps the
     # first definition it finds, so listing RecompiledFuncs first would silently drop the patches.
@@ -392,6 +415,7 @@ target_link_libraries(BattleTanxGARecompiled PRIVATE
     ultramodern
     rt64
     nfd
+    ${BTGA_LINK_GROUP_END}
 )
 
 

@@ -1,7 +1,113 @@
 # Status
 
-Last updated: 2026-09-27, in a Claude Code cloud session (a different sandbox
+Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
+
+## 2026-09-28, round 23: wrote the real entry point -- and hit exactly the wall PROGRESS.md item 7 predicted
+
+Wrote `src/main/main.cpp`, the piece round 22 flagged as missing (nothing
+called `recomp_entrypoint`, so the linker dropped all the recompiled game
+code as unreferenced). Structurally modeled on
+`bdragoncore/battle-tanx-recomp`'s own `src/main/main.cpp` (cloned to
+`/home/user/bdragoncore/battle-tanx-recomp` for reference, same as before --
+only the generic ultramodern/librecomp/recompui plumbing carries over, none
+of BattleTanx's own game logic, addresses, or polish like its audio
+resampling bridge or launcher theming, which this file deliberately leaves
+out for now):
+
+- Registers one `recomp::GameEntry` for this ROM: real entry point
+  (`0x80071000`), and a real `rom_hash` -- **not** the N64 header CRC1/CRC2,
+  but `XXH3_64` of the whole normalized big-endian `.z64` (computed directly
+  against the ROM this project has been developed against:
+  `0x9c7467e763553529`, `pip install xxhash`), since that's what
+  `librecomp/src/recomp.cpp`'s `check_hash` actually compares against.
+- `save_type` is `SaveType::AllowAll` -- this ROM's real save type
+  (EEPROM/SRAM/FlashRAM) has never been determined; that's real
+  undone work, not a considered choice.
+- `get_rsp_microcode` returns `nullptr` unconditionally. RT64 ships its own
+  generic F3DEX-family GBI interpreters (`lib/rt64/src/gbi/*.cpp` -- F3D,
+  F3DEX, F3DEX2, F3DGolden, F3DPD, F3DWave, F3DZEX2, L3DEX2, S2DEX, S2DEX2,
+  Extended -- all already built successfully as part of round 22's RT64
+  build) that handle GFX tasks via HLE without needing this game's own
+  recompiled microcode, so graphics may work without any RSP work at all.
+  Audio tasks have no such fallback -- the game will hit
+  `quick_exit` printing the unhandled task type the first time it submits
+  an `M_AUDTASK`, which is expected until PROGRESS.md item 6 happens.
+- No font is registered (`register_primary_font` call is commented out) --
+  there's no font file under `assets/` yet, so RmlUi has nothing to render
+  UI text with. The launcher menu will likely be visually broken (invisible
+  or fallback-glyph text) until one is added.
+- Audio playback is a plain `SDL_QueueAudio` push with no resampling --
+  functional enough to tell whether audio comes out at all, not tuned to
+  sound clean.
+- Discovered by trying to actually link it: `recompui`'s own code declares
+  `extern SDL_Window* window;` (`ui_state.cpp`) and `default_launcher_init_
+  callback` (`ui_launcher.cpp`) reads a global `std::vector<recomp::
+  GameEntry> supported_games` **by that exact name** -- these aren't
+  optional customization points, they're required extern symbols any game
+  project using this frontend must define. Neither is documented anywhere
+  outside the source itself; found both only from the linker's undefined-
+  reference output naming them.
+- Fixed a real `CMakeLists.txt` bug this surfaced: `recompui` and
+  `recompinput` (and, separately, `RecompiledFuncs` and `librecomp`/
+  `ultramodern`) reference each other's/each layer's symbols without CMake
+  knowing about the cross-target cycle, so a single left-to-right static-
+  archive scan left resolvable symbols (`recompui::controls_page`) undefined
+  depending on which object a given `.a` happened to pull in first on its
+  one pass. Wrapped the whole `target_link_libraries(BattleTanxGARecompiled
+  ...)` list in `-Wl,--start-group`/`--end-group`. Learned the hard way that
+  this has to be literal arguments *inside* the same `target_link_libraries`
+  call -- two separate `target_link_options` calls (one for
+  `--start-group`, one for `--end-group`) do NOT interleave with the
+  library list in call order; CMake collects link options and link
+  libraries into separate property lists and concatenates them at fixed
+  positions in the final command regardless of when each was called, so
+  both flags landed adjacent to each other before the library list instead
+  of wrapping it.
+- Corrected `patches/recompui_event_structs.h` (added in round 22) to
+  exactly match `lib/RecompFrontend/recompui/include/recompui/
+  event_structs.h` -- an actual reference copy sitting in that include
+  directory for exactly this purpose that a plain grep for the filename
+  `ui_types.h`'s own comment names ("must be kept in sync with
+  patches/recompui_event_structs.h") had missed on the first pass. My
+  hand-derived version used different enum names/types (`int32_t` instead
+  of `bool`, `RECOMPUI_EVENT_TEXT` instead of `UI_EVENT_RESERVED1`, etc.) --
+  functionally equivalent, but there was no reason to diverge from the
+  library's own canonical copy once it was found.
+
+**Where it stands now**: the link fails on exactly 12 undefined
+`*_recomp` symbols, all C functions our recompiled code calls that N64Recomp's
+built-in `reimplemented_funcs` list expects some runtime to provide, and
+neither `librecomp` nor `ultramodern` do (confirmed by grepping their
+entire source for each name -- zero matches, not a link-order problem this
+time). This is precisely PROGRESS.md item 7,
+"stock-runtime compatibility shims" -- the original BattleTanx needed its
+own hand-written `stock_runtime_compat.cpp`/`controller_pak.cpp` for the
+same reason, and it's now confirmed (not just suspected) that Global
+Assault needs its own equivalent too. The 12 symbols split into four real
+subsystems, none implemented yet:
+  - `__osGetSR_recomp` -- COP0 Status register read.
+  - `__osDequeueThread_recomp`, `__osDispatchThread_recomp`,
+    `__osPopThread_recomp`, `__osEnqueueThread_recomp` -- libultra thread
+    scheduler internals (called from this ROM's own `osDestroyThread`/
+    interrupt-handler code, not just from the exception-vector dead code
+    already stubbed in `battletanxga.us.rev0.toml`).
+  - `__osContAddressCrc_recomp`, `__osPfsSelectBank_recomp`,
+    `__osContRamWrite_recomp`, `__osContRamRead_recomp`,
+    `__osCheckPackId_recomp`, `__osPfsRWInode_recomp`,
+    `__osRepairPackId_recomp` -- Controller Pak (memory card) filesystem
+    internals, exactly the `controller_pak.cpp`-shaped gap the CMakeLists.txt
+    comment already flagged as unknown.
+  - `__osSiCreateAccessQueue_recomp` -- SI (controller port) access queue
+    setup.
+  - `__osTimerInterrupt_recomp`, `__osViSwapContext_recomp` -- timer
+    interrupt and VI (video interface) context-swap internals.
+
+Next step: write real implementations for these 12 functions (a genuine
+new round of work, not a quick patch -- four distinct subsystems, most
+needing to be understood from libultra's real behavior rather than this
+ROM's own disassembly, since these are OS-layer internals the game calls
+into rather than game logic).
 
 ## 2026-09-27, round 22: first full build -- `BattleTanxGARecompiled` links and runs
 
