@@ -102,20 +102,31 @@ static RspUcodeFunc* get_rsp_microcode(const OSTask* task) {
 // window;` and reads it directly -- not `static`, needs external linkage.
 SDL_Window* window = nullptr;
 
+static void checkpoint(const char* name) {
+    fprintf(stdout, "checkpoint: %s\n", name);
+    fflush(stdout);
+}
+
 static ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
+    checkpoint("create_gfx: entered");
+
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) != 0) {
         exit_error("Failed to initialize SDL2: %s", SDL_GetError());
     }
+    checkpoint("create_gfx: after SDL_Init");
 
     fprintf(stdout, "SDL Video Driver: %s\n", SDL_GetCurrentVideoDriver());
+    fflush(stdout);
 
     return {};
 }
 
 static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::gfx_data_t) {
+    checkpoint("create_window: entered");
+
     uint32_t flags = SDL_WINDOW_RESIZABLE;
 #if defined(__APPLE__)
     flags |= SDL_WINDOW_METAL;
@@ -131,6 +142,7 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     if (window == nullptr) {
         exit_error("Failed to create window: %s", SDL_GetError());
     }
+    checkpoint("create_window: after SDL_CreateWindow");
 
 #if defined(_WIN32)
     SDL_SysWMinfo wm_info;
@@ -138,8 +150,10 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     if (!SDL_GetWindowWMInfo(window, &wm_info)) {
         exit_error("Failed to get window info: %s", SDL_GetError());
     }
+    checkpoint("create_window: after SDL_GetWindowWMInfo, returning");
     return ultramodern::renderer::WindowHandle{ wm_info.info.win.window, GetCurrentThreadId() };
 #elif defined(__linux__) || defined(__ANDROID__)
+    checkpoint("create_window: returning (non-Windows)");
     return ultramodern::renderer::WindowHandle{ window };
 #else
     static_assert(false && "Only Linux and Windows are set up in this file so far -- see PROGRESS.md.");
@@ -147,6 +161,10 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
 }
 
 static void update_gfx(void*) {
+    static std::atomic<bool> first_call{true};
+    if (first_call.exchange(false)) {
+        checkpoint("update_gfx: first call");
+    }
     recompinput::poll_inputs();
 }
 
@@ -333,8 +351,11 @@ int main(int argc, char** argv) {
 
     ultramodern::renderer::callbacks_t renderer_callbacks{
         .create_render_context = [](uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode) {
+            checkpoint("create_render_context: entered");
             auto presentation_mode = ultramodern::renderer::PresentationMode::PresentEarly;
-            return recompui::renderer::create_render_context(rdram, window_handle, presentation_mode, developer_mode);
+            auto ctx = recompui::renderer::create_render_context(rdram, window_handle, presentation_mode, developer_mode);
+            checkpoint("create_render_context: returning");
+            return ctx;
         },
     };
 
