@@ -3,6 +3,50 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 52: found why round 50/51's fix still hangs -- it never drains the external-message queue that VI/AI event delivery depends on
+
+Round 51's fix built and ran, but the game still hung (same `AppHangB1`).
+Debugger dump this round: the previously-fixed thread is now back at
+`func_80098B40`, but genuinely cycling through the yield each iteration
+(caught mid-`osSetThreadPri` inside `btga_yield_via_priority_drop`, not a
+bare unyielding spin) -- so the mechanism runs, but the flag it waits on
+(vram `0x80229230`) still never clears. All other threads unchanged from
+every prior round, and critically: `func_800988E8` (the thread rounds
+47-48 identified as needing to run to clear that flag) is still parked at
+the *exact same* `osRecvMesg` call (`RecompiledFuncs/funcs_5.c` line 8301)
+it has been at since round 47 -- meaning it has made zero progress across
+five straight rounds, regardless of what round 50/51 changed.
+
+Root cause: read `ultramodern/src/mesgqueue.cpp` in full. `osSendMesg`
+skips `do_send` (the function that actually writes into a target's
+`OSMesgQueue` and moves a `blocked_on_recv` thread into the ready queue) for
+any non-game thread and instead calls `enqueue_external_message`
+(`mesgqueue.cpp:34-36`), which just pushes onto a completely separate
+`external_messages` concurrent queue. Ultramodern's VI/AI event thread
+(`events.cpp`) is exactly such a non-game thread. That external queue is
+only ever drained -- and the message actually delivered to the real target
+queue -- by a game thread calling `wait_for_external_message`/
+`_timed` (`mesgqueue.cpp:53-68`), which is what round 49's original
+`yield_self_1ms` did but round 50/51's `btga_yield_via_priority_drop`
+*doesn't*: it only calls `osGetThreadPri`/`osSetThreadPri`, which merely
+rescans the already-ready `running_queue` via `check_running_queue` --
+it never touches `external_messages` at all. So `func_800988E8`'s VI/AI
+message was very likely sitting in that queue the entire time, and nothing
+in rounds 50-51's fix ever pulled it out to actually deliver it.
+
+**Fix (`src/main/scheduler_workaround.cpp`):** `btga_yield_via_priority_drop`
+now calls `yield_self_1ms` first (drains `external_messages`, delivering
+any pending event message and moving its receiver into the ready queue,
+plus its own strict-priority `check_running_queue`), and only then does the
+priority-drop trick -- so a thread that just became ready from a drained
+message also gets an actual handoff despite not being strictly
+higher-priority than the poller. Both steps are necessary: round 49 proved
+draining alone isn't enough (strict priority check), and rounds 50-51 proved
+the priority drop alone isn't enough (nothing to drain the external queue).
+No TOML/generated-code changes needed this round, just the shared helper.
+Verified: full `ninja BattleTanxGARecompiled` rebuild succeeded end-to-end
+with no errors. Not yet confirmed against a real run.
+
 ## 2026-09-28, round 51: round 50 confirmed working via debugger; found and fixed a second, structurally identical scheduler gap
 
 Round 50's priority-drop fix genuinely resolved the `func_80098B40` spin --
