@@ -418,7 +418,22 @@ functions = [
     { name = "func_8009EB68", vram = 0x8009eb68, size = 0xa4 },
     { name = "func_8009EC0C", vram = 0x8009ec0c, size = 0xe8 },
     { name = "func_8009ED00", vram = 0x8009ed00, size = 0x9c },
-    { name = "func_8009ED9C", vram = 0x8009ed9c, size = 0x13c },
+    # Round 37 (STATUS.md): this used to be one declared function,
+    # func_8009ED9C with size 0x13c. Disassembly (tools/mini_mips_disasm.py
+    # against vram 0x8009ed9c-0x8009eed8) shows three separate, complete
+    # functions back to back -- each with its own standard prologue
+    # (addiu $sp, $sp, -N / sw $ra, ...) and its own jr $ra/nop epilogue --
+    # not one function with internal branches. The original boundary-
+    # detection pass merged them (see PROGRESS.md item 3's "sizes are still
+    # mostly gap-derived" caveat). The merge was silently wrong until now:
+    # the game's own code does an indirect call straight to the middle
+    # function's start (0x8009ee08), which N64Recomp can only resolve if
+    # that address is itself a declared function entry -- hence "Failed to
+    # find function at 0x8009EE08" at runtime. Sizes: 0x6c + 0x98 + 0x38 =
+    # 0x13c, matching the original total exactly (no bytes gained or lost).
+    { name = "func_8009ED9C", vram = 0x8009ed9c, size = 0x6c },
+    { name = "func_8009EE08", vram = 0x8009ee08, size = 0x98 },
+    { name = "func_8009EEA0", vram = 0x8009eea0, size = 0x38 },
     { name = "func_8009EEE0", vram = 0x8009eee0, size = 0x50 },
     { name = "func_8009EF30", vram = 0x8009ef30, size = 0x1c },
     { name = "func_8009EF4C", vram = 0x8009ef4c, size = 0x88 },

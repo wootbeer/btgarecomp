@@ -3,6 +3,137 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 39: first real function-boundary bug found and fixed -- func_8009ED9C was actually three separate functions merged into one
+
+With rounds 37-38's fixes in, the game finally boots, opens a responsive
+window, loads the user's ROM, and starts executing real recompiled N64 code
+-- reaching, for the first time in this project's history, an honest
+reverse-engineering-content crash instead of an infrastructure one:
+`"Failed to find function at 0x8009EE08"` (`librecomp/src/overlays.cpp:364-372`,
+`get_function`'s deliberate `assert(false); std::exit(EXIT_FAILURE);` path
+for an indirect call/jump target with no matching entry in `func_map`).
+
+`0x8009EE08` isn't a gap between declared functions -- it falls *inside*
+the declared range of `func_8009ED9C` (`BattleTanxGASyms/battletanxga.us.rev0.syms.toml`,
+vram `0x8009ed9c`, declared size `0x13c`, i.e. `0x8009ed9c`-`0x8009eed8`).
+Disassembled the whole range by hand with `tools/mini_mips_disasm.py`
+(rom offset = vram - `0x80070000`, per `tools/splat.yaml`'s documented
+mapping) against the ROM staged locally in this sandbox
+(`BattleTanx Global Assault (USA).z64`, gitignored, never committed).
+
+The disassembly shows three complete, independent functions back to back,
+not one function with internal control flow:
+- `0x8009ed9c`-`0x8009ee04`: standard prologue (`addiu $sp,$sp,-0x28` /
+  `sw $ra,...`) through its own `jr $ra`/`nop` epilogue at `0x8009ee00`/
+  `0x8009ee04`. Real size `0x6c`.
+- `0x8009ee08`-`0x8009ee9c`: another standalone prologue immediately after,
+  own epilogue at `0x8009ee98`/`0x8009ee9c`. Real size `0x98`. This is the
+  one the game calls indirectly and N64Recomp couldn't resolve, since only
+  `0x8009ed9c` was a declared function entry.
+- `0x8009eea0`-`0x8009eed4`: third standalone prologue/epilogue pair. Real
+  size `0x38`.
+- `0x8009eed8`-`0x8009eee0`: 8 bytes of non-code (decodes as garbage/data,
+  e.g. `.word 0x4D504149`), matching the existing `func_8009EEE0` entry's
+  own start -- this padding was already correctly excluded by the original
+  boundary, which is why the total (`0x6c + 0x98 + 0x38 = 0x13c`) matches
+  the original declared size exactly. Nothing was gained or lost; the
+  original pass just found the right *outer* boundary and missed the two
+  real splits inside it.
+
+This is a concrete instance of the "sizes are still mostly gap-derived...
+rather than checked one-by-one" caveat `PROGRESS.md` item 3 already flagged
+as an open risk. Fixed by splitting the one `syms.toml` entry into three
+(`func_8009ED9C` size `0x6c`, `func_8009EE08` size `0x98`, `func_8009EEA0`
+size `0x38`).
+
+**Not yet regenerated/rebuilt or confirmed fixed** -- this requires
+re-running `N64RecompCLI` (`BUILDING.md` step 4) to regenerate
+`RecompiledFuncs/*.c` from the corrected symbols, a CMake reconfigure
+(`file(GLOB ...)` is configure-time-only, per earlier rounds), and a
+rebuild, all on the user's Windows machine. There are almost certainly more
+of these elsewhere in the 1288-entry symbol table -- this was one found by
+following the exact runtime crash address, not a systematic sweep.
+
+## 2026-09-28, round 38: window opened but was permanently "(Not Responding)" -- update_gfx was reading input state, not pumping SDL/Win32 events
+
+With round 37's crash fixed, the game window opened for the first time ever
+but Windows immediately marked it "(Not Responding)" and it never rendered
+anything, despite the process clearly still running (non-zero, moving CPU
+usage; nothing hung at the OS level).
+
+Root cause: `update_gfx` (`src/main/main.cpp`, the
+`ultramodern::gfx_callbacks_t::update_gfx` callback, invoked every
+iteration of `recomp::start`'s main loop) was calling
+`recompinput::poll_inputs()`. That function
+(`RecompFrontend/recompinput/src/input_state.cpp:34`) only reads
+*already-buffered* SDL state (`SDL_GetKeyboardState`, controller state,
+mouse deltas) -- it never calls `SDL_PollEvent`, so the window's Win32
+message queue was never being serviced at all, which is exactly what makes
+Windows mark a window unresponsive regardless of whether the app is
+otherwise looping fine.
+
+Found by comparing against `BanjoRecomp` (github.com/BanjoRecomp/BanjoRecomp,
+same author as N64Recomp itself, same RecompFrontend/N64ModernRuntime/RT64
+stack) at the user's suggestion -- its own `update_gfx` calls
+`recompinput::handle_events()` instead, which does call `SDL_PollEvent` in
+a loop (`RecompFrontend/recompinput/src/input_events.cpp:249-253`).
+`poll_inputs()` is already correctly wired elsewhere as
+`ultramodern::input::callbacks_t::poll_input` and doesn't need to also run
+from `update_gfx`. Fixed by switching `update_gfx` to call
+`handle_events()` instead, matching BanjoRecomp exactly. Confirmed fixed:
+the window became interactive immediately after (mouse hover/highlight and
+clicks started working, including opening a native file-picker dialog for
+ROM selection).
+
+## 2026-09-28, round 37: the actual root cause of the whole-startup crash -- missing recompui::config::finalize() call, found by diffing against BanjoRecomp
+
+Round 36 ended with the theory that a clean `Release` rebuild had fixed the
+"cannot use 'throw' with exceptions disabled" build failures; it hadn't
+resolved the real symptom, which turned out to be a separate runtime crash
+entirely, and took a long debugging session (checkpoint-instrumented
+startup logging in `main.cpp`, a `std::set_terminate` handler to surface
+otherwise-lost exception messages, and eventually live debugger sessions
+under `devenv /debugexe` with `RelWithDebInfo`/`Debug` builds) to actually
+pin down.
+
+The exe reliably crashed inside `RT64::Application::setup()` ->
+`UIState::create_menus()` -> `recompui::config::init_modal()`
+(`RecompFrontend/recompui/src/config/ui_config.cpp:138-145`), which throws
+`"Config modal has already been initialized."` if `config_modal` (a
+file-scope static, legitimately assignable only once, from inside this
+exact function) is already non-null. Breakpoint-and-count confirmed
+`init_modal()` is entered exactly once before the crash -- `config_modal`
+was already non-null on its *first* call, which is inconsistent with any
+normal double-invocation theory. In `Release` builds this same underlying
+issue surfaced as a raw, uncatchable `0xC0000409` fail-fast in
+`ucrtbase.dll` instead of a catchable C++ exception (same root cause,
+different manifestation depending on build-specific memory/heap layout,
+which is what made this so hard to pin down purely from stack traces and
+crash offsets -- the `ucrtbase.dll` offset that kept recurring across many
+unrelated bugs today turned out to just be the CRT's generic internal
+abort-family entry point, not a fingerprint of one specific issue).
+
+Root cause, found by cloning and reading `BanjoRecomp`
+(github.com/BanjoRecomp/BanjoRecomp) at the user's suggestion -- another
+project on this exact same toolchain. Its `main()`
+(`src/main/main.cpp:745`) always calls `banjo::init_config()`
+(`src/game/config.cpp:248-277`) before `recomp::start()`, which creates
+several config tabs and then calls `recompui::config::finalize()`. This
+project's `main.cpp` never called `finalize()` (or created any config
+tabs) at all. `finalize()`'s own doc comment
+(`RecompFrontend/recompui/include/recompui/config.h:90,129-131`) says it
+"loads the config from disk" and "must be called after all tabs have been
+created" -- skipping it left the config system in a state `init_modal()`
+didn't expect.
+
+Fixed by adding the missing call in `src/main/main.cpp`, before
+`recomp::start()`: `recompui::config::create_general_tab()`,
+`create_graphics_tab()`, `create_controls_tab()`, `create_sound_tab()`,
+`create_mods_tab()` (the library's own prefab tabs, no game-specific
+options exist yet per `PROGRESS.md` item 8), then `finalize()`. Confirmed
+fixed: the startup crash is gone and the game reaches `create_render_context`
+successfully.
+
 ## 2026-09-28, round 36: round 35's placeholder was too empty -- comment-only RCSS parses as failure, not success, crashing the same unguarded dereference from the other side
 
 The user hit a `RelWithDebInfo` build regression while chasing a symbolized
