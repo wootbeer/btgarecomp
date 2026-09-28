@@ -290,15 +290,22 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+#define BTGA_CHECKPOINT(name) do { fprintf(stdout, "checkpoint: %s\n", name); fflush(stdout); } while (0)
+
+    BTGA_CHECKPOINT("before NFD_Init");
     NFD_Init();
+    BTGA_CHECKPOINT("after NFD_Init");
 
     recompui::programconfig::set_program_name(program_name);
     recompui::programconfig::set_program_id(program_id);
+    BTGA_CHECKPOINT("after set_program_name/id");
 
     SDL_InitSubSystem(SDL_INIT_AUDIO);
+    BTGA_CHECKPOINT("after SDL_InitSubSystem(AUDIO)");
     if (!open_audio_device(audio_frequency)) {
         fprintf(stderr, "Continuing without sound.\n");
     }
+    BTGA_CHECKPOINT("after open_audio_device");
 
     // Lato (SIL Open Font License 1.1, assets/FONT_LICENSE.txt), reused from
     // RmlUi's own bundled sample assets -- see the file-level comment. This
@@ -307,14 +314,18 @@ int main(int argc, char** argv) {
     // std::runtime_error otherwise -- see STATUS.md round 33), not a
     // considered choice of the game's real UI typeface.
     recompui::register_primary_font("LatoLatin-Regular.ttf", "Lato");
+    BTGA_CHECKPOINT("after register_primary_font");
 
     recomp::register_config_path(recompui::file::get_app_folder_path());
+    BTGA_CHECKPOINT("after register_config_path");
 
     for (const auto& game : supported_games) {
         recomp::register_game(game);
     }
+    BTGA_CHECKPOINT("after register_game loop");
 
     recompinput::players::set_single_player_mode(true);
+    BTGA_CHECKPOINT("after set_single_player_mode");
 
     recomp::rsp::callbacks_t rsp_callbacks{
         .get_rsp_microcode = get_rsp_microcode,
@@ -362,6 +373,7 @@ int main(int argc, char** argv) {
     // recompui's own default launcher menu is used -- no
     // register_launcher_init_callback call here (see file-level comment).
 
+    BTGA_CHECKPOINT("before recomp::start");
     recomp::start({
         .argc = argc,
         .argv = argv,
