@@ -3,6 +3,62 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 43: entrypoint_address wasn't sign-extended -- crashed on the very first RDRAM write in do_rom_read(), immediately after the game actually started
+
+With rounds 39-42 clearing every startup/render/lookup-table bug, clicking
+"Play" after loading the ROM finally reached real game-boot code -- and hit
+a new crash immediately: access violation inside `recomp::do_rom_read`
+(`librecomp/src/pi.cpp:72`, `MEM_B(i, ram_address) = *rom_addr;`), on the
+very first loop iteration (`i=0`). This call happens inside `init()`
+(`recomp.cpp:494-502`), which runs once per game boot, well before
+`recomp_entrypoint` (the actual recompiled game code) is ever reached --
+so this is a distinct code path from anything exercised so far, not a
+regression in previously-working code.
+
+Locals at the crash: `ram_address` (the entrypoint address passed through
+from `GameEntry::entrypoint_address`) showed as decimal `2147946496`, i.e.
+hex `0x80071000` -- correct in *value*, but zero-extended
+(`0x0000000080071000` as the actual 64-bit `gpr` bit pattern) rather than
+sign-extended (`0xFFFFFFFF80071000`). `rom_addr` and `rdram` both looked
+individually valid (non-null, plausible contents), which is what pointed
+at the address *computation* rather than either raw pointer.
+
+Root cause: `MEM_B`/`MEM_W`/`MEM_H` (`N64Recomp/include/recomp.h:95-108`)
+compute `rdram + (((reg + offset) ^ N) - 0xFFFFFFFF80000000)` -- that
+constant is the KSEG0 base (`0x80000000`) in its *sign-extended* 64-bit
+form, matching real MIPS64: a 32-bit value loaded into a 64-bit register is
+always sign-extended, so every register value these macros are normally
+fed with with is already in `0xFFFFFFFF80xxxxxx` form. `entrypoint_address`
+is declared `gpr` (`librecomp/include/librecomp/game.hpp:34`, a `uint64_t`
+typedef) but this project's `main.cpp` set it from a plain
+`0x80071000` literal, which the compiler zero-extends on implicit
+conversion to `uint64_t` (`0x0000000080071000`), not sign-extends. Feeding
+that zero-extended form into the macro's subtraction computes an offset
+~4GB too large (`0x0000000080071000 - 0xFFFFFFFF80000000` wraps to
+`0x0000000100071003` after the `^3` and subtraction, not the intended
+`0x71000`), landing far outside the actual RDRAM allocation and segfaulting
+on the very first byte write.
+
+N64Recomp's own generator already produces the fix for this, just never
+used: `RecompiledFuncs/lookup.cpp`'s auto-generated
+`get_entrypoint_address()` returns `(gpr)(int32_t)0x80071000u` -- the cast
+through `int32_t` (a signed type) before converting to `gpr` forces sign
+extension. Confirmed this is exactly BanjoRecomp's own pattern too
+(`src/main/main.cpp`: `.entrypoint_address = get_entrypoint_address()`).
+This project's `main.cpp` never called that generated function at all,
+just hardcoded the raw literal.
+
+Fixed with the same cast applied inline in `main.cpp`'s
+`supported_games` entry (`.entrypoint_address = (gpr)(int32_t)0x80071000u`)
+rather than depending on the generated `get_entrypoint_address()` directly,
+since that function only exists once `RecompiledFuncs/` has real content --
+depending on it directly would break the project's existing
+"builds fine without the ROM yet" placeholder path (same reasoning as the
+`BTGA_HAS_RECOMPILED_FUNCS` guard added in round 40 for
+`register_overlays.cpp`).
+
+**Not yet confirmed against a real run.**
+
 ## 2026-09-28, round 42: third confirmed merged-function boundary
 
 Same bug class as rounds 39/41, found via the next runtime crash address

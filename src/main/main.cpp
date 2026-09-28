@@ -284,7 +284,18 @@ std::vector<recomp::GameEntry> supported_games = {
         .is_enabled = true,
         .decompression_routine = nullptr,
         .has_compressed_code = false,
-        .entrypoint_address = 0x80071000,
+        // entrypoint_address is a gpr (uint64_t). A plain 0x80071000 literal
+        // zero-extends to 0x0000000080071000 -- but the MEM_B/MEM_W/MEM_H
+        // macros (N64Recomp/include/recomp.h) subtract the *sign-extended*
+        // KSEG0 base (0xFFFFFFFF80000000, matching real MIPS64 register
+        // semantics: a 32-bit value in a 64-bit register is always sign-
+        // extended), so a zero-extended address computes a ~4GB-off offset
+        // into rdram instead of the intended small one, segfaulting on the
+        // very first RDRAM write in do_rom_read(). Cast through int32_t
+        // first to sign-extend, matching what N64Recomp's own generated
+        // get_entrypoint_address() (RecompiledFuncs/lookup.cpp) does for
+        // exactly this reason.
+        .entrypoint_address = (gpr)(int32_t)0x80071000u,
         .entrypoint = recomp_entrypoint,
         .on_init_callback = nullptr,
     },
