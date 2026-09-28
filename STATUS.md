@@ -3,6 +3,52 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 29: round 27's --target forcing was itself the bug -- reverted now that round 28's exact-path pin is the real fix
+
+The user pulled round 28's fix (explicit full path to the x64-hosted
+`clang-cl.exe`) and reconfigured. CMake's "Check for working C compiler"
+step now correctly resolved and invoked
+`.../VC/Tools/Llvm/x64/bin/clang-cl.exe` (confirmed in the log) -- and
+still hit the *exact same* failure as round 28:
+
+```
+lld-link: error: <root>: undefined symbol: mainCRTStartup
+```
+
+This is the tell: round 27's `CMAKE_C_COMPILER_TARGET`/
+`CMAKE_CXX_COMPILER_TARGET` forcing (`x86_64-pc-windows-msvc`) was never
+actually necessary, and is the thing causing this failure. Before round 27
+existed, this exact CMake self-test (and everything after it) passed
+without any explicit `--target=` flag -- rounds 25/26's real failures were
+never about this trivial test-compile step at all, only about which
+physical clang-cl got invoked for the *project's own* source files later
+in the build. Once round 28 pinned the exact x64-hosted binary by full
+path, that binary's own natural default target is already
+`x86_64-pc-windows-msvc` -- forcing the same value explicitly, redundantly,
+via `CMAKE_C_COMPILER_TARGET` apparently changes clang-cl's internal
+toolchain-selection path enough to break its implicit embedding of the CRT
+default-library directive (the `/DEFAULTLIB:` COFF directive derived from
+`-MD`/`-MDd`/etc that normally tells the linker which import library
+supplies `mainCRTStartup`) -- reproduced identically on CMake's own
+minimal one-file test program, with zero project-specific code involved,
+so this isn't specific to anything in this repo's own sources.
+
+Reverted round 27's `CMakeLists.txt` change entirely. The real, sufficient
+fix is round 28's: pin `CMAKE_C_COMPILER`/`CMAKE_CXX_COMPILER` to the exact
+`Tools\Llvm\x64\bin\clang-cl.exe` path (already in `BUILDING.md`). No
+`--target=` forcing needed once the right binary is the one actually being
+invoked -- it already knows its own architecture.
+
+Not yet confirmed against an actual Windows build -- same standing caveat
+as rounds 25-28. If `mainCRTStartup` still comes up undefined on the next
+attempt even without the reverted flag, the next thing to check is whether
+`LIB` (the environment variable naming where the CRT/Windows SDK import
+libraries live, normally set by the VS dev shell launcher itself) is
+actually populated in that shell -- `echo $env:LIB` in PowerShell or
+`echo %LIB%` in cmd should show several semicolon-separated paths; if it's
+empty, the dev environment wasn't actually initialized for that window
+despite its name/shortcut.
+
 ## 2026-09-28, round 28: round 27's --target fix wasn't enough on its own -- the wrong clang-cl binary needs to be avoided, not compensated for
 
 After deleting `build/` and reconfiguring fresh (picking up round 27's
