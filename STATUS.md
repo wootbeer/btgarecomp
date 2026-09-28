@@ -3,6 +3,54 @@
 Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-28, round 32: real BUILDING.md bug, unrelated to Windows -- step 4 was building the wrong CMake target this whole time
+
+With the x64 shell finally sorted (round 31), the Windows build got all the
+way to the final `BattleTanxGARecompiled.exe` link and failed on exactly
+one missing symbol: `recomp_entrypoint`. Traced it to `RecompiledFuncs/`
+being empty on the user's machine -- this repo's own `CMakeLists.txt` has a
+deliberate placeholder fallback for that (`file(GLOB ...)` finds nothing,
+so it silently substitutes an empty `.c` file so the rest of the project
+still configures on a fresh clone). That meant step 4 -- actually running
+`N64Recomp.exe battletanxga.us.rev0.toml` to generate the recompiled game
+code -- had never completed on this machine.
+
+Tracing that down surfaced a real, standing bug in `BUILDING.md` itself,
+present on **both** platforms, not a Windows-specific issue: step 4's
+`cmake --build ... --target N64Recomp` builds the wrong CMake target.
+`lib/N64ModernRuntime/N64Recomp/CMakeLists.txt` defines the actual CLI tool
+as `add_executable(N64RecompCLI)` (line 117), which links against a
+separate static library also confusingly named `N64Recomp`
+(`add_library(N64Recomp ...)` elsewhere in that file -- also visible
+directly in the main project's own final link command, as
+`N64Recomp.lib` alongside `LiveRecomp.lib`/`SymbolLists.lib`). The CLI
+executable gets its user-facing filename via
+`set_target_properties(N64RecompCLI PROPERTIES OUTPUT_NAME N64Recomp)`
+(line 129) -- so the *file* is correctly named `N64Recomp`/`N64Recomp.exe`,
+but the *CMake target* you have to ask Ninja to build is `N64RecompCLI`.
+Building `--target N64Recomp` instead silently builds only the static
+library and stops -- no error, just the wrong, much smaller output, which
+is exactly what the user's pasted log showed ("Linking CXX static library
+N64Recomp.lib", 49/49, done -- no `.exe` anywhere).
+
+This was wrong in `BUILDING.md` since it was first written (round 24-ish),
+on both the Linux/macOS and Windows command blocks -- it likely went
+unnoticed on Linux specifically in this session because earlier rounds'
+Linux verification never re-ran step 4 from a truly fresh clone/build
+directory after `BUILDING.md` was written; whatever `N64Recomp` binary was
+used for those checks was almost certainly built earlier, before this
+target-naming detail mattered, by whatever ad hoc command produced it at
+the time. Fixed both command blocks in `BUILDING.md` to
+`--target N64RecompCLI`, with a note explaining the executable's output
+filename is still `N64Recomp.exe`/`N64Recomp` so the later "run it" step
+doesn't need to change.
+
+Not yet confirmed against an actual Windows build -- this fix should let
+step 4 finally produce a real `N64Recomp.exe`, regenerate `RecompiledFuncs/`
+for real, and get the final link past the `recomp_entrypoint` symbol. Next
+real signal is whether `BattleTanxGARecompiled.exe` links successfully with
+the real recompiled code in it.
+
 ## 2026-09-28, round 31: found it -- the dev shell itself was initialized for x86, not x64
 
 Asked the user to check `$env:LIB` and confirm the base MSVC v143 build

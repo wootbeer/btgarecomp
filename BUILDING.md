@@ -128,8 +128,12 @@ Build `N64Recomp` from `lib/N64ModernRuntime/N64Recomp`:
 **Linux/macOS:**
 ```bash
 cmake -S lib/N64ModernRuntime/N64Recomp -B lib/N64ModernRuntime/N64Recomp/build -G Ninja
-cmake --build lib/N64ModernRuntime/N64Recomp/build --target N64Recomp -j$(nproc)
+cmake --build lib/N64ModernRuntime/N64Recomp/build --target N64RecompCLI -j$(nproc)
 ```
+(The CMake *target* is `N64RecompCLI` — `N64Recomp` alone names a static
+library the CLI links against, not the executable. `N64RecompCLI` builds to
+an output file literally named `N64Recomp`/`N64Recomp.exe` via CMake's
+`OUTPUT_NAME` property, which is what the commands below actually run.)
 
 **Windows** (from an x64 Native Tools Command Prompt, or Developer
 PowerShell, for VS 2022 — both work, just match the syntax below to
@@ -149,18 +153,20 @@ Developer PowerShell:
 ```powershell
 $env:BTGA_CLANGCL = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe"
 cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER="$env:BTGA_CLANGCL" -DCMAKE_CXX_COMPILER="$env:BTGA_CLANGCL"
-cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64Recomp
+cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64RecompCLI
 ```
 
 x64 Native Tools Command Prompt (cmd.exe):
 ```bat
 set "BTGA_CLANGCL=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe"
 cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER="%BTGA_CLANGCL%" -DCMAKE_CXX_COMPILER="%BTGA_CLANGCL%"
-cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64Recomp
+cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64RecompCLI
 ```
 (Ninja parallelizes automatically using all cores — no `-j` flag needed.
 `$env:BTGA_CLANGCL`/`%BTGA_CLANGCL%` don't carry over to a new shell window
-— re-set it, or just re-paste the full path, if you closed and reopened.)
+— re-set it, or just re-paste the full path, if you closed and reopened.
+The CMake target is `N64RecompCLI`, same note as the Linux/macOS block
+above — its output file is still named `N64Recomp.exe`.)
 
 Then, from the repo root, with the ROM in place from step 3:
 
