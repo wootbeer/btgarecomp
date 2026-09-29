@@ -3,6 +3,97 @@
 Last updated: 2026-09-29, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-29, round 62: stood up the ELF-based `patches/` toolchain and properly wired `recomp_run_ui_callbacks` via a real RECOMP_PATCH
+
+Round 61's `[[patches.hook]]` shortcut was reverted for causing a worse
+regression (a real Windows app hang instead of merely-unresponsive UI) --
+see that entry below for the full root cause. This round does it properly:
+a complete, minimal version of BanjoRecomp's ELF-based patch pipeline
+(cross-compile real C to MIPS object code via clang, link it with
+`ld.lld` against dummy absolute-address symbols, then run it back through
+N64Recomp as a *second*, separate input), built from scratch for this
+project rather than copied wholesale (BanjoRecomp's own `patches.h`
+depends on a vendored `bk-decomp` SDK-headers submodule this project
+doesn't have).
+
+New files, all under `patches/` unless noted:
+- `patches.h`: `RECOMP_PATCH`/`RECOMP_EXPORT` section attributes, the
+  `osViBlack`/`osViSwapBuffer` -> `_recomp` renames patch code needs to
+  call the stock runtime, and a `typedef int bool` shim for the freestanding
+  MIPS build (no `<stdbool.h>` under `-nostdinc`) that the already-existing
+  `recompui_event_structs.h` needs.
+- `patch_helpers.h`: `DECLARE_FUNC`, which gives one declaration valid on
+  both sides of the ABI -- a plain prototype when compiled as real MIPS
+  (`-DMIPS`, this directory's own build), the real recompiled-function
+  signature `(uint8_t* rdram, recomp_context* ctx)` otherwise (host C++).
+- `ui_funcs.h` (already existed as a placeholder for recompui's "forced
+  game includes" hook): added the actual `DECLARE_FUNC(void,
+  recomp_run_ui_callbacks);` declaration, now that there's a real patch to
+  use it.
+- `recompui_patches.c`: `RECOMP_PATCH void func_800A1858(...)` -- see
+  below.
+- `patches.toml` (project root): the second N64Recomp input, `elf_path`
+  instead of `rom_file_path`/`symbols_file_path`, `func_reference_syms_file`
+  pointed at the same `BattleTanxGASyms/battletanxga.us.rev0.syms.toml` the
+  main recompile uses so patch code can call original game functions by
+  name.
+- `Makefile`, `patches.ld`, `syms.ld`, `include/PR/*.h` already existed
+  from round 22's scaffolding (`PROGRESS.md` item 8) and needed no changes
+  -- `syms.ld` already had dummy addresses reserved for
+  `recomp_run_ui_callbacks`, `osViBlack_recomp` and `osViSwapBuffer_recomp`
+  specifically, confirming this was anticipated back then.
+
+**Patch target:** `func_800A1858` (`RecompiledFuncs/funcs_8.c:1191`, real
+address confirmed in the syms table at `0x800A1858`, size `0x78`) -- this
+game's VI-swap-throttle routine, reached once per real VI tick
+(`func_800A1290`'s VI-message dispatch -> `func_800A140C` -> here, traced
+back in round 52) and the only place that calls `osViSwapBuffer`. Fully
+reimplemented (not stubbed) from the disassembly: `recomp_run_ui_callbacks()`
+unconditionally first, then the original's real logic -- an early return if
+a `u16` "pending swap count" hasn't reached a `u16` "threshold" (both raw
+offsets into the same state pointer the original indexed, `0x1F0`/`0x1EC` --
+no recovered struct type for this yet, so read via `u16*` pointer casts
+matching the disassembly exactly rather than guessed field names), then
+`func_8007AF84(1)` (an original, un-patched game function, called by name --
+resolved through `func_reference_syms_file` like BanjoRecomp's patches call
+their own original functions), a conditional `osViBlack(0)` gated on a
+one-shot `0x1F2` flag, and finally `osViSwapBuffer(...)` and clearing the
+pending-swap counter.
+
+**Why this function and not another `[[patches.hook]]` spot:** a
+`RECOMP_PATCH` fully *replaces* a function at its real call boundary (the
+existing `jal 0x800A1858` sites already save/restore their own registers
+around a genuine call, same as any other function call) instead of
+splicing raw text into the *middle* of a function's body with no register
+preservation -- exactly the distinction round 61's regression came from.
+
+**Duplicate-symbol snag and why it's not a real problem:** the ROM's own
+recompile (`RecompiledFuncs/funcs_8.c`) still generates its own
+`func_800A1858` body too (nothing in `battletanxga.us.rev0.toml` tells it
+to skip that address) -- N64Recomp's `RECOMP_PATCH` mechanism relies on
+`recomp.h`'s `RECOMP_FUNC` being a *weak* symbol so the linker silently
+keeps whichever definition it sees first (`PatchesLib` is listed before
+`RecompiledFuncs` in `CMakeLists.txt`'s link line already, from round 22).
+That's only true for `recomp.h`'s Clang branch (`extern inline
+__attribute__((weak,noinline))`) -- the GCC branch (`__attribute__((noipa,
+...))`) has no weak linkage, so a build configured with plain GCC hits a
+hard `multiple definition of 'func_800A1858'` linker error. Confirmed this
+sandbox's default `cmake` configure silently picked up GCC and hit exactly
+that error; not a real project regression, since `CMakeLists.txt` already
+requires clang-cl specifically on Windows (see its own top-of-file NOTE)
+and this project has never targeted plain MSVC `cl.exe` or GCC on Linux as
+supported toolchains. Reconfigured a clean build with
+`-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++` to match the
+project's actual required toolchain and confirmed: `PatchesLib` builds,
+the full `BattleTanxGARecompiled` link succeeds, and disassembling the
+final binary's `func_800A1858` symbol shows it resolved to the patch's
+version (calls `recomp_run_ui_callbacks`, `func_8007AF84`, `osViBlack_recomp`,
+`osViSwapBuffer_recomp` in exactly the order the patch source has them --
+not the original's own body). Not yet confirmed against a real run --
+that needs the user's Windows machine (clang-cl + `ld.lld`/GNU `make`, or
+an equivalent driving the same three `patches/` build commands, need to be
+available there; see PROGRESS.md for what to confirm next).
+
 ## 2026-09-29, round 61 (REVERTED): recompui's per-frame UI callback pump was never wired up; a same-context mid-body injection made things worse, not better
 
 Round 60's fix cleared the last known unyielding poll loop. The game now

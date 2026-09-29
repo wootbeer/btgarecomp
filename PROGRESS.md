@@ -195,11 +195,20 @@ well-trodden, mechanical problems compared to open-ended disassembly).
    both if VI timing, timer-driven logic, or (if ever wanted) real
    Controller Pak support misbehave once this is testable on a machine
    with a real display and the ROM.
-8. **Patches** (`patches/*.c`) — game behavior that needs source-level
-   rewriting rather than a binary patch (e.g. how the UI is driven each
-   frame, controller pak access, cheat/level-select hooks), written in C
-   against the discovered function addresses and cross-compiled with
-   clang+lld targeting MIPS via N64Recomp's patch pipeline.
+8. ~~Patches~~ (`patches/*.c`) — the ELF-based toolchain (round 62:
+   `patches.h`, `patch_helpers.h`, `patches.toml`, plus round 22's
+   already-existing `Makefile`/`patches.ld`/`syms.ld`/vendored SDK headers)
+   is stood up and proven end-to-end in the sandbox: `func_800A1858`
+   (VI-swap throttle) is `RECOMP_PATCH`ed to call `recomp_run_ui_callbacks`
+   every VI tick, confirmed correctly linked into the final binary with a
+   clang-built configuration (see STATUS.md round 62 for why it must be
+   built with clang/clang-cl specifically, not GCC or plain MSVC). Not yet
+   confirmed on a real run — needs the user's Windows machine to have
+   clang-cl, `ld.lld`, and something that can drive `patches/Makefile`
+   (GNU `make`, or an equivalent invoked the same way) available so
+   CMake's `PatchesLib` custom commands can run. Further UI-driving
+   patches (controller pak access, cheat/level-select hooks) can follow
+   the same pattern once this one is confirmed working.
 
 ## How to help this along right now
 

@@ -13,6 +13,12 @@
 RecompiledFuncs/
 RecompiledPatches/
 
+# patches/ build output (patches.elf is covered by the *.elf rule below)
+patches/*.o
+patches/*.d
+patches/*.bin
+patches/*.map
+
 # Linux build output
 build/
 build-cmake/
