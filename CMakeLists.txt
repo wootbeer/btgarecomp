@@ -155,11 +155,27 @@ else()
     )
 
     # patches.elf is built by the Makefile in patches/, with clang targeting MIPS.
-    set(PATCHES_C_COMPILER "clang" CACHE STRING "C compiler used to build the game patches")
-    set(PATCHES_LD "ld.lld" CACHE STRING "Linker used to build the game patches")
+    # Windows note: neither Visual Studio's bundled "C++ Clang Compiler for
+    # Windows" nor the official llvm.org Windows installer builds include the
+    # MIPS backend (confirmed empirically -- `clang -print-targets` lists
+    # aarch64/arm/x86/riscv/wasm/bpf/nvptx but no mips on either). Ubuntu's
+    # packaged clang does have it (this is how this pipeline was verified
+    # end-to-end originally), so on Windows this routes the one `make` step
+    # through WSL instead of failing on a MIPS-less native clang. `wsl.exe`
+    # invoked with a Windows WORKING_DIRECTORY automatically translates it to
+    # the equivalent /mnt/c/... path, so no path translation is needed here.
+    if (WIN32)
+        set(PATCHES_C_COMPILER "clang" CACHE STRING "C compiler used to build the game patches (name only -- resolved inside WSL on Windows)")
+        set(PATCHES_LD "ld.lld" CACHE STRING "Linker used to build the game patches (name only -- resolved inside WSL on Windows)")
+        set(PATCHES_MAKE_COMMAND wsl.exe make)
+    else()
+        set(PATCHES_C_COMPILER "clang" CACHE STRING "C compiler used to build the game patches")
+        set(PATCHES_LD "ld.lld" CACHE STRING "Linker used to build the game patches")
+        set(PATCHES_MAKE_COMMAND make)
+    endif()
     file(GLOB PATCH_HEADERS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/patches/*.h)
     add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/patches/patches.elf
-        COMMAND make CC=${PATCHES_C_COMPILER} LD=${PATCHES_LD}
+        COMMAND ${PATCHES_MAKE_COMMAND} CC=${PATCHES_C_COMPILER} LD=${PATCHES_LD}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/patches
         DEPENDS ${PATCH_SOURCES} ${PATCH_HEADERS} ${CMAKE_SOURCE_DIR}/patches/Makefile ${CMAKE_SOURCE_DIR}/patches/patches.ld ${CMAKE_SOURCE_DIR}/patches/syms.ld
     )
