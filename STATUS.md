@@ -1,7 +1,69 @@
 # Status
 
-Last updated: 2026-09-28, in a Claude Code cloud session (a different sandbox
+Last updated: 2026-09-29, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
+
+## 2026-09-29, round 61: found why the game "hangs" black once gameplay starts -- recompui's per-frame UI callback pump was never wired up
+
+Round 60's fix cleared the last known unyielding poll loop. The game now
+boots, the menu works, and clicking into the game genuinely runs without
+crashing -- confirmed via debugger: the main game-logic thread cycles
+through many different functions each sample (not stuck anywhere), CPU
+sits at a steady ~10% (one core, matching normal per-frame work, not a
+spin), and `[sp] osSpTaskStartGo`/`Gfx task` prints (enabled via a
+temporary local diagnostic in `librecomp/src/sp.cpp`, reverted after
+verifying) confirmed the game is genuinely submitting real display lists
+every frame, alternating between two buffers as expected.
+
+But the screen goes solid black once in-game and never changes, and
+neither clicking around nor keypresses (Escape/Enter) do anything --
+including the window's own close button, which normally still works fine
+pre-game-start (confirmed: `SDL_QUIT`'s handler,
+`lib/RecompFrontend/recompinput/src/input_events.cpp:107-116`, calls
+`ultramodern::quit()` directly before the game has started, but opens a
+`recompui::open_quit_game_prompt()` confirmation dialog afterward --
+which never visibly appears or responds to any input once the game is
+running).
+
+Traced this to `recomp_run_ui_callbacks`
+(`lib/RecompFrontend/recompui/src/api/ui_api_events.cpp:102`) -- the
+function that pumps/renders recompui's UI layer (buttons, dialogs, text)
+each frame -- never being called anywhere in this project. Confirmed via
+BanjoRecomp (the reference project used throughout this whole session)
+that this is a required wiring step, not something that happens
+automatically: Banjo's `patches/recompui_patches.c` `RECOMP_PATCH`es a
+per-frame game function specifically to call it, via Banjo's full
+ELF-based `patches/` toolchain (which this project has never set up --
+`patches/` has no sources, `patches.toml` doesn't exist; see this file's
+own `[patches]` section notes). Without this call ever happening, the
+main menu's UI apparently renders through a separate, simpler path during
+startup (menu interaction was confirmed working many rounds ago), but
+nothing UI-related -- including the quit-confirmation prompt -- ever gets
+pumped again once real gameplay's own per-frame loop takes over.
+
+**Fix:** rather than standing up Banjo's full ELF-based patch toolchain
+from scratch, used the already-proven `[[patches.hook]]` mechanism to
+inject the same call directly into the game's own main per-frame loop --
+`func_8009D3A4` (entry point `func_8009EEA0`, this whole session's main
+loop thread), at its own loop-back label `L_8009D3B8` (confirmed reached
+exactly once per iteration via its own `goto L_8009D3B8`,
+`funcs_6.c:12890-12893`). `battletanxga.us.rev0.toml`:
+```
+[[patches.hook]]
+func = "func_8009D3A4"
+before_vram = 0x8009D3B8
+text = """
+    { extern void recomp_run_ui_callbacks(uint8_t *rdram, recomp_context *ctx); recomp_run_ui_callbacks(rdram, ctx); }
+"""
+```
+Verified: regenerated via the local `N64RecompCLI`, confirmed the hook
+lands correctly at the loop label, and a full `cmake -S . -B build &&
+ninja BattleTanxGARecompiled` build succeeded end-to-end including
+linking (confirming `recomp_run_ui_callbacks` resolves against
+RecompFrontend/recompui). Not yet confirmed against a real run -- if this
+works, the quit-confirmation prompt should become visible/interactive,
+and it's plausible any other in-game UI (HUD, pause menu) that was also
+silently non-functional starts working too.
 
 ## 2026-09-28, round 60: third unyielding poll loop found, same fix applied
 
