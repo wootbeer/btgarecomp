@@ -1336,31 +1336,25 @@ text = """
     { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
 """
 
-# Round 61 (STATUS.md): once in-game, the screen stays black and neither
-# clicks nor keypresses do anything, including the quit-confirmation
-# prompt opened by the window's own close button
-# (recompui::open_quit_game_prompt, librecomp/src/base/ui_state.cpp).
-# Traced this to recompui's per-frame UI callback pump
-# (recomp_run_ui_callbacks, lib/RecompFrontend/recompui/src/api/
-# ui_api_events.cpp) never being invoked once real gameplay starts --
-# nothing in this project's TOML calls it. BanjoRecomp (the reference
-# project used throughout this whole session) wires this up via its full
-# ELF-based patches/ mechanism, RECOMP_PATCH-ing a per-frame game function
-# to call it (patches/recompui_patches.c) -- but this project has never
-# set up that heavier toolchain (patches/ has no sources, patches.toml
-# doesn't exist; see the [patches] section's own notes above). The
-# existing, already-used [[patches.hook]] mechanism achieves the exact
-# same effect more simply: inject the call directly into the game's own
-# main per-frame loop, which this whole session has been tracing as
-# func_8009D3A4 (entry point func_8009EEA0's own body) -- specifically at
-# its own loop-back label L_8009D3B8, reached exactly once per iteration
-# (confirmed via funcs_6.c:12890-12893's own `goto L_8009D3B8`).
-[[patches.hook]]
-func = "func_8009D3A4"
-before_vram = 0x8009D3B8
-text = """
-    { extern void recomp_run_ui_callbacks(uint8_t *rdram, recomp_context *ctx); recomp_run_ui_callbacks(rdram, ctx); }
-"""
+# Round 61 (STATUS.md, REVERTED): tried injecting a call to recompui's
+# per-frame UI callback pump (recomp_run_ui_callbacks,
+# lib/RecompFrontend/recompui/src/api/ui_api_events.cpp) directly into
+# func_8009D3A4's loop-back label via [[patches.hook]], to fix the
+# unresponsive black screen once in-game. Tested: made things worse (a
+# real Windows-detected app hang, versus merely-unresponsive-but-stable
+# before). Root cause: recomp_run_ui_callbacks can call
+# LOOKUP_FUNC(...)(rdram, ctx) -- executing arbitrary real game code
+# (whatever UI callback is queued) using the *same* ctx as whatever's
+# mid-execution at the injection point. [[patches.hook]] splices raw text
+# into the middle of an existing function's body, not a real call
+# boundary with proper register save/restore -- so nothing protects
+# func_8009D3A4's own register-resident locals (s0-s7, used throughout
+# its real logic) from being clobbered by whatever a fired callback does.
+# Reverted. Wiring this up correctly likely needs BanjoRecomp's actual
+# approach: a full RECOMP_PATCH (complete function replacement, which
+# gets proper compiler-managed register preservation at its own call
+# boundary) via the ELF-based patches/ toolchain this project has never
+# set up -- not a same-context mid-body injection.
 
 # Round 52 diagnostic (STATUS.md): func_800988E8 has been stuck at its very
 # first osRecvMesg (mq vram 0x80217030) since round 47, unmoved by rounds

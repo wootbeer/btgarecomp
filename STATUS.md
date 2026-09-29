@@ -3,7 +3,7 @@
 Last updated: 2026-09-29, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
-## 2026-09-29, round 61: found why the game "hangs" black once gameplay starts -- recompui's per-frame UI callback pump was never wired up
+## 2026-09-29, round 61 (REVERTED): recompui's per-frame UI callback pump was never wired up; a same-context mid-body injection made things worse, not better
 
 Round 60's fix cleared the last known unyielding poll loop. The game now
 boots, the menu works, and clicking into the game genuinely runs without
@@ -60,10 +60,34 @@ Verified: regenerated via the local `N64RecompCLI`, confirmed the hook
 lands correctly at the loop label, and a full `cmake -S . -B build &&
 ninja BattleTanxGARecompiled` build succeeded end-to-end including
 linking (confirming `recomp_run_ui_callbacks` resolves against
-RecompFrontend/recompui). Not yet confirmed against a real run -- if this
-works, the quit-confirmation prompt should become visible/interactive,
-and it's plausible any other in-game UI (HUD, pause menu) that was also
-silently non-functional starts working too.
+RecompFrontend/recompui).
+
+**On a real run: made things worse, not better.** The screen behaved the
+same (black, unresponsive), but Windows now flagged a genuine app hang
+(`Hang type: Top level window is idle`) where before it had been merely
+unresponsive-but-stable (no hang flagged, steady ~10% CPU, message pump
+confirmed running). Root cause: `recomp_run_ui_callbacks` can call
+`LOOKUP_FUNC(cur_callback.callback.callback)(rdram, ctx)` -- executing
+whatever real, compiled game function is queued as a UI callback (e.g.
+the quit prompt's button handlers), using the *same* `ctx` as whatever's
+mid-execution at the call site. `[[patches.hook]]` splices raw C text into
+the *middle* of an existing function's body -- it is not a real call
+boundary with compiler-managed register save/restore -- so nothing
+protects `func_8009D3A4`'s own register-resident locals (`s0`-`s7`, used
+throughout its real per-frame logic) from being clobbered by whatever a
+fired callback does. **Reverted** (`battletanxga.us.rev0.toml`, replaced
+with an explanatory comment in place of the hook).
+
+Real fix likely needs BanjoRecomp's actual approach: a full `RECOMP_PATCH`
+(complete function *replacement*, which gets proper register preservation
+at its own genuine call boundary, since the call site it's inserted at was
+already a real `jal` in the original code) via the ELF-based `patches/`
+toolchain this project has never set up (`patches/` has no sources,
+`patches.toml` doesn't exist) -- not a same-context mid-body injection via
+`[[patches.hook]]`. Setting that toolchain up (a cross-compiling
+clang+ld.lld pipeline, `patches.toml`, `syms.ld`, etc., matching
+BanjoRecomp's own `patches/` directory) is a real, scoped next step for
+whoever picks this up, distinct from everything else in this session.
 
 ## 2026-09-28, round 60: third unyielding poll loop found, same fix applied
 
