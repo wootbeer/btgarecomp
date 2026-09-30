@@ -3,6 +3,60 @@
 Last updated: 2026-09-30, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-30, round 65 (part 2): the round 65 hook unblocked func_800A1290 exactly once, then re-stuck -- root cause was single-message drain starvation, not a missing hook
+
+Round 65's new hook (func_8009D3A4's loop-back label) did have a real
+effect on a live run: `func_800A1858`'s own diagnostic
+(`[BTGA DEBUG v3]`) printed once where it had printed zero times before --
+proof `func_800A1290`'s chain genuinely ran once more. But it then went
+straight back to being permanently parked at the exact same `osRecvMesg`
+(confirmed via a flagged-thread Continue+Break-All check), and the
+diagnostic never printed again even after a patient real-time wait.
+
+Checked `events_context.vi`'s actual live state via the debugger (raw
+struct field access -- `events_context.vi.states[events_context.vi.cur_state].mq`
+and `...retrace_count`, *not* `get_cur_state()`, which is a real C++
+method: evaluating it as a live function call while the app's many
+cooperative-scheduler threads were paused triggered "An attempt to abort
+the evaluation failed. The process is now in an indeterminate state." --
+had to fully stop debugging and confirm no orphaned process was left in
+Task Manager before continuing). Confirmed `mq` correctly resolves to
+`0x80222930` (a real, valid, non-null pointer -- not the "never
+initialized" scenario that would've been the simpler explanation) and
+`retrace_count=1`, meaning ultramodern's VI thread (`ultramodern/src/
+events.cpp:187`) really should be enqueueing a fresh message for this
+queue on every single VI tick, not just once.
+
+Reading `ultramodern/src/mesgqueue.cpp` found the actual cause:
+`external_messages` is one shared FIFO (`moodycamel::BlockingConcurrentQueue`)
+fed by *every* event source -- VI, AI, SP, DP, Timer, SI all call
+`enqueue_external_message_src` into the same queue. `yield_self_1ms`
+(what `btga_yield_via_priority_drop` was calling) only pops a single
+entry per call (`wait_for_external_message_timed`, `mesgqueue.cpp:61-68`).
+If any other source produces faster than our once-per-Game2-loop-
+iteration drain rate, the specific VI message `func_800A1290` is waiting
+for can end up stuck arbitrarily far back in FIFO order behind a growing
+backlog of unrelated messages -- fully explaining one lucky early
+delivery (round 65's hook happened to run before any backlog existed)
+followed by permanent starvation once one built up.
+
+**Fix:** `btga_yield_via_priority_drop` (`src/main/scheduler_workaround.cpp`)
+now calls `dequeue_external_messages` (a plain, non-`extern "C"` but
+ordinarily-linkable C++ function already defined in `mesgqueue.cpp:40`,
+just never exposed via a header -- declared a matching prototype directly)
+instead of `yield_self_1ms`. That function drains the *entire* queue in
+one pass (`while (external_messages.try_dequeue(...))`) rather than one
+entry, so it can't starve this way regardless of relative production
+rates between event sources. This is a strict improvement for the three
+existing hook sites too (`func_80098B40`, `func_800A1384` x2,
+`func_80079FF0`), not just the new one -- draining more thoroughly can
+only help them, never hurt.
+
+Verified: full `ninja BattleTanxGARecompiled` build succeeded end-to-end,
+including linking against `dequeue_external_messages` with a
+hand-declared prototype (confirms the C++ name-mangling matches the real
+symbol). Not yet confirmed against a real run.
+
 ## 2026-09-30, round 65: a fourth unyielding-poll-loop-class deadlock, this time a starved external-message drain -- fixed by moving the existing yield hook to code the game actually still runs
 
 Round 64's merged-function fix got the game past `0x800CDAAC`, but the

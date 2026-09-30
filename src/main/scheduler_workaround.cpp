@@ -39,9 +39,16 @@
 
 #include "ultramodern/ultramodern.hpp"
 
-extern "C" void yield_self_1ms(uint8_t* rdram);
 extern "C" int32_t osGetThreadPri(uint8_t* rdram, int32_t t);
 extern "C" void osSetThreadPri(uint8_t* rdram, int32_t t, int32_t pri);
+
+// Round 65 (part 2): not extern "C" and not declared in any header, but has
+// ordinary external C++ linkage (ultramodern/src/mesgqueue.cpp:40) -- drains
+// every currently-pending message in one pass, unlike yield_self_1ms's own
+// wait_for_external_message_timed (mesgqueue.cpp:61-68), which pops at most
+// one. See btga_yield_via_priority_drop below for why that distinction
+// turned out to matter.
+void dequeue_external_messages(uint8_t* rdram);
 
 // Round 52 diagnostic: traced the full chain that's supposed to unblock
 // func_800988E8 -- ultramodern's VI thread should enqueue an external
@@ -71,10 +78,24 @@ static void btga_debug_check_vi_dispatch(uint8_t* rdram) {
     fflush(stdout);
 }
 
+// Round 65 (part 2, STATUS.md): the round 65 fix (a fourth hook, at
+// func_8009D3A4's loop-back label) unblocked func_800A1290 exactly once,
+// then it went straight back to being permanently stuck at the same
+// osRecvMesg. Root cause: external_messages is one shared FIFO fed by
+// *every* source (VI, AI, SP, DP, Timer, SI -- mesgqueue.cpp's own
+// enqueue_external_message_src callers), and yield_self_1ms only pops a
+// single entry per call. With other sources producing faster than our
+// once-per-loop-iteration drain rate, the VI message func_800A1290 is
+// waiting for can get stuck arbitrarily far back in FIFO order behind a
+// growing backlog of unrelated messages -- explaining a single lucky
+// early delivery (before any backlog existed) followed by permanent
+// starvation once one built up. dequeue_external_messages drains the
+// entire queue in one pass instead of one entry, which can't starve this
+// way regardless of relative production rates.
 extern "C" void btga_yield_via_priority_drop(uint8_t* rdram) {
     btga_debug_check_vi_dispatch(rdram);
 
-    yield_self_1ms(rdram);
+    dequeue_external_messages(rdram);
 
     int32_t saved_pri = osGetThreadPri(rdram, 0);
     osSetThreadPri(rdram, 0, 0);
