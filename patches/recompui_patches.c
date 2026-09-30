@@ -7,6 +7,11 @@
 // call into the rest of the recompiled game rather than a native stub.
 extern void* func_8007AF84(s32 flag);
 
+// Round 65: src/game/vi_dispatch_diag.cpp, called unconditionally every
+// real VI tick from here (see that file for why -- round 52's equivalent
+// diagnostic only fires from code paths this game no longer revisits).
+extern void btga_debug_vi_dispatch_live(void);
+
 // func_800A1858 (RecompiledFuncs/funcs_8.c) is this game's VI-swap-throttle
 // routine: it's reached once per real VI tick (func_800A1290's VI-message
 // dispatch -> func_800A140C -> here), and is the only place that ever calls
@@ -30,6 +35,7 @@ extern void* func_8007AF84(s32 flag);
 //   0x1F2 (u16): one-shot "unblank display" flag.
 RECOMP_PATCH void func_800A1858(void* state) {
     recomp_run_ui_callbacks();
+    btga_debug_vi_dispatch_live();
 
     u16* swap_pending = (u16*) ((u8*) state + 0x1F0);
     u16* swap_threshold = (u16*) ((u8*) state + 0x1EC);
