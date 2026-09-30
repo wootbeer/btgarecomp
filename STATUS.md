@@ -1,7 +1,112 @@
 # Status
 
-Last updated: 2026-09-29, in a Claude Code cloud session (a different sandbox
+Last updated: 2026-09-30, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
+
+## 2026-09-30, round 63: round 62's fix confirmed working correctly, but a separate, pre-existing render-freeze bug is now the actual blocker
+
+First, real Windows toolchain setup problems had to be solved before round 62
+could even be tested (all fixed, documented here since they'll recur for
+anyone else setting this up): neither Visual Studio's bundled "C++ Clang
+Compiler for Windows" nor the official llvm.org Windows installer include
+the MIPS backend (`clang -print-targets` lists aarch64/arm/x86/riscv/wasm/
+bpf/nvptx on both, no mips) -- fixed by routing the `patches/` build through
+WSL specifically on Windows (`CMakeLists.txt`, `PATCHES_MAKE_COMMAND`).
+Separately, live debugging the running game needed: (1) `Debug -> Attach to
+Process` with the code type explicitly forced to **Native** (it was
+defaulting to "Automatically determine," which silently produced a
+non-functional debug session -- empty call stacks and "the current frame
+does not support evaluating expressions" for *every* thread, not just the
+one being investigated); (2) a genuine Debug build (`CMAKE_BUILD_TYPE`
+was cached as `Release` from early in this project's history --
+`cmake -B build -DCMAKE_BUILD_TYPE=Debug` was needed before the debugger
+could unwind any stack at all, confirmed via Debug -> Windows -> Modules
+showing "Binary was not built with debug information" beforehand).
+
+**Round 62's fix is confirmed correct on a real run**, via multiple
+independent signals: the console's `[BTGA DEBUG]` print now shows
+`is_game_started=1` (previously never seen), and behavior is no longer
+deterministic run-to-run in the way a permanently-inert callback queue
+would produce -- one run reached and got stuck on the static 3DO
+publisher splash image (never seen before this fix), other runs still show
+plain black. This is consistent with round 61's theory being *right* that
+`recomp_run_ui_callbacks` needing to fire is what let the "start game"
+click's queued transition actually happen for the first time, genuinely
+advancing the boot sequence past where it could ever previously reach.
+
+**But the underlying frozen-screen symptom itself persists**, and a live
+debugging session (once the toolchain issues above were fixed) shows this
+is a *different*, likely pre-existing bug, not something round 62
+introduced or something UI-callback-shaped:
+- The real per-frame game-logic thread (`func_8009EEA0` -> `func_8009D3A4`
+  -> `func_8007A0A0` -> `func_8007A818`) is confirmed healthy, not
+  deadlocked -- repeated Continue+Break-All samples show it genuinely
+  executing different lines each time, same as the established-good
+  baseline from rounds 50-60.
+- `[sp] osSpTaskStartGo`/`Gfx task` prints (the same temporary diagnostic
+  from round 60) confirm real gfx tasks are still being submitted
+  continuously while frozen. **This is not new evidence of health** --
+  the exact same signature (continuous submission, frozen screen) was
+  already the confirmed state in round 61 *before* today's fix, so this
+  alone doesn't distinguish "boot stuck" from "real gameplay stuck." The
+  two repeating buffer addresses (`0x801293E0`/`0x80129428`) are most
+  likely just this game's fixed pair of framebuffers reused for every
+  frame regardless of content -- their repetition isn't diagnostic of
+  whether the visible picture is actually changing.
+- No GPU driver TDR/reset in Windows Event Viewer, no startup warnings
+  from the graphics backend, and the host's SDL event loop is confirmed
+  genuinely alive (USB controller hot-plug/unplug is detected and logged
+  live while the screen is frozen) -- rules out a full application hang
+  or a GPU device-removed scenario.
+- `RT64::PresentQueue::threadLoop()`'s own internals aren't visible in the
+  debugger (collapsed under "[External Code]" -- RT64 likely lacks debug
+  info regardless of this project's own `CMAKE_BUILD_TYPE`). `rt64.log`
+  doesn't get created by this project's integration at all (that log path
+  is wired up in `RT64::Application`'s own standalone-player code path,
+  which this project's `lib/RecompFrontend/recompui/src/renderer/
+  rt64_render_context.cpp` integration doesn't appear to use), so that
+  avenue for RT64-side diagnostics is a dead end as currently wired.
+- `func_8007A818` (`RecompiledFuncs/funcs_0.c:6186`) has a real,
+  suspicious-looking construct right at its start (`0x8007A824`-
+  `0x8007A828`): `$t0` is loaded from `[$a1+0xB0]` exactly once, then a
+  `bne $t0, $a3, L_8007A828` loop branches back to *itself* with `$t0`
+  never reloaded inside the loop -- a genuinely unconditional infinite
+  spin if `$t0 != -1` (`$a3`) the first time it's checked, same general
+  shape as the scheduler-gap bugs fixed in rounds 50-53/60. **Not yet
+  confirmed this is actually being hit** -- the function's own varying
+  line numbers across breaks are equally explained by its other,
+  genuinely-bounded logic below this point (a small fixed-iteration
+  search over up to 3 fields at `+0xB2`/`+0xB4`/`+0xB6`, repeated for what
+  looks like multiple controller-status channels). Needs a real breakpoint
+  at `0x8007A828` specifically (not just sampled Break-All snapshots) to
+  confirm whether it's ever actually entered during the freeze, before
+  concluding this is the cause rather than a red herring.
+
+**Leading theories for next session, not yet tested:**
+1. The already-documented USA boot-timing race (`patches/README.md`) --
+   `osContInit` called before libultra's VI-timer list finishes
+   initializing, per two independent emulator projects' own writeups
+   (n64js PR #123, mupen64plus-core issue #283). The "stuck exactly on the
+   boot/publisher splash" symptom matches this well. Not yet located in
+   this ROM's own symbol map (same status as when `patches/README.md` was
+   originally written) -- next step would be finding the real equivalent
+   of n64js's patched branch (right after the IPL3 checksum check) in this
+   game's actual boot code, which the resident-code addresses established
+   very early in this project (`syms/rom_info.md`) should make tractable
+   now that real symbols/disassembly exist for far more of the ROM than
+   when that README note was first written.
+2. RT64's HLE graphics-command interpreter failing to correctly process
+   something in this game's specific display lists (an unusual GBI/F3D
+   microcode variant or command sequence), silently leaving the
+   framebuffer showing whatever was last successfully drawn while still
+   "succeeding" at the task-submission level every frame. Harder to
+   pursue without GPU-level tooling (RenderDoc/PIX) this session didn't
+   attempt.
+
+Either way: **round 62's actual deliverable (the ELF patches toolchain and
+the `recomp_run_ui_callbacks` wiring) should be considered done and
+correct** -- what's left is a distinct, likely pre-existing rendering/boot
+bug that happened to be masked by the UI-callback gap until now.
 
 ## 2026-09-29, round 62: stood up the ELF-based `patches/` toolchain and properly wired `recomp_run_ui_callbacks` via a real RECOMP_PATCH
 
