@@ -3,6 +3,41 @@
 Last updated: 2026-09-30, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-30, round 64: the "render freeze" wasn't a render bug -- it was a tenth merged-function boundary the game hadn't reached until round 62's fix let it
+
+Round 63 ended with a live theory (RT64 HLE gap, or the documented USA
+boot-timing race) for why the screen stayed frozen despite healthy game
+logic and continuous gfx task submission. Turned out to be neither.
+
+While setting a real breakpoint to check round 63's spin-loop suspicion in
+`func_8007A818` (`RecompiledFuncs/funcs_0.c:6198`), continuing past it let
+real time pass -- and the game's own boot sequence, now actually able to
+progress thanks to round 62's `recomp_run_ui_callbacks` fix, ran far enough
+to hit a genuinely new crash: `Failed to find function at 0x800CDAAC` /
+`Assertion failed: false, ... librecomp/src/overlays.cpp, line 368`
+(librecomp's `abort()` path for an unresolved indirect call) -- the exact
+same failure mode as every prior merged-function-boundary bug this project
+has fixed (rounds 39-46, 54-56, 59). The "frozen screen" was never a
+rendering bug at all: the game was stuck *earlier*, in a state that never
+called this address, until round 62 let it advance far enough to actually
+reach and crash on it. Round 63's `func_8007A818`/USA-boot-race/RT64
+theories are retired as red herrings -- noted here so no one re-investigates
+them.
+
+`func_800CD970` (declared `0x400` bytes) turned out to be twelve functions
+back to back, with `0x800CDAAC` (the crashing indirect-call target) as the
+third. Verified with the same automated `jr $ra`-boundary scan used for
+rounds 56/59's multi-way splits (parse every instruction address, propose a
+boundary right after each `jr $ra` + delay slot, confirm no branch/jump
+crosses a proposed boundary) -- clean with no violations, sizes summing to
+exactly `0x400`. Fixed via the normal `syms.toml` split (twelve entries
+replacing one, `BattleTanxGASyms/battletanxga.us.rev0.syms.toml`), no
+`manual_funcs`/`ignored` needed. Verified: regenerated via the local
+`N64Recomp` (1330 functions, no errors), confirmed all eleven new functions
+compile separately (`RecompiledFuncs/funcs_13.c:4846` on), and a full
+`cmake . && ninja BattleTanxGARecompiled` build succeeded end-to-end
+including linking. Not yet confirmed against a real run.
+
 ## 2026-09-30, round 63: round 62's fix confirmed working correctly, but a separate, pre-existing render-freeze bug is now the actual blocker
 
 First, real Windows toolchain setup problems had to be solved before round 62

@@ -789,7 +789,23 @@ functions = [
     { name = "func_800CCEC4", vram = 0x800ccec4, size = 0x86c },
     { name = "func_800CD730", vram = 0x800cd730, size = 0x12c },
     { name = "func_800CD85C", vram = 0x800cd85c, size = 0x110 },
-    { name = "func_800CD970", vram = 0x800cd970, size = 0x400 },
+    # Round 64 (STATUS.md): merged-function boundary, a twelve-way split.
+    # "Failed to find function at 0x800CDAAC" -- automated jr-$ra boundary
+    # scan (same method as rounds 56/59) over the original 0x400-byte range
+    # found 12 clean sub-functions with no branch/jump crossing any
+    # proposed boundary; sizes sum to exactly 0x400.
+    { name = "func_800CD970", vram = 0x800cd970, size = 0x108 },
+    { name = "func_800CDA78", vram = 0x800cda78, size = 0x34 },
+    { name = "func_800CDAAC", vram = 0x800cdaac, size = 0x14 },
+    { name = "func_800CDAC0", vram = 0x800cdac0, size = 0x34 },
+    { name = "func_800CDAF4", vram = 0x800cdaf4, size = 0x2c },
+    { name = "func_800CDB20", vram = 0x800cdb20, size = 0x28 },
+    { name = "func_800CDB48", vram = 0x800cdb48, size = 0x3c },
+    { name = "func_800CDB84", vram = 0x800cdb84, size = 0x14 },
+    { name = "func_800CDB98", vram = 0x800cdb98, size = 0x44 },
+    { name = "func_800CDBDC", vram = 0x800cdbdc, size = 0xf0 },
+    { name = "func_800CDCCC", vram = 0x800cdccc, size = 0x40 },
+    { name = "func_800CDD0C", vram = 0x800cdd0c, size = 0x64 },
     { name = "func_800CDD70", vram = 0x800cdd70, size = 0x418 },
     { name = "func_800CE188", vram = 0x800ce188, size = 0x488 },
     { name = "func_800CE610", vram = 0x800ce610, size = 0x16c },
