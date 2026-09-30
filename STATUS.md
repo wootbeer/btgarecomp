@@ -3,6 +3,73 @@
 Last updated: 2026-09-30, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-09-30, round 65: a fourth unyielding-poll-loop-class deadlock, this time a starved external-message drain -- fixed by moving the existing yield hook to code the game actually still runs
+
+Round 64's merged-function fix got the game past `0x800CDAAC`, but the
+screen went straight back to a deterministic black-screen freeze (same
+three `[sp] Gfx task` lines every run, then silence -- confirmed via a
+patient real-time wait, not just a debugger pause artifact). Added a live
+diagnostic (`src/game/vi_dispatch_diag.cpp`, called every real VI tick from
+the `func_800A1858` `RECOMP_PATCH`) to get an unbiased read on `mq
+0x80222930`'s state, since round 52's existing diagnostic
+(`btga_debug_check_vi_dispatch`) only ever fires from inside the old
+`func_800A1384`/`func_80079FF0` spin-loop hooks the game no longer
+revisits -- its silence was never actually informative about this freeze.
+The new diagnostic printed *zero* times over a full minute, meaning
+`func_800A1858` itself had stopped being called entirely -- the whole
+`func_800A1290` (VI-message dispatch) -> `func_800A140C` -> `func_800A1858`
+chain had halted, while the game's *other* independent per-frame chain
+(`func_8009EEA0` -> `func_8009D3A4` -> `func_8007A0A0` -> `func_8007A818`,
+"Game 2" in the debugger) stayed confirmed healthy throughout (repeated
+Continue+Break-All samples kept landing on different lines -- verified
+`func_8007A818`'s own suspicious-looking loop from round 63 can't actually
+be an infinite spin either, since it's bounded by an unconditionally-
+incrementing `slti ..., 0x3` index check that must exit within 4
+iterations regardless of memory contents; that was a red herring, not a
+bug).
+
+Debugger confirmed (flagging the thread row to track it precisely across
+Continue+Break-All cycles, since two threads share the "Game 3" label and
+are easy to mix up) that `func_800A1290`'s thread was genuinely and
+permanently parked at its very first `osRecvMesg`, not merely idle between
+messages. Root cause: the same drain gap documented at
+`btga_yield_via_priority_drop`'s own definition
+(`src/main/scheduler_workaround.cpp`) and round 52's notes below --
+ultramodern's VI thread only enqueues into an intermediate
+`external_messages` queue; delivery into a real `OSMesgQueue` (waking a
+blocked `osRecvMesg`) only happens when *some* game thread calls
+`yield_self_1ms`/`wait_for_external_message`. The three existing yield
+hooks (`func_80098B40`, `func_800A1384`, `func_80079FF0` -- rounds 50/51/53/
+60) provided that drain as a side effect of fixing their own unrelated
+spins, but round 64's fix let the game advance past all three of those
+functions entirely, so nothing was left draining the queue at all once
+that happened.
+
+**Fix:** moved (really, added a fourth instance of) the same
+`btga_yield_via_priority_drop` hook to `func_8009D3A4`'s own loop-back
+label (`L_8009D3B8`) -- the per-iteration re-entry point of the game's
+*other*, still-healthy main per-frame loop (`func_8007A818`'s thread).
+This is explicitly not a repeat of round 61's mistake:
+`btga_yield_via_priority_drop` takes only `rdram`, never touches `ctx`, so
+unlike `recomp_run_ui_callbacks` (which manipulates `ctx` and invokes
+arbitrary game code via `LOOKUP_FUNC` using that same `ctx`) it can't
+corrupt whatever register-resident locals the hooked function's own logic
+is using -- the exact property that already made the three earlier yield
+hooks safe via `[[patches.hook]]` throughout rounds 50-60. (A short-lived
+detour: first tried wiring the drain into the `func_800A1858`
+`RECOMP_PATCH` itself, before realizing that function is *downstream* of
+the very thread that's stuck -- if `func_800A1290` never wakes, it never
+dispatches down to `func_800A1858`, so a fix placed there would never
+execute. Reverted that attempt; the round 65 diagnostic function stays, and
+should start actually printing once this real fix lets the chain run
+again.)
+
+Verified: regenerated via the local `N64Recomp` (1330 functions, no
+errors), confirmed the hook lands exactly at `L_8009D3B8` in
+`RecompiledFuncs/funcs_6.c`, and a full `cmake . && ninja
+BattleTanxGARecompiled` build succeeded end-to-end including linking. Not
+yet confirmed against a real run.
+
 ## 2026-09-30, round 64: the "render freeze" wasn't a render bug -- it was a tenth merged-function boundary the game hadn't reached until round 62's fix let it
 
 Round 63 ended with a live theory (RT64 HLE gap, or the documented USA

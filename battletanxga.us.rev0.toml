@@ -1356,6 +1356,36 @@ text = """
 # boundary) via the ELF-based patches/ toolchain this project has never
 # set up -- not a same-context mid-body injection.
 
+# Round 65 (STATUS.md): after round 64's merged-function fix let the game
+# progress further, func_800A1290 (the VI-message dispatcher thread) was
+# found permanently stuck at its own first osRecvMesg -- not merely idle
+# between messages, confirmed by repeated debugger samples that never
+# moved. Traced to the same drain gap documented above
+# (btga_yield_via_priority_drop's own comment, and the round 52 note
+# below): the VI thread only ever enqueues into ultramodern's intermediate
+# `external_messages` queue: it's only delivered into a real OSMesgQueue
+# (waking a blocked osRecvMesg) once some game thread calls
+# yield_self_1ms/wait_for_external_message. The three existing yield hooks
+# above (func_80098B40, func_800A1384, func_80079FF0) provided that drain
+# incidentally, but the game no longer executes any of that code once
+# round 64 let it past -- so nothing is left draining the queue at all.
+# This is NOT the round 61 mistake: btga_yield_via_priority_drop takes
+# only `rdram`, never touches `ctx`, so it can't corrupt whatever the
+# hooked function's own register-resident locals are doing (unlike
+# recomp_run_ui_callbacks, which manipulates ctx and invokes arbitrary
+# game code via LOOKUP_FUNC using that same ctx). Hooked at
+# func_8009D3A4's own loop-back label (L_8009D3B8, confirmed reached
+# exactly once per iteration of the game's other, still-healthy main
+# per-frame loop -- func_8009EEA0 -> func_8009D3A4 -> func_8007A0A0 ->
+# func_8007A818, the thread this whole session keeps finding varying
+# lines in, never stuck).
+[[patches.hook]]
+func = "func_8009D3A4"
+before_vram = 0x8009D3B8
+text = """
+    { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
+"""
+
 # Round 52 diagnostic (STATUS.md): func_800988E8 has been stuck at its very
 # first osRecvMesg (mq vram 0x80217030) since round 47, unmoved by rounds
 # 50-52's fixes. Reading source traced this queue's registration to
