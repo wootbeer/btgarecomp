@@ -996,14 +996,14 @@ text = """
 """
 
 [[patches.hook]]
-func = "Fportoff"
+func = "Fdefa"
 before_vram = 0x800fddb0
 text = """
     if (S32(ctx->r6) != 0) { lo = S32(S64(S32(ctx->r2)) / S64(S32(ctx->r6))); hi = S32(S64(S32(ctx->r2)) % S64(S32(ctx->r6))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "Fportoff"
+func = "Ftempo"
 before_vram = 0x800fdf00
 text = """
     if (S32(ctx->r4) != 0) { lo = S32(S64(S32(ctx->r3)) / S64(S32(ctx->r4))); hi = S32(S64(S32(ctx->r3)) % S64(S32(ctx->r4))); } else { lo = 0; hi = 0; }

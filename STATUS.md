@@ -3,6 +3,32 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 92: audio tasks run; the music sequencer's command handlers split at libmus's command table
+
+Round 91's run got further: `[sp] Audio task: 801EC768` now alternates
+with gfx tasks, so `M_AUDTASK`s are submitted and run through the
+recompiled `n_aspMain`. Then `Failed to find function at 0x800FE1C4`,
+inside the entry named `Ftron`. Round 83 predicted this: with audio live,
+the libmus music sequencer runs, and its command handlers are reached
+through a pointer table. The syms had several handlers merged per
+named entry.
+
+Found the libmus command table at `0x80126590`: 45 pointers, matching
+libmus's 45 sequence commands. Every pointer that already landed on a
+named entry agreed with libmus's command order (slot 0 `Fstop`, 3
+`Fportoff`, 10 `Fviboff`, 18 `Fenvon`, 20 `Ftron`, 24 `Fwobbleoff`, 26
+`Fveloff`, 29 `Fstereo`, 32 `Fprint`, 42 `Fchangefx`; slot 16
+`Fenvelope` is round 84's recovered `func_800FAE70`). Split the 10
+merged entries at the 32 table pointers that weren't function starts,
+naming each piece by its libmus command. Every split point follows a
+`jr $ra` + delay slot with no crossing branch. The two divide-guard
+hooks keyed to `Fportoff` (`0x800fddb0`, `0x800fdf00`) moved to `Fdefa`
+and `Ftempo`.
+
+Verified in-sandbox: regenerated (1578 = 1546 + 32 functions, no
+errors), hook/patch landings and switches identical, full build links.
+Not yet run.
+
 ## 2026-10-01, round 91: the audio pipeline runs -- one microcode dispatch target was wrongly excluded
 
 Round 90's first run aborted at game start with `Unhandled jump target
