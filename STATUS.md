@@ -1,7 +1,66 @@
 # Status
 
-Last updated: 2026-09-30, in a Claude Code cloud session (a different sandbox
+Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
+
+## 2026-10-01, round 66: round 65's whole investigation was a red herring -- the real deadlock was a fifth unyielding-poll-loop, structurally different from the first four
+
+Round 65 parts 1-2 (the `func_8009D3A4` hook, then the full-queue-drain
+fix) made no visible difference -- console output stayed byte-for-byte
+identical across both changes, confirmed via multiple fresh clean-terminal
+runs. Rather than keep guessing, added live instrumentation directly in
+`ultramodern`'s own message-passing code (temporary, submodule-local,
+reverted after -- same pattern as the earlier `sp.cpp` gfx-task diagnostic
+from round 60): round 65 part 3 confirmed the VI thread keeps attempting
+to enqueue a message every tick, continuously, forever (`cur_state->mq`
+stays valid at `0x80222930`, never null). Round 65 parts 4-5 then
+instrumented `dequeue_external_messages` directly and found the real
+picture: delivery to `0x80222930` was **not** stuck after the first
+message -- it kept succeeding repeatedly (20+ successful `do_send` calls
+to that exact queue over one run, confirmed via an uncapped, targeted log
+line). `func_800A1290`'s own repeated "stuck at the same `osRecvMesg`"
+debugger samples were never evidence of a real deadlock -- a fast,
+healthy event dispatcher that spends nearly all its time idle between
+messages looks identical to a stuck one under casual Break-All sampling.
+**Rounds 65 parts 1-2's hook and drain-starvation fix are harmless but
+were never the actual fix** -- left in place (draining the whole queue in
+one pass is a strict improvement regardless), but the real bug was
+elsewhere the entire time.
+
+Traced the actual blocker by reading `func_800A140C` (what
+`func_800A1290` dispatches to, confirmed earlier) in full: it gates
+building a new gfx task on a flag at `0x801147E8`, read via
+`func_80097660` and only proceeding if non-zero. Only one other function
+(`func_80097844`) ever writes a non-zero value there; `func_800976AC`
+clears it back to 0. Reading `func_80097844` found a *fifth*
+unyielding-poll-loop-class bug (same family as rounds 50/51/53/60's
+`func_80098B40`/`func_800A1384`/`func_80079FF0`), but structurally
+different in a way that matters: those three all re-read memory every
+iteration (`while (*ptr == 0) {}`), so a bare yield was enough. This one
+loads the flag into `$v0` *once* before the loop
+(`RecompiledFuncs/funcs_5.c:5332`), then `bne $v0, zero, L_800978D8`
+(`:5344`) spins on that stale register copy forever -- never rereading
+memory, no OS call inside -- so a plain yield would only turn a
+CPU-pegging infinite loop into a yielding-but-still-infinite one. This
+function only reaches the spin if called while the flag is already
+non-zero (a race the cooperative, one-thread-at-a-time scheduler can
+expose even where real N64 hardware's actual RSP/CPU timing apparently
+never did).
+
+**Fix:** `battletanxga.us.rev0.toml`'s hook at this loop (`func_80097844`,
+`before_vram = 0x800978D8`) does two things, not one: calls
+`btga_yield_via_priority_drop` (to actually let `func_800976AC`'s thread
+run and clear the flag), *and* recomputes `ctx->r2` via the exact same
+`lui`+`lw` the loop's own entry used
+(`ctx->r2 = MEM_W(S32(0x8011 << 16), 0x47E8);`), so the loop can actually
+observe the flag once it clears instead of checking a permanently-stale
+copy.
+
+Verified: regenerated via the local `N64Recomp` (1330 functions, no
+errors), confirmed the hook lands exactly at `L_800978D8`
+(`RecompiledFuncs/funcs_5.c:5341-5342`), and a full `cmake . && ninja
+BattleTanxGARecompiled` build succeeded end-to-end including linking. Not
+yet confirmed against a real run.
 
 ## 2026-09-30, round 65 (part 2): the round 65 hook unblocked func_800A1290 exactly once, then re-stuck -- root cause was single-message drain starvation, not a missing hook
 

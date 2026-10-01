@@ -1336,6 +1336,33 @@ text = """
     { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
 """
 
+# Round 66 (STATUS.md): a fifth unyielding-poll-loop-class deadlock, but
+# structurally different from func_80098B40/func_800A1384/func_80079FF0:
+# those all re-read memory each iteration (a real `while (*ptr == 0) {}`),
+# so a bare yield was sufficient. This one loads the 0x801147E8 "task
+# ready" flag into $v0 *once* before the loop, then
+# `bne $v0, zero, L_800978D8` spins on that stale register copy forever --
+# never rereading memory, no OS call inside -- so a yield alone would just
+# turn a CPU-pegging infinite loop into a yielding-but-still-infinite one.
+# func_80097844 is the function that *sets* this flag; it only reaches
+# this spin if called while the flag is already non-zero (a race this
+# project's cooperative single-thread-at-a-time scheduler can expose even
+# if real N64 hardware's actual RSP/CPU timing rarely hit it). The flag
+# gets cleared by func_800976AC (`sw $zero, 0x47E8`) on another thread,
+# which the yield (not the reload alone) gives a chance to actually run.
+# Confirmed via live diagnostics (not a static disassembly guess): rounds
+# 65 parts 1-5 proved func_800A1290's VI-message dispatch chain was
+# healthy and delivering continuously, narrowing the real gap down to
+# this specific gate. Fix: yield (to let func_800976AC's thread run), then
+# redo the exact lui+lw this loop's own entry used to recompute $v0 fresh,
+# so the loop can actually observe the flag once it clears.
+[[patches.hook]]
+func = "func_80097844"
+before_vram = 0x800978D8
+text = """
+    { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); ctx->r2 = MEM_W(S32(0x8011 << 16), 0x47E8); }
+"""
+
 # Round 61 (STATUS.md, REVERTED): tried injecting a call to recompui's
 # per-frame UI callback pump (recomp_run_ui_callbacks,
 # lib/RecompFrontend/recompui/src/api/ui_api_events.cpp) directly into
