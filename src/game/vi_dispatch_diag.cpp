@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <chrono>
-#include <atomic>
 
 #include "recomp.h"
 
@@ -41,70 +40,10 @@ extern "C" void btga_debug_vi_dispatch_live(uint8_t* rdram, recomp_context* ctx)
     fflush(stdout);
 }
 
-// Round 66 (part 3): func_800A1290's message-type dispatch table showed
-// func_800A140C (what we'd been chasing) only handles msg==0x29A (plain
-// VI vsync); func_800A15F0 handles msg==0x29B and looks like the real
-// "SP/RDP task complete, submit next pending task" driver -- it manages
-// two pending-task slots at the same state struct's 0x200/0x204 that
-// func_800A140C's own gated path also writes to, and calls func_800976AC
-// (confirmed earlier to clear the 0x801147E8 gate) once both are empty.
-// Hooked at this function's own entry (before its prologue runs, so
-// ctx->r4 still holds the raw incoming state-struct pointer unmodified)
-// to see whether/how often it's reached, and what state it sees each
-// time -- first 50 calls logged individually, then a running heartbeat.
-static std::atomic<long long> btga_800A15F0_call_count{0};
-
-extern "C" void btga_debug_800A15F0_entry(uint8_t* rdram, recomp_context* ctx) {
-    long long call_num = btga_800A15F0_call_count.fetch_add(1);
-    uint8_t* base = rdram + ((uint32_t)ctx->r4 - 0x80000000u);
-    int32_t slot_200 = *(int32_t*)(base + 0x200);
-    int32_t slot_204 = *(int32_t*)(base + 0x204);
-    uint16_t flags_1F4 = *(uint16_t*)(base + (0x1F4 ^ 2));
-
-    if (call_num < 50) {
-        printf("[BTGA 800A15F0] call #%lld: 0x200=0x%08x 0x204=0x%08x 0x1F4=0x%04x\n",
-            call_num, (unsigned)slot_200, (unsigned)slot_204, (unsigned)flags_1F4);
-        fflush(stdout);
-    }
-
-    using namespace std::chrono;
-    static steady_clock::time_point last_heartbeat{};
-    auto now = steady_clock::now();
-    if (now - last_heartbeat >= seconds(1)) {
-        last_heartbeat = now;
-        printf("[BTGA 800A15F0 HEARTBEAT] total_calls=%lld 0x200=0x%08x 0x204=0x%08x 0x1F4=0x%04x\n",
-            call_num + 1, (unsigned)slot_200, (unsigned)slot_204, (unsigned)flags_1F4);
-        fflush(stdout);
-    }
-}
-
-// Round 66 (part 4): func_800A15F0 is confirmed to stop being called
-// entirely after exactly 3 calls (no heartbeat since -- that's not logging
-// cap, it's zero further calls), consistent with 0x801147E8 never
-// reopening (round 66's fix to func_80097844's spin apparently isn't
-// enough on its own). Hooked at func_80097844's own entry (before its
-// prologue, ctx->r4 still the raw incoming arg) to see whether it's even
-// being called anymore, and with what argument -- it skips all of the
-// flag-setting logic entirely when ctx->r4 != 0.
-static std::atomic<long long> btga_80097844_call_count{0};
-
-extern "C" void btga_debug_80097844_entry(uint8_t* rdram, recomp_context* ctx) {
-    long long call_num = btga_80097844_call_count.fetch_add(1);
-    int32_t gate_before = *(int32_t*)(rdram + (0x801147E8u - 0x80000000u));
-
-    if (call_num < 50) {
-        printf("[BTGA 80097844] call #%lld: arg(r4)=0x%08x gate_before=0x%08x\n",
-            call_num, (unsigned)ctx->r4, (unsigned)gate_before);
-        fflush(stdout);
-    }
-
-    using namespace std::chrono;
-    static steady_clock::time_point last_heartbeat{};
-    auto now = steady_clock::now();
-    if (now - last_heartbeat >= seconds(1)) {
-        last_heartbeat = now;
-        printf("[BTGA 80097844 HEARTBEAT] total_calls=%lld arg(r4)=0x%08x gate_before=0x%08x\n",
-            call_num + 1, (unsigned)ctx->r4, (unsigned)gate_before);
-        fflush(stdout);
-    }
-}
+// Round 66 parts 3-4's entry-hook diagnostics on func_800A15F0 and
+// func_80097844 (confirming the former stops after 3 calls and the latter
+// is never reached at all) found the real chain -- see STATUS.md round 67
+// -- and are removed now that it's understood and fixed
+// (src/game/gfx_gate_workaround.cpp). This live gate_0x801147E8 read above
+// still covers verifying the fix: it should stop reading 0 once the
+// patch's btga_reopen_gfx_gate is wired in.

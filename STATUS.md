@@ -3,6 +3,81 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 67: found and fixed the real cause of the permanent post-3-frames freeze -- the gfx-task gate (0x801147E8) never reopens because round 58's audio-DSP stub starves its only re-opener
+
+Round 66's fix made no observable difference. Rather than guess again,
+added two targeted entry-hook diagnostics (now removed, having served
+their purpose): `func_800A15F0` (the "submit pending gfx task, clear the
+gate once empty" driver, found via `func_800A1290`'s dispatch table) is
+confirmed to run **exactly 3 times then never again**; `func_80097844`
+(the only other writer of `0x801147E8`, round 66's fix target) is
+confirmed to be **called zero times in a real run**. Since
+`func_80097844` is reached exclusively through a 3-entry function-pointer
+table (`0x801147EC/F0/F4`, registered once at boot by `func_80097560` ->
+`func_800FBDBC` into global `0x8012686C`, confirmed via a raw ROM binary
+search for its address since it has no other textual reference anywhere
+in `RecompiledFuncs/*.c`), traced every reader of that table.
+
+`func_800FF698` (`RecompiledFuncs/funcs_19.c`) is the audio-processing
+loop that reads it: it calls table offset 0 once, then loops calling
+offset 4 while `osAiGetLength() & 0x80000000`, and -- the key find --
+calls table offset 8 (`func_80097844`) at `funcs_19.c:1440-1445`, but
+*only* when a local "did we build any audio commands this pass" flag
+(an output param at `$sp+0x20`) is non-zero. That flag is written by
+`func_801025C0` (`$a1` out-param, read back right after the call at
+`funcs_19.c:1414-1416`) -- which is **round 58's hand-written stub**
+(`src/game/func_801025C0_stub.cpp`), chosen back then to unconditionally
+write 0 there and short-circuit a real crash deeper in unimplemented
+audio-DSP internals (`n_alEnvmixerPull` / `_n_saveBuffer`). That stub was
+the right call to avoid the crash, but it has a side effect nobody
+connected until now: it permanently starves `func_800FF698`'s only call
+site for `func_80097844`, so the gate it would reopen never does.
+
+**Why not just call `func_80097844` directly instead?** Its real argument
+is a pointer the caller dereferences at offsets `0x0/0x4/0x8/0xC` before
+any gating check runs (`funcs_5.c:5265-5278`) -- in the real call site
+it's `&sp[0x10]` from `func_800FF698`'s own frame, which we have no
+native equivalent of; calling it with a null or fabricated pointer risks
+an out-of-bounds read. But the value it stores into `0x801147E8` on
+success (`funcs_5.c:5342` / `:5357-5358`) is just `sp + 0x10` from *its
+own* frame -- a transient address that's never dereferenced by any reader
+(`func_80097660` only returns it raw, `func_800A140C` only tests it for
+non-zero) -- i.e. a non-null sentinel, not real data. Reopening the gate
+only needs *some* non-zero value there.
+
+**Fix** (`src/game/gfx_gate_workaround.cpp`, wired into
+`patches/recompui_patches.c`'s `func_800A1858` RECOMP_PATCH, same safe
+per-VI-tick call boundary as the existing live diagnostic):
+`btga_reopen_gfx_gate` checks `0x801147E8` every real VI tick and writes
+a `1` sentinel whenever it's found cleared. Runs *after*
+`func_800A140C`'s own gate-check for the current tick (it's called from
+inside that function, near its end), so it only ever affects the next
+tick, never races the current one.
+
+Also removed round 66 parts 3-4's investigative entry-hook diagnostics
+(`btga_debug_800A15F0_entry`, `btga_debug_80097844_entry`, and their
+`[[patches.hook]]` entries) now that they've served their purpose --
+kept the live `gate_0x801147E8` read in `btga_debug_vi_dispatch_live`
+since it directly covers verifying this fix (should stop reading 0 once
+the gate takes hold), and kept round 66's actual spin-fix (now mostly
+moot since this path isn't reached in practice, but still correct in
+isolation if it ever is).
+
+Verified in-sandbox: rebuilt `patches.elf` (`cd patches && make
+CC=clang LD=ld.lld` -- this sandbox's `make`/`cc` defaults silently
+resolve to plain `cc`/`ld`, not `clang`/`ld.lld`, so both must be passed
+explicitly here), added the new native symbol to `patches/syms.ld`
+(`btga_reopen_gfx_gate = 0x8F0000F0`, next free dummy slot after
+`btga_debug_vi_dispatch_live`), regenerated via `./build/N64Recomp
+patches.toml` then `./build/N64Recomp battletanxga.us.rev0.toml` (1330
+game functions, 60 patch functions, no errors either time), confirmed
+`btga_reopen_gfx_gate(rdram, ctx);` lands in
+`RecompiledPatches/patches.c`, and a full `cmake .. && ninja
+BattleTanxGARecompiled` build succeeded end-to-end including linking.
+Not yet confirmed against a real run -- next step is the user pulling,
+regenerating, and rebuilding on Windows to see whether the screen keeps
+updating past the 3-frame mark.
+
 ## 2026-10-01, round 66: round 65's whole investigation was a red herring -- the real deadlock was a fifth unyielding-poll-loop, structurally different from the first four
 
 Round 65 parts 1-2 (the `func_8009D3A4` hook, then the full-queue-drain

@@ -52,3 +52,4 @@ recomp_get_cheat_enabled = 0x8F0000E0;
 osViBlack_recomp = 0x8F0000E4;
 osViSwapBuffer_recomp = 0x8F0000E8;
 btga_debug_vi_dispatch_live = 0x8F0000EC;
+btga_reopen_gfx_gate = 0x8F0000F0;

@@ -12,6 +12,13 @@ extern void* func_8007AF84(s32 flag);
 // diagnostic only fires from code paths this game no longer revisits).
 extern void btga_debug_vi_dispatch_live(void);
 
+// Round 67: src/game/gfx_gate_workaround.cpp -- see that file for the full
+// chain. Reopens the 0x801147E8 gfx-task gate with a non-zero sentinel
+// whenever it's found cleared, since the real re-opener (func_80097844)
+// is permanently unreachable as a side effect of round 58's audio-DSP
+// stub. Called every real VI tick, same spot as the diagnostic above.
+extern void btga_reopen_gfx_gate(void);
+
 // func_800A1858 (RecompiledFuncs/funcs_8.c) is this game's VI-swap-throttle
 // routine: it's reached once per real VI tick (func_800A1290's VI-message
 // dispatch -> func_800A140C -> here), and is the only place that ever calls
@@ -36,6 +43,7 @@ extern void btga_debug_vi_dispatch_live(void);
 RECOMP_PATCH void func_800A1858(void* state) {
     recomp_run_ui_callbacks();
     btga_debug_vi_dispatch_live();
+    btga_reopen_gfx_gate();
 
     u16* swap_pending = (u16*) ((u8*) state + 0x1F0);
     u16* swap_threshold = (u16*) ((u8*) state + 0x1EC);

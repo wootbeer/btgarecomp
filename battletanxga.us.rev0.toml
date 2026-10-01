@@ -1363,36 +1363,15 @@ text = """
     { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); ctx->r2 = MEM_W(S32(0x8011 << 16), 0x47E8); }
 """
 
-# Round 66 (part 4, STATUS.md) diagnostic: round 66's fix made no observable
-# difference and func_800A15F0 (part 3) confirmed stops being called
-# entirely after 3 times -- check whether func_80097844 (the only other
-# writer of 0x801147E8) is even being called anymore, and with what first
-# argument, since it skips all flag-setting logic when that argument is
-# non-zero. Hooked at this function's own entry, before its prologue runs.
-[[patches.hook]]
-func = "func_80097844"
-before_vram = 0x80097844
-text = """
-    { extern void btga_debug_80097844_entry(uint8_t *rdram, recomp_context *ctx); btga_debug_80097844_entry(rdram, ctx); }
-"""
-
-# Round 66 (part 3, STATUS.md) diagnostic: round 66's fix made no observable
-# difference, so before guessing further, directly instrument
-# func_800A15F0 -- func_800A1290's message-type dispatch table (traced
-# while investigating this) shows it handles msg==0x29B, separately from
-# func_800A140C's msg==0x29A, and it looks like the real "SP/RDP task
-# complete, submit next pending task" driver (manages the same state
-# struct's 0x200/0x204 task slots func_800A140C also writes, and calls
-# func_800976AC -- confirmed to clear the 0x801147E8 gate -- once both are
-# empty). Hooked at this function's own entry, before its prologue runs,
-# so ctx->r4 still holds the raw incoming state-struct pointer
-# (src/game/vi_dispatch_diag.cpp has the actual logging).
-[[patches.hook]]
-func = "func_800A15F0"
-before_vram = 0x800A15F0
-text = """
-    { extern void btga_debug_800A15F0_entry(uint8_t *rdram, recomp_context *ctx); btga_debug_800A15F0_entry(rdram, ctx); }
-"""
+# Round 66 parts 3-4 diagnostics (entry hooks on func_800A15F0 and
+# func_80097844) traced the real chain -- see STATUS.md round 67 -- and
+# are removed now that it's understood: func_800A15F0 only ever runs 3
+# times because func_80097844 (the only other writer of 0x801147E8) is
+# never reachable at all, as a side effect of round 58's audio-DSP stub
+# starving its one real call site (RecompiledFuncs/funcs_19.c, inside
+# func_800FF698). Round 67's fix lives in
+# src/game/gfx_gate_workaround.cpp / patches/recompui_patches.c instead of
+# here, since it doesn't touch any instruction boundary in this function.
 
 # Round 61 (STATUS.md, REVERTED): tried injecting a call to recompui's
 # per-frame UI callback pump (recomp_run_ui_callbacks,
