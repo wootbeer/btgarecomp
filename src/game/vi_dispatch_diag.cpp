@@ -77,3 +77,34 @@ extern "C" void btga_debug_800A15F0_entry(uint8_t* rdram, recomp_context* ctx) {
         fflush(stdout);
     }
 }
+
+// Round 66 (part 4): func_800A15F0 is confirmed to stop being called
+// entirely after exactly 3 calls (no heartbeat since -- that's not logging
+// cap, it's zero further calls), consistent with 0x801147E8 never
+// reopening (round 66's fix to func_80097844's spin apparently isn't
+// enough on its own). Hooked at func_80097844's own entry (before its
+// prologue, ctx->r4 still the raw incoming arg) to see whether it's even
+// being called anymore, and with what argument -- it skips all of the
+// flag-setting logic entirely when ctx->r4 != 0.
+static std::atomic<long long> btga_80097844_call_count{0};
+
+extern "C" void btga_debug_80097844_entry(uint8_t* rdram, recomp_context* ctx) {
+    long long call_num = btga_80097844_call_count.fetch_add(1);
+    int32_t gate_before = *(int32_t*)(rdram + (0x801147E8u - 0x80000000u));
+
+    if (call_num < 50) {
+        printf("[BTGA 80097844] call #%lld: arg(r4)=0x%08x gate_before=0x%08x\n",
+            call_num, (unsigned)ctx->r4, (unsigned)gate_before);
+        fflush(stdout);
+    }
+
+    using namespace std::chrono;
+    static steady_clock::time_point last_heartbeat{};
+    auto now = steady_clock::now();
+    if (now - last_heartbeat >= seconds(1)) {
+        last_heartbeat = now;
+        printf("[BTGA 80097844 HEARTBEAT] total_calls=%lld arg(r4)=0x%08x gate_before=0x%08x\n",
+            call_num + 1, (unsigned)ctx->r4, (unsigned)gate_before);
+        fflush(stdout);
+    }
+}
