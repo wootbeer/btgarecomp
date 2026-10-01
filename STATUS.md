@@ -3,6 +3,32 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 82: in-game! Shooting crashed in an entry the batch tool couldn't decode
+
+**Round 81 confirmed on Windows:** the options menu works and the game
+reaches actual gameplay, playable for a few seconds. Firing aborted with
+`Failed to find function at 0x800EE288`, inside `func_800EDF14`. It's a
+clean boundary (real `jr $ra` at `0x800EE280`, prologue at `0x800EE288`,
+no crossing branch), so why had round 78's batch missed it?
+`tools/batch_split_merged_funcs.py` silently skipped any entry capstone
+couldn't fully disassemble, and capstone ran in MIPS32 mode. String data
+stored after a function's last return (here `66616b65`, "fake...") often
+decodes as a 64-bit MIPS III op, which MIPS32 mode rejects. 15 `func_`
+entries were affected.
+
+Tool changes: disassemble in MIPS64 mode (the N64's R4300 is MIPS III),
+and require every new piece to contain its own `jr $ra`, so a
+ROM-referenced string after a return can never be split off as a
+"function". Re-running added 5 functions across 4 entries and touched
+nothing else: `func_800DD0D8` (+`func_800DD1C0`), `func_800EDF14`
+(+`func_800EE288`), `func_800F7C30` (+`func_800F7D24`,
+`func_800F7E64`), `func_800F8264` (+`func_800F85D8`). Of the other 11,
+two are in `stubs` and the rest have no referenced clean boundary.
+
+Verified in-sandbox: regenerated (1564 functions, no errors), hook/patch
+landings and all switches identical, all 5 new functions registered,
+full build links. Not yet confirmed against a real run.
+
 ## 2026-10-01, round 81: round 80 confirmed (full intro -> main menu); options-menu crash in the entry round 80 renamed
 
 **Round 80 confirmed on Windows:** the attract demo plays all the way

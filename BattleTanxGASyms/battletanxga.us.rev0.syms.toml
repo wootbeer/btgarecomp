@@ -1115,7 +1115,9 @@ functions = [
     { name = "func_800DC3A8", vram = 0x800dc3a8, size = 0x344 },
     { name = "func_800DC6EC", vram = 0x800dc6ec, size = 0xb8 },
     { name = "func_800DC968", vram = 0x800dc968, size = 0x770 },
-    { name = "func_800DD0D8", vram = 0x800dd0d8, size = 0x1b8 },
+    # Round 82 (STATUS.md): batch-tool split, newly analysable with MIPS64 decoding (trailing string data).
+    { name = "func_800DD0D8", vram = 0x800dd0d8, size = 0xe8 },
+    { name = "func_800DD1C0", vram = 0x800dd1c0, size = 0xd0 },
     { name = "func_800DD290", vram = 0x800dd290, size = 0x110 },
     { name = "func_800DD3A0", vram = 0x800dd3a0, size = 0x3bc },
     # Round 73 (STATUS.md): merged-function boundary, a four-way split.
@@ -1318,7 +1320,9 @@ functions = [
     { name = "func_800ED990", vram = 0x800ed990, size = 0x35c },
     { name = "func_800EDCEC", vram = 0x800edcec, size = 0xe0 },
     { name = "func_800EDDCC", vram = 0x800eddcc, size = 0x148 },
-    { name = "func_800EDF14", vram = 0x800edf14, size = 0x57c },
+    # Round 82 (STATUS.md): batch-tool split, newly analysable with MIPS64 decoding (trailing string data).
+    { name = "func_800EDF14", vram = 0x800edf14, size = 0x374 },
+    { name = "func_800EE288", vram = 0x800ee288, size = 0x208 },
     { name = "func_800EE490", vram = 0x800ee490, size = 0x1f8 },
     { name = "func_800EE688", vram = 0x800ee688, size = 0x238 },
     { name = "func_800EE8C0", vram = 0x800ee8c0, size = 0x21c },
@@ -1430,7 +1434,10 @@ functions = [
     { name = "func_800F7A80", vram = 0x800f7a80, size = 0x124 },
     { name = "func_800F757C", vram = 0x800f757c, size = 0xcc },
     { name = "func_800F7BA4", vram = 0x800f7ba4, size = 0x80 },
-    { name = "func_800F7C30", vram = 0x800f7c30, size = 0x290 },
+    # Round 82 (STATUS.md): batch-tool split, newly analysable with MIPS64 decoding (trailing string data).
+    { name = "func_800F7C30", vram = 0x800f7c30, size = 0xf4 },
+    { name = "func_800F7D24", vram = 0x800f7d24, size = 0x140 },
+    { name = "func_800F7E64", vram = 0x800f7e64, size = 0x5c },
     # Round 77 (STATUS.md): merged-function boundary, a three-way split.
     # "Failed to find function at 0x800F7F6C" after idling at the title
     # screen. Two clean internal boundaries, no crossing branch, no jump
@@ -1451,7 +1458,9 @@ functions = [
     { name = "func_800F80A0", vram = 0x800f80a0, size = 0x48 },
     { name = "func_800F80E8", vram = 0x800f80e8, size = 0x120 },
     { name = "func_800F8208", vram = 0x800f8208, size = 0x5c },
-    { name = "func_800F8264", vram = 0x800f8264, size = 0x38c },
+    # Round 82 (STATUS.md): batch-tool split, newly analysable with MIPS64 decoding (trailing string data).
+    { name = "func_800F8264", vram = 0x800f8264, size = 0x374 },
+    { name = "func_800F85D8", vram = 0x800f85d8, size = 0x18 },
     { name = "func_800F85F0", vram = 0x800f85f0, size = 0x6c },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
     { name = "func_800F8660", vram = 0x800f8660, size = 0xcc },

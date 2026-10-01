@@ -7,7 +7,9 @@ import re, struct, glob, capstone, sys, json
 SYMS='BattleTanxGASyms/battletanxga.us.rev0.syms.toml'
 TOML='battletanxga.us.rev0.toml'
 rom=open('BattleTanx Global Assault (USA).z64','rb').read()
-md=capstone.Cs(capstone.CS_ARCH_MIPS, capstone.CS_MODE_MIPS32+capstone.CS_MODE_BIG_ENDIAN)
+# MIPS64 (round 82): string data after a function's last return often decodes as a
+# 64-bit (MIPS III) op, which MIPS32 mode rejects, silently skipping the whole entry.
+md=capstone.Cs(capstone.CS_ARCH_MIPS, capstone.CS_MODE_MIPS64+capstone.CS_MODE_BIG_ENDIAN)
 syms=open(SYMS).read(); toml=open(TOML).read()
 
 # ROM references: literal words and lui/addiu|ori constants
@@ -74,6 +76,16 @@ for line in syms.splitlines():
         end=pts[idx+1] if idx+1<len(pts) else v+s
         if all(x==0 for x in rom[b-0x80070000:end-0x80070000]): continue
         keep.append(b)
+    # Round 82: every new piece must contain its own jr $ra, so a ROM-referenced
+    # string sitting after a function's return is never split off as a "function".
+    jra={i.address for i in insns if i.mnemonic=='jr' and i.op_str=='$ra'}
+    changed=True
+    while changed and keep:
+        changed=False
+        for idx,b in enumerate(keep):
+            end=keep[idx+1] if idx+1<len(keep) else v+s
+            if not any(b<=a<end for a in jra):
+                keep.pop(idx); changed=True; break
     if not keep: continue
     p=[v]+keep+[v+s]
     pieces=[(a,b-a) for a,b in zip(p,p[1:])]
