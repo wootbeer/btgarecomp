@@ -790,7 +790,16 @@ functions = [
     # function starts at 0x800C0704, which the ROM references as a data
     # word twice (0x8011866C, 0x80118674). Renamed since nothing here
     # resembles libgcc's __udiv_w_sdiv.
-    { name = "func_800C0704", vram = 0x800c0704, size = 0x368 },
+    # Round 81 (STATUS.md): batch-tool split, newly eligible after round 80 renamed this from __udiv_w_sdiv.
+    { name = "func_800C0704", vram = 0x800c0704, size = 0xfc },
+    { name = "func_800C0800", vram = 0x800c0800, size = 0x14 },
+    { name = "func_800C0814", vram = 0x800c0814, size = 0x14 },
+    { name = "func_800C0828", vram = 0x800c0828, size = 0x14 },
+    { name = "func_800C083C", vram = 0x800c083c, size = 0x14 },
+    { name = "func_800C0850", vram = 0x800c0850, size = 0x48 },
+    { name = "func_800C0898", vram = 0x800c0898, size = 0x48 },
+    { name = "func_800C08E0", vram = 0x800c08e0, size = 0x184 },
+    { name = "func_800C0A64", vram = 0x800c0a64, size = 0x8 },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
     { name = "func_800C0A6C", vram = 0x800c0a6c, size = 0x70 },
     { name = "func_800C0ADC", vram = 0x800c0adc, size = 0x9c },

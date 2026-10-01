@@ -3,6 +3,23 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 81: round 80 confirmed (full intro -> main menu); options-menu crash in the entry round 80 renamed
+
+**Round 80 confirmed on Windows:** the attract demo plays all the way
+through, and the game reaches the main menu. Changing options there
+aborted with `Failed to find function at 0x800C0A64`, inside
+`func_800C0704`. That's the entry round 80 moved and renamed from
+`__udiv_w_sdiv`; round 78's batch had skipped it because it had a
+library name. Re-running `tools/batch_split_merged_funcs.py` changed
+only this entry. It splits nine ways, and both of its jump tables stay in
+their own pieces (`jr 0x800C0774` -> `func_800C0704`, `jr 0x800C0914` ->
+`func_800C08E0`). The crash address is a two-instruction "return 1"
+function (`jr $ra; addiu $v0, $zero, 1`), most likely a menu callback.
+
+Verified in-sandbox: regenerated (1559 functions, no errors), hook/patch
+landings and all switches identical, `func_800C0A64` registered, full
+build links. Not yet confirmed against a real run.
+
 ## 2026-10-01, round 80: demo crash was a function cut off mid-epilogue -- round 22's splits were chasing branches decoded from string data
 
 Round 79 confirmed: the attract demo now plays until a nuke goes off and
