@@ -1369,9 +1369,26 @@ text = """
 # times because func_80097844 (the only other writer of 0x801147E8) is
 # never reachable at all, as a side effect of round 58's audio-DSP stub
 # starving its one real call site (RecompiledFuncs/funcs_19.c, inside
-# func_800FF698). Round 67's fix lives in
-# src/game/gfx_gate_workaround.cpp / patches/recompui_patches.c instead of
-# here, since it doesn't touch any instruction boundary in this function.
+# func_800FF698). See src/game/gfx_gate_workaround.cpp for the full chain.
+
+# Round 67 (STATUS.md): fix for the above. func_800976AC is the ONLY place
+# that ever clears 0x801147E8 (its one call site is func_800A15F0's own
+# "both task slots empty" path, RecompiledFuncs/funcs_8.c:789), so it's
+# the real re-opener's natural trigger point -- SP task completion, not a
+# fixed timer. A first attempt reopened the gate unconditionally every VI
+# tick instead (patches/recompui_patches.c) and crashed the game (an
+# access violation within a few ticks): forcing it open ~60x/sec let
+# func_800A140C submit SP tasks far faster than the SP could drain them,
+# corrupting the two-slot pending-task state with none of its intended
+# backpressure. Hooked here instead, immediately after the real clear
+# (`sw $zero, 0x47E8($at)` at 0x800976CC), so the gate reopens at exactly
+# the same cadence the game's own code already decided was safe.
+[[patches.hook]]
+func = "func_800976AC"
+before_vram = 0x800976D0
+text = """
+    { extern void btga_reopen_gfx_gate(uint8_t *rdram, recomp_context *ctx); btga_reopen_gfx_gate(rdram, ctx); }
+"""
 
 # Round 61 (STATUS.md, REVERTED): tried injecting a call to recompui's
 # per-frame UI callback pump (recomp_run_ui_callbacks,

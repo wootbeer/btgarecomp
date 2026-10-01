@@ -30,17 +30,29 @@
 // not real data. Reopening the gate only needs *some* non-zero value
 // there, not a call into func_80097844 itself.
 //
-// Called every real VI tick from func_800A1858's RECOMP_PATCH (same spot
-// as btga_debug_vi_dispatch_live), right after func_800A140C's own
-// gate-check for this tick has already run -- so this only ever affects
-// next tick's check, never races the current one.
+// Round 67 (first attempt, REVERTED): called this unconditionally every
+// real VI tick from func_800A1858's RECOMP_PATCH -- fixed the freeze, but
+// crashed the game instead (access violation within a few ticks of
+// starting). Forcing the gate open ~60x/sec let func_800A140C build and
+// submit new SP tasks far faster than the SP could actually drain them,
+// with none of the real backpressure the two-slot pending-task state
+// (0x200/0x204, func_800A15F0) is built around -- corrupting that state.
+//
+// Fixed version: func_800976AC is the ONLY place that ever clears
+// 0x801147E8 (confirmed: its one call site is func_800A15F0's own "both
+// task slots empty" path, RecompiledFuncs/funcs_8.c:789), i.e. real SP
+// task completion, not a fixed timer -- the correct pacing signal for
+// this flag, matching whatever rate the SP actually drains tasks at.
+// Hooked immediately after that clear (battletanxga.us.rev0.toml,
+// func_800976AC before_vram = 0x800976D0, right after the `sw $zero,
+// 0x47E8($at)` at 0x800976CC) so the gate reopens at exactly the same
+// cadence the real game's own code already decided it was safe to clear
+// it, rather than racing ahead of the SP.
 #include <cstdint>
 
 #include "recomp.h"
 
 extern "C" void btga_reopen_gfx_gate(uint8_t* rdram, recomp_context* ctx) {
     uint8_t* gate_ptr = rdram + (0x801147E8u - 0x80000000u);
-    if (*(int32_t*)gate_ptr == 0) {
-        *(int32_t*)gate_ptr = 1;
-    }
+    *(int32_t*)gate_ptr = 1;
 }

@@ -3,6 +3,50 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 68: round 67's fix made the game crash instead of freeze -- reopening the gate every VI tick raced ahead of the SP; retargeted to fire only when the real code clears it
+
+Tested round 67's fix on Windows: the game now runs for a moment (black
+window, a handful of ticks of normal startup output) then crashes with an
+access violation (`0xc0000005`) instead of freezing. Progress -- the
+freeze is gone -- but a new, faster-onset bug replaced it.
+
+Root cause: `btga_reopen_gfx_gate` was called unconditionally from
+`func_800A1858`'s RECOMP_PATCH, which fires every real VI tick (~60/sec).
+That reopened `0x801147E8` far more often than the real game ever would
+have, letting `func_800A140C` build and submit new SP tasks every tick
+with none of the backpressure the two-slot pending-task state
+(`0x200`/`0x204`, managed by `func_800A15F0`) is designed around --
+submitting a new task before the SP had drained the previous ones
+corrupts that state, crashing the process almost immediately (only a
+single `[sp] osSpTaskStartGo` print before the crash, versus 3 before
+round 67).
+
+**Fix:** moved the hook to fire only when the real game actually clears
+the flag. `func_800976AC` is the *only* place that ever clears
+`0x801147E8` (its one call site is `func_800A15F0`'s own "both task slots
+empty" path, `RecompiledFuncs/funcs_8.c:789`) -- i.e. real SP task
+completion, which is the correct, naturally-rate-limited pacing signal
+for this flag (whatever cadence the SP actually drains tasks at), unlike
+a fixed VI-tick timer. `battletanxga.us.rev0.toml` now hooks
+`func_800976AC` at `before_vram = 0x800976D0`, immediately after its real
+clear (`sw $zero, 0x47E8($at)` at `0x800976CC`), calling
+`btga_reopen_gfx_gate` right there -- so the gate reopens at exactly the
+same rate the game's own code already decided it was safe to clear it,
+instead of racing ahead of the SP. Removed the call from
+`patches/recompui_patches.c` and the now-unused `patches/syms.ld` dummy
+symbol entry (no longer routed through the ELF patches pipeline at all --
+this is a plain `[[patches.hook]]` text splice like the other native
+hooks in this file).
+
+Verified in-sandbox: rebuilt `patches.elf` back to its pre-round-67 state
+(the reopen call no longer lives there), regenerated via `./build/N64Recomp
+patches.toml` then `./build/N64Recomp battletanxga.us.rev0.toml` (no
+errors), confirmed `btga_reopen_gfx_gate(rdram, ctx);` now lands only in
+`RecompiledFuncs/funcs_5.c` right after `func_800976AC`'s clear (and no
+longer in `RecompiledPatches/patches.c`), and a full `cmake ..  && ninja
+BattleTanxGARecompiled` build succeeded end-to-end. Not yet confirmed
+against a real run.
+
 ## 2026-10-01, round 67: found and fixed the real cause of the permanent post-3-frames freeze -- the gfx-task gate (0x801147E8) never reopens because round 58's audio-DSP stub starves its only re-opener
 
 Round 66's fix made no observable difference. Rather than guess again,
