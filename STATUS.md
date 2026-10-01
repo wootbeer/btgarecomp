@@ -3,6 +3,20 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 72: one more merged-function boundary from idling at the title screen
+
+Idle at the title again: `Failed to find function at 0x800D97EC`,
+inside `func_800D942C`'s declared `0x4d4` range. One internal `jr $ra`
+(`0x800D97E4`), no crossing branch, no jump table, and `0x800D97EC`
+opens with a normal prologue (`addiu $sp, $sp, -0x828`). The existing
+`[[patches.hook]]` on `func_800D942C` (`before_vram = 0x800d9508`) stays
+in the first piece and still lands after regeneration. Split `0x3c0` +
+`0x114`.
+
+Verified in-sandbox: regenerated (1334 functions, no errors),
+`func_800D97EC` is registered in `recomp_overlays.inl`, and a full build
+succeeded. Not yet confirmed against a real run.
+
 ## 2026-10-01, round 71: another merged-function boundary, hit by idling at the title screen
 
 Left idle at the title screen with no input (likely the attract/demo

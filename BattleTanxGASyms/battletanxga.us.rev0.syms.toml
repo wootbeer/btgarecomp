@@ -874,7 +874,14 @@ functions = [
     # compiler check -- removed along with this split, since it's now
     # outside any declared function's range.
     { name = "func_800D92E0", vram = 0x800d92e0, size = 0x14c },
-    { name = "func_800D942C", vram = 0x800d942c, size = 0x4d4 },
+    # Round 72 (STATUS.md): merged-function boundary, a two-way split.
+    # "Failed to find function at 0x800D97EC" after idling at the title
+    # screen. One internal jr $ra (0x800D97E4, delay slot 0x800D97E8), no
+    # crossing branch, no jump table; 0x800D97EC opens with a normal
+    # prologue. The existing [[patches.hook]] on this function (0x800d9508)
+    # stays in the first piece. Sums to 0x4d4.
+    { name = "func_800D942C", vram = 0x800d942c, size = 0x3c0 },
+    { name = "func_800D97EC", vram = 0x800d97ec, size = 0x114 },
     { name = "func_800D9900", vram = 0x800d9900, size = 0x1e0 },
     { name = "func_800D9AE0", vram = 0x800d9ae0, size = 0x68 },
     { name = "func_800D9B50", vram = 0x800d9b50, size = 0x200 },
