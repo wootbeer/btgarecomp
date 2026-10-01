@@ -3,6 +3,47 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 88: frame-locked delta time -- the game times motion with the host clock
+
+Round 87's pacing log ruled out presentation: steady state is exactly 30
+fps (2 VIs and ~34 ms per swap, all 3 framebuffers in order, no repeats or
+A->B->A). The only irregularities are occasional 100-270 ms hitches. None
+of RT64's options (resolution, aspect ratio, MSAA) changed the remaining
+stutter or the distant-building flicker, and the flicker can be anywhere
+on screen. Thread priorities rule out the yield workarounds letting
+lower-priority threads interleave: the main game thread
+(`func_8009EEA0`) is priority 10, the lowest of the game's threads; the
+VI dispatcher (`func_800A1290`) is 30.
+
+Found it in the per-frame update `func_800BF80C`: it calls `osGetTime()`,
+subtracts the previous frame's timestamp (`0x803A5938`), converts to us,
+scales by `30.0 / 1000000.0` (constants at `0x80073290`/`0x80073294`), and
+stores the result as a float at `0x803A5948`, the game's delta time in
+1/30 s units (code like `func_800C68AC`/`func_800CFA84` multiplies by
+it). On hardware the CPU reaches that point at the same phase of every
+video frame, so it's a steady 1.0. Here `osGetTime()` is the host clock
+and the main thread wakes at a slightly different moment each frame, so it
+wobbles while presentation stays even, and objects step unevenly.
+
+**Fix:** `btga_vi_tick` (called at the top of `func_800A1858`'s
+RECOMP_PATCH, once per real VI, registered at `0x8F0000F4`) counts VIs.
+A `[[patches.hook]]` on `func_800BF80C` right before `swc1 $f0,
+0x5948($at)` (`0x800BFAC8`) calls `btga_frame_dt`
+(`src/game/frame_dt_fix.cpp`). It replaces `$f0` with
+VIs-since-last-frame * 0.5, falling back to the raw value on the first
+frame or after a stall of more than 8 VIs (loads). A once-per-second
+`[BTGA DT]` line reports the raw value's min/avg/max next to
+VIs-per-frame, to confirm the wobble.
+
+Verified in-sandbox: regenerated (1581 functions, no errors), hook lands
+right before the store, `btga_vi_tick` lands at the top of the patch,
+full build links. Not yet confirmed against a real run.
+
+Separately reported: the logo decal on the back of the player's tank
+flickers on its own. A coplanar decal flickering by itself is the
+classic sign of depth fighting in the renderer's decal handling, a
+separate issue from timing. Next, if it survives this round.
+
 ## 2026-10-01, round 87: menus confirmed; investigating remaining stutter with a frame-pacing diagnostic
 
 **Round 86 confirmed:** the launcher and config menus now render text and

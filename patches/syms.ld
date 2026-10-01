@@ -53,3 +53,4 @@ osViBlack_recomp = 0x8F0000E4;
 osViSwapBuffer_recomp = 0x8F0000E8;
 btga_debug_vi_dispatch_live = 0x8F0000EC;
 btga_debug_swap_pacing = 0x8F0000F0;
+btga_vi_tick = 0x8F0000F4;

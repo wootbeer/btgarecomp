@@ -1513,3 +1513,16 @@ text = """
     }
 """
 
+# Round 88 (STATUS.md): frame-locked delta time. func_800BF80C measures each
+# frame's elapsed time with osGetTime() (host clock here) and stores it, in
+# 1/30-second units, at 0x803A5948; object/camera motion scales by it. The
+# cooperative scheduler wakes the main thread at a slightly different moment
+# each frame, so that value wobbled even with perfectly even presentation,
+# making models jitter. Substitute VIs-since-last-frame * 0.5, which is what
+# the hardware value effectively measures (src/game/frame_dt_fix.cpp).
+[[patches.hook]]
+func = "func_800BF80C"
+before_vram = 0x800BFAC8
+text = """
+    { extern void btga_frame_dt(uint8_t *rdram, recomp_context *ctx); btga_frame_dt(rdram, ctx); }
+"""
