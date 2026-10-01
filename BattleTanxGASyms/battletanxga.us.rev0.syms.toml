@@ -283,7 +283,15 @@ functions = [
     { name = "func_800909CC", vram = 0x800909cc, size = 0x280 },
     { name = "func_80090C4C", vram = 0x80090c4c, size = 0x180 },
     { name = "func_80090DCC", vram = 0x80090dcc, size = 0x99c },
-    { name = "func_80091768", vram = 0x80091768, size = 0x1234 },
+    # Round 71 (STATUS.md): merged-function boundary, a three-way split.
+    # "Failed to find function at 0x80092748" after idling at the title
+    # screen. jr-$ra scan of the original 0x1234 range: two internal
+    # boundaries (0x80092748, 0x8009277C), no branch crossing either. The
+    # range's one jump table (jr at 0x80092050) only targets
+    # 0x80092058-0x800920C4, all inside the first piece. Sums to 0x1234.
+    { name = "func_80091768", vram = 0x80091768, size = 0xfe0 },
+    { name = "func_80092748", vram = 0x80092748, size = 0x34 },
+    { name = "func_8009277C", vram = 0x8009277c, size = 0x220 },
     { name = "func_8009299C", vram = 0x8009299c, size = 0x29c },
     { name = "func_80092C38", vram = 0x80092c38, size = 0x1b8c },
     { name = "func_800947C4", vram = 0x800947c4, size = 0xbc },

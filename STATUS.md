@@ -3,6 +3,30 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 71: another merged-function boundary, hit by idling at the title screen
+
+Left idle at the title screen with no input (likely the attract/demo
+mode kicking in), the game aborted with `Failed to find function at
+0x80092748`. That address was inside `func_80091768`'s declared `0x1234`
+range. The jr-$ra boundary scan found two internal boundaries
+(`0x80092748`, `0x8009277C`), with no branch crossing either. This range
+also contains a jump table (`jr` at `0x80092050`); its 15 cases resolve
+to `0x80092058`-`0x800920C4`, all inside the first piece, so the split
+can't cut a table target off. Split three ways: `0xfe0` + `0x34` +
+`0x220` = `0x1234`.
+
+Verified in-sandbox: regenerated (1333 functions, no errors), both new
+functions are registered in `recomp_overlays.inl`, and a full build
+succeeded. Not yet confirmed against a real run.
+
+A whole-table scan with the same method flags 362 of 1333 entries with
+some internal clean boundary, but that count is inflated. Many are real
+library functions (`ldiv`, `osYieldThread`, `_Litob`, ...) whose
+"second piece" is just alignment-padding `nop`s after the return, and
+47 of the 362 contain jump tables that would each need the target check
+above. Bulk-splitting isn't safe without filtering those out first, so
+these stay one-at-a-time as crashes surface them.
+
 ## 2026-10-01, round 70: round 69 worked -- the game renders and the menus play; next crash is another merged-function boundary at the Controller Pak check
 
 **Round 69 confirmed on Windows:** the game runs, renders, and plays
