@@ -105,8 +105,11 @@ target_include_directories(RecompiledFuncs PRIVATE
     ${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime/N64Recomp/include
 )
 
-file(GLOB FUNC_C_SOURCES ${CMAKE_SOURCE_DIR}/RecompiledFuncs/*.c)
-file(GLOB FUNC_CXX_SOURCES ${CMAKE_SOURCE_DIR}/RecompiledFuncs/*.cpp)
+# CONFIGURE_DEPENDS: regenerating can add a new funcs_N.c (more functions
+# spill into another file), which a plain configure-time glob never sees --
+# the build then links against a library missing that file's functions.
+file(GLOB FUNC_C_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/RecompiledFuncs/*.c)
+file(GLOB FUNC_CXX_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/RecompiledFuncs/*.cpp)
 
 if (NOT FUNC_C_SOURCES AND NOT FUNC_CXX_SOURCES)
     # The recompiled game code is generated from the ROM, which this repository cannot ship, so

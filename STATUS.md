@@ -3,6 +3,36 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 74: round 73 never actually ran -- a new generated file wasn't being compiled, so every build since failed to link
+
+Round 73's retest crashed at the same `0x800DD82C` it fixed. The source
+and generated files on Windows were both correct, but the exe was older
+than the regenerated `recomp_overlays.inl`, and `cmake --build` was
+failing at link: `lld-link: error: undefined symbol: func_8009F02C`,
+referenced from `register_overlays.cpp`'s overlay table. Each run since
+had been the stale pre-round-73 exe.
+
+Cause: the extra functions from rounds 70-73's splits pushed N64Recomp's
+output into a new file, `RecompiledFuncs/funcs_24.c`. N64Recomp writes
+`manual_funcs` (round 54's `func_8009F02C`) after all regular functions,
+so it landed in that new file. `CMakeLists.txt` collected
+`RecompiledFuncs/*.c` with a plain `file(GLOB)`, which only runs at
+configure time, so `funcs_24.c` was never compiled into
+`RecompiledFuncs.lib`. **Fix:** added `CONFIGURE_DEPENDS` to both
+`RecompiledFuncs` globs, so every build re-checks for new generated
+files (same as the `src/game/*.cpp` glob already did).
+
+**Sandbox verification gap, also fixed:** this sandbox had been
+regenerating with a stale `build/N64Recomp` binary that silently drops
+`manual_funcs` entirely (no `func_8009F02C` anywhere in its output), so
+its builds never referenced the symbol and never hit this. The
+submodule's own `lib/N64ModernRuntime/N64Recomp/build/N64Recomp`
+matches the Windows behaviour (1338 functions, `func_8009F02C` in
+`funcs_24.c` and in `recomp_overlays.inl`). Use that binary for
+in-sandbox verification from now on. Rebuilt with it: `funcs_24.c` is
+picked up and compiled with no manual reconfigure, and
+`func_8009F02C` is defined in `libRecompiledFuncs.a`. The link succeeds.
+
 ## 2026-10-01, round 73: four-way split of func_800DD75C (title-screen idle again)
 
 Idle at the title again: `Failed to find function at 0x800DD82C`,
