@@ -26,7 +26,16 @@ extern "C" void btga_debug_vi_dispatch_live(uint8_t* rdram, recomp_context* ctx)
     int32_t validCount = *(int32_t*)(mq_ptr + 8);
     int32_t msgCount = *(int32_t*)(mq_ptr + 16);
 
-    printf("[BTGA DEBUG v3 - live, from patch] mq 0x80222930: validCount=%d msgCount=%d\n",
-        validCount, msgCount);
+    // Round 66 (part 2): round 66's fix to func_80097844's spin made no
+    // observable difference, meaning either that spin was never actually
+    // hit in this run, or the real gate is stuck shut for an unrelated
+    // reason. 0x801147E8 is the flag func_800A140C's gfx-task-build path
+    // (via func_80097660) requires to be non-zero -- read it directly to
+    // see whether it's ever actually non-zero, rather than guessing
+    // further from static analysis.
+    int32_t gate_flag = *(int32_t*)(rdram + (0x801147E8u - 0x80000000u));
+
+    printf("[BTGA DEBUG v3 - live, from patch] mq 0x80222930: validCount=%d msgCount=%d gate_0x801147E8=0x%08x\n",
+        validCount, msgCount, (unsigned)gate_flag);
     fflush(stdout);
 }
