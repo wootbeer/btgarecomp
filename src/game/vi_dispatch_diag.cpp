@@ -40,10 +40,8 @@ extern "C" void btga_debug_vi_dispatch_live(uint8_t* rdram, recomp_context* ctx)
     fflush(stdout);
 }
 
-// Round 66 parts 3-4's entry-hook diagnostics on func_800A15F0 and
-// func_80097844 (confirming the former stops after 3 calls and the latter
-// is never reached at all) found the real chain -- see STATUS.md round 67
-// -- and are removed now that it's understood and fixed
-// (src/game/gfx_gate_workaround.cpp). This live gate_0x801147E8 read above
-// still covers verifying the fix: it should stop reading 0 once the
-// patch's btga_reopen_gfx_gate is wired in.
+// Round 69: 0x801147E8 turned out to be the pending-audio-OSTask* slot, not
+// a gfx gate (STATUS.md round 69) -- reading 0 is expected while audio is
+// stubbed. This print's real value now is as a heartbeat: it fires from the
+// VI-dispatch thread, so it reappearing every second means that thread is
+// getting scheduled again.

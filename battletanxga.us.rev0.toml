@@ -1363,31 +1363,53 @@ text = """
     { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); ctx->r2 = MEM_W(S32(0x8011 << 16), 0x47E8); }
 """
 
-# Round 66 parts 3-4 diagnostics (entry hooks on func_800A15F0 and
-# func_80097844) traced the real chain -- see STATUS.md round 67 -- and
-# are removed now that it's understood: func_800A15F0 only ever runs 3
-# times because func_80097844 (the only other writer of 0x801147E8) is
-# never reachable at all, as a side effect of round 58's audio-DSP stub
-# starving its one real call site (RecompiledFuncs/funcs_19.c, inside
-# func_800FF698). See src/game/gfx_gate_workaround.cpp for the full chain.
+# Note (round 69, STATUS.md): 0x801147E8 is NOT a gfx gate -- it's the
+# "pending audio OSTask*" handoff slot. func_80097844 (audio thread) builds
+# an M_AUDTASK OSTask on its own stack and posts its address there, then
+# blocks on mq 0x801B4590; func_800A140C picks it up into its 0x200 slot
+# and submits it (preempting any running gfx task via osSpTaskYield);
+# func_800976AC wakes the audio thread and clears the slot when it's done.
+# With audio stubbed (round 58's func_801025C0), it correctly stays 0 --
+# "no audio task pending". Rounds 67-68 wrongly forced it non-zero, which
+# made func_800A140C submit task pointer 0x00000001 to the SP and crash.
+# Reverted. The real post-3-frames freeze is func_8007A818's framebuffer
+# wait (hooks below).
 
-# Round 67 (STATUS.md): fix for the above. func_800976AC is the ONLY place
-# that ever clears 0x801147E8 (its one call site is func_800A15F0's own
-# "both task slots empty" path, RecompiledFuncs/funcs_8.c:789), so it's
-# the real re-opener's natural trigger point -- SP task completion, not a
-# fixed timer. A first attempt reopened the gate unconditionally every VI
-# tick instead (patches/recompui_patches.c) and crashed the game (an
-# access violation within a few ticks): forcing it open ~60x/sec let
-# func_800A140C submit SP tasks far faster than the SP could drain them,
-# corrupting the two-slot pending-task state with none of its intended
-# backpressure. Hooked here instead, immediately after the real clear
-# (`sw $zero, 0x47E8($at)` at 0x800976CC), so the gate reopens at exactly
-# the same cadence the game's own code already decided was safe.
+# Round 69 (STATUS.md): the actual post-3-frames freeze. func_8007A818
+# acquires a free framebuffer for the next frame: 3 framebuffers (indices
+# 0-2), with three "in use" slots at 0xB2/0xB4/0xB6 of the state struct at
+# *0x80114500. If all three are taken it retries forever (L_8007A880 ->
+# `beq $v0, $a3, L_8007A828`) with no OS call inside -- so the cooperative
+# scheduler never runs the VI-dispatch thread (func_800A1290 ->
+# func_800A140C -> func_800A1858's osViSwapBuffer) that would release one,
+# and that thread's VI messages never even get drained from ultramodern's
+# external queue. 3 framebuffers == exactly 3 gfx tasks, then every other
+# thread starves (debugger: game thread parked at funcs_0.c:6257, inside
+# this loop; every throttled diagnostic in every other thread went silent
+# at once). Same unyielding-poll-loop family as rounds 50/51/53/60, and the
+# loop re-reads 0xB2/0xB4/0xB6 from memory every pass, so a yield is enough.
+# Only yields on the retry path (no free buffer found), so the normal
+# found-one-immediately path is untouched.
 [[patches.hook]]
-func = "func_800976AC"
-before_vram = 0x800976D0
+func = "func_8007A818"
+before_vram = 0x8007A888
 text = """
-    { extern void btga_reopen_gfx_gate(uint8_t *rdram, recomp_context *ctx); btga_reopen_gfx_gate(rdram, ctx); }
+    if (ctx->r2 == ctx->r7) { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
+"""
+
+# Round 69: same function, its entry wait. `lh $t0, 0xB0($a1)` loads the
+# "framebuffer currently being rendered" field ONCE, then
+# `bne $t0, $a3, L_8007A828` spins on that stale register copy -- the
+# round 66 func_80097844 pattern, an unconditional hang if ever entered.
+# Not the observed hang (the debugger shows the thread past it), but fixed
+# preemptively: only acts when the original code would spin forever
+# (t0 != -1), yielding and re-reading the field so the wait can complete.
+# On the retry path above t0 is already -1, so this is a no-op there.
+[[patches.hook]]
+func = "func_8007A818"
+before_vram = 0x8007A828
+text = """
+    if (ctx->r8 != ctx->r7) { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); ctx->r8 = MEM_H(ctx->r5, 0xB0); }
 """
 
 # Round 61 (STATUS.md, REVERTED): tried injecting a call to recompui's

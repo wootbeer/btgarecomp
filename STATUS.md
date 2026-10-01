@@ -3,6 +3,68 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 69: the real post-3-frames freeze is func_8007A818's framebuffer wait; rounds 67-68 were wrong and are reverted
+
+Round 68 stopped the crash but the freeze was back, identical to before:
+3 gfx tasks, then nothing. A filtered run log showed *every* throttled
+once-per-second diagnostic (`[BTGA DEBUG]` from all four yield hooks,
+`[BTGA DEBUG v3]` from the VI-dispatch thread) printed exactly once in
+a 20-second run -- the whole cooperative scheduler had stalled, not just
+one chain. A Break-All debugger sample put the game thread
+(`func_8009EEA0 -> func_8009D3A4 -> func_8007A0A0 -> func_8007A818`) at
+`RecompiledFuncs/funcs_0.c:6257`.
+
+`func_8007A818` acquires a free framebuffer for the next frame: three
+framebuffers (indices 0-2), three "in use" slots at `0xB2/0xB4/0xB6` of
+the state struct at `*0x80114500`, result stored to `0xB0`. If all three
+are taken, it retries forever (`L_8007A880` -> `beq $v0, $a3,
+L_8007A828`) with no OS call -- so ultramodern never switches threads,
+the VI-dispatch thread (`func_800A1290` -> `func_800A140C` ->
+`func_800A1858`'s `osViSwapBuffer`, which is what frees a framebuffer)
+never runs, and its VI messages never even get drained from
+`external_messages`. 3 framebuffers == exactly 3 gfx tasks. This is the
+same unyielding-poll-loop family as rounds 50/51/53/60 -- and this game
+thread is the one earlier rounds kept describing as "varying lines, never
+stuck": it was varying lines *inside this loop*. Round 65's yield at
+`func_8009D3A4`'s loop-back label never helped because that label is
+only reached after `func_8007A818` returns.
+
+**Fix** (`battletanxga.us.rev0.toml`, two hooks on `func_8007A818`):
+- `before_vram = 0x8007A888` (the retry branch): yield via
+  `btga_yield_via_priority_drop` only when no free buffer was found
+  (`ctx->r2 == ctx->r7`, i.e. -1). The loop re-reads `0xB2/0xB4/0xB6`
+  every pass, so a yield is sufficient.
+- `before_vram = 0x8007A828` (entry wait): `lh $t0, 0xB0` is loaded once
+  and `bne $t0, $a3` spins on the stale register -- the round 66
+  pattern. Not the observed hang, fixed preemptively: only acts when
+  `t0 != -1` (where the original would hang forever), yielding and
+  re-reading `0xB0`. A no-op on the retry path, where `t0` is already -1.
+
+**Correction to rounds 67-68 (reverted):** `0x801147E8` is not a gfx
+gate and its value is not a throwaway sentinel. It's the pending-audio
+`OSTask*` handoff slot: `func_80097844` builds an `M_AUDTASK` OSTask on
+its own stack (type field `2` at `sp+0x10`, ucode pointers, sizes) and
+posts that address there, then blocks on mq `0x801B4590`;
+`func_800A140C` stores it into its `0x200` slot, preempts any running
+gfx task with `osSpTaskYield`, and submits it; `func_800976AC` wakes the
+audio thread and clears the slot once it's done. With audio stubbed
+(round 58), the slot correctly stays 0 -- "no audio task pending". Round
+67's `1` "sentinel" got submitted to the SP as a task pointer -- its
+crash log literally shows `osSpTaskStartGo(0x00000001)` -- and round 68's
+hook would have done the same the first time `func_800976AC` ran. Removed
+the `func_800976AC` hook and `src/game/gfx_gate_workaround.cpp`. Round
+66's `func_80097844` spin fix stays (correct on its own; unreachable
+while audio is stubbed).
+
+Verified in-sandbox: regenerated (1330 functions, no errors), confirmed
+both hooks land at `L_8007A828` and right before the `0x8007A888` branch,
+no remaining `btga_reopen_gfx_gate` references, and a full `ninja
+BattleTanxGARecompiled` build succeeded. `patches.elf` is unchanged from
+round 68. Not yet confirmed against a real run -- if this works,
+`[BTGA DEBUG]` should now print every second (the retry path calls
+`btga_yield_via_priority_drop`, which carries that diagnostic) and
+`[sp] osSpTaskStartGo` should keep appearing past 3.
+
 ## 2026-10-01, round 68: round 67's fix made the game crash instead of freeze -- reopening the gate every VI tick raced ahead of the SP; retargeted to fire only when the real code clears it
 
 Tested round 67's fix on Windows: the game now runs for a moment (black
