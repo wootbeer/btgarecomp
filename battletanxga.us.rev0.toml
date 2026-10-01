@@ -1363,6 +1363,24 @@ text = """
     { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); ctx->r2 = MEM_W(S32(0x8011 << 16), 0x47E8); }
 """
 
+# Round 66 (part 3, STATUS.md) diagnostic: round 66's fix made no observable
+# difference, so before guessing further, directly instrument
+# func_800A15F0 -- func_800A1290's message-type dispatch table (traced
+# while investigating this) shows it handles msg==0x29B, separately from
+# func_800A140C's msg==0x29A, and it looks like the real "SP/RDP task
+# complete, submit next pending task" driver (manages the same state
+# struct's 0x200/0x204 task slots func_800A140C also writes, and calls
+# func_800976AC -- confirmed to clear the 0x801147E8 gate -- once both are
+# empty). Hooked at this function's own entry, before its prologue runs,
+# so ctx->r4 still holds the raw incoming state-struct pointer
+# (src/game/vi_dispatch_diag.cpp has the actual logging).
+[[patches.hook]]
+func = "func_800A15F0"
+before_vram = 0x800A15F0
+text = """
+    { extern void btga_debug_800A15F0_entry(uint8_t *rdram, recomp_context *ctx); btga_debug_800A15F0_entry(rdram, ctx); }
+"""
+
 # Round 61 (STATUS.md, REVERTED): tried injecting a call to recompui's
 # per-frame UI callback pump (recomp_run_ui_callbacks,
 # lib/RecompFrontend/recompui/src/api/ui_api_events.cpp) directly into

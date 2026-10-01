@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <chrono>
+#include <atomic>
 
 #include "recomp.h"
 
@@ -38,4 +39,41 @@ extern "C" void btga_debug_vi_dispatch_live(uint8_t* rdram, recomp_context* ctx)
     printf("[BTGA DEBUG v3 - live, from patch] mq 0x80222930: validCount=%d msgCount=%d gate_0x801147E8=0x%08x\n",
         validCount, msgCount, (unsigned)gate_flag);
     fflush(stdout);
+}
+
+// Round 66 (part 3): func_800A1290's message-type dispatch table showed
+// func_800A140C (what we'd been chasing) only handles msg==0x29A (plain
+// VI vsync); func_800A15F0 handles msg==0x29B and looks like the real
+// "SP/RDP task complete, submit next pending task" driver -- it manages
+// two pending-task slots at the same state struct's 0x200/0x204 that
+// func_800A140C's own gated path also writes to, and calls func_800976AC
+// (confirmed earlier to clear the 0x801147E8 gate) once both are empty.
+// Hooked at this function's own entry (before its prologue runs, so
+// ctx->r4 still holds the raw incoming state-struct pointer unmodified)
+// to see whether/how often it's reached, and what state it sees each
+// time -- first 50 calls logged individually, then a running heartbeat.
+static std::atomic<long long> btga_800A15F0_call_count{0};
+
+extern "C" void btga_debug_800A15F0_entry(uint8_t* rdram, recomp_context* ctx) {
+    long long call_num = btga_800A15F0_call_count.fetch_add(1);
+    uint8_t* base = rdram + ((uint32_t)ctx->r4 - 0x80000000u);
+    int32_t slot_200 = *(int32_t*)(base + 0x200);
+    int32_t slot_204 = *(int32_t*)(base + 0x204);
+    uint16_t flags_1F4 = *(uint16_t*)(base + (0x1F4 ^ 2));
+
+    if (call_num < 50) {
+        printf("[BTGA 800A15F0] call #%lld: 0x200=0x%08x 0x204=0x%08x 0x1F4=0x%04x\n",
+            call_num, (unsigned)slot_200, (unsigned)slot_204, (unsigned)flags_1F4);
+        fflush(stdout);
+    }
+
+    using namespace std::chrono;
+    static steady_clock::time_point last_heartbeat{};
+    auto now = steady_clock::now();
+    if (now - last_heartbeat >= seconds(1)) {
+        last_heartbeat = now;
+        printf("[BTGA 800A15F0 HEARTBEAT] total_calls=%lld 0x200=0x%08x 0x204=0x%08x 0x1F4=0x%04x\n",
+            call_num + 1, (unsigned)slot_200, (unsigned)slot_204, (unsigned)flags_1F4);
+        fflush(stdout);
+    }
 }
