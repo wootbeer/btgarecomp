@@ -3,6 +3,33 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 89: correcting round 88 -- it fed the game double the delta time
+
+Round 88's `[BTGA DT]` log showed both of its assumptions were wrong:
+
+- The game's raw per-frame value is a steady **~0.75** (0.72-0.77), not
+  1.0. That matches hardware: the game divides CPU-count ticks (46.875
+  MHz) by the CPU clock rate (62.5 MHz), so a 30 fps frame is 0.75 and one
+  VI is **0.375** units. The host-clock wobble is only about +/-3%.
+- `btga_vi_tick` counted **3** per 30 fps frame (~90/s): `func_800A1858`
+  runs off another message as well as VI. So round 88 substituted **1.5**
+  where the game expects 0.75, making time-based motion run about 2x.
+  The user's "helped in some places" can't be trusted.
+
+Fixed: removed `btga_vi_tick` (patch call and `syms.ld` entry).
+`btga_frame_dt` now snaps the game's own measured value to whole VIs
+(`round(raw / 0.375) * 0.375`, steady state exactly 0.75), leaving
+sub-VI values (first frame / zero) as measured. The `[BTGA DT]` line now
+prints raw min/avg/max next to the value actually used.
+
+Since the raw wobble is only +/-3%, delta time is probably *not* the main
+cause of the visible stutter or the flicker (the tank's rear logo decal
+flickering on its own, distant buildings flickering anywhere on screen).
+Those look renderer-side and are the next thing to investigate.
+
+Verified in-sandbox: regenerated (1581 functions, no errors), no
+remaining `btga_vi_tick` references, full build links. Not yet run.
+
 ## 2026-10-01, round 88: frame-locked delta time -- the game times motion with the host clock
 
 Round 87's pacing log ruled out presentation: steady state is exactly 30

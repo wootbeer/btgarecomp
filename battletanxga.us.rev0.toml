@@ -1518,8 +1518,9 @@ text = """
 # 1/30-second units, at 0x803A5948; object/camera motion scales by it. The
 # cooperative scheduler wakes the main thread at a slightly different moment
 # each frame, so that value wobbled even with perfectly even presentation,
-# making models jitter. Substitute VIs-since-last-frame * 0.5, which is what
-# the hardware value effectively measures (src/game/frame_dt_fix.cpp).
+# making models jitter. Snap it to whole VIs (0.375 units each; the game's
+# value is 0.75 per 30 fps frame, as on hardware) -- src/game/frame_dt_fix.cpp.
+# (Round 88 replaced it with a miscounted VI-based 1.5; corrected in round 89.)
 [[patches.hook]]
 func = "func_800BF80C"
 before_vram = 0x800BFAC8
