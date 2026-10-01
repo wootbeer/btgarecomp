@@ -767,7 +767,7 @@ text = """
 """
 
 [[patches.hook]]
-func = "func_800ED4F4"
+func = "func_800ED63C"
 before_vram = 0x800ed648
 text = """
     if (S32(ctx->r3) != 0) { lo = S32(S64(S32(ctx->r2)) / S64(S32(ctx->r3))); hi = S32(S64(S32(ctx->r2)) % S64(S32(ctx->r3))); } else { lo = 0; hi = 0; }

@@ -3,6 +3,29 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 79: round 78's batch confirmed -- the attract demo plays; one skipped entry fixed
+
+**Round 78 confirmed on Windows:** idling at the title now plays the
+intro/attract demo movie, new territory for this port. It crashed after
+a while with `Failed to find function at 0x800ED804`, inside
+`func_800ED4F4`, one of the two entries round 78 skipped as having an
+"unresolved jump table".
+
+Why it was skipped: the range ends with a stray `jr $zero` at
+`0x800ED98C`, after the last real `jr $ra`. It's dead code that N64Recomp
+emits as `LOOKUP_FUNC(0)`, not a jump table. The range's two real tables
+(`jr $v0` at `0x800ED6C0` and `0x800ED87C`) were both resolved.
+`tools/batch_split_merged_funcs.py` now ignores `jr $zero` when looking
+for unresolved tables. Re-running it changed only this entry (round 78's
+splits came out identical, and `func_80082A90` has no referenced
+boundaries): `0x148` + `0x1c8` + `0x18c`. Each jump table stays in its
+own piece, and the divide-guard hook at `0x800ed648` was re-pointed to
+`func_800ED63C`.
+
+Verified in-sandbox: regenerated (1556 functions, no errors), hook/patch
+landings and all switches identical to before, both new pieces
+registered, full build links. Not yet confirmed against a real run.
+
 ## 2026-10-01, round 78: batch split of every ROM-referenced merged-function boundary (one revertible commit)
 
 Rounds 70-77 fixed eight `Failed to find function at 0x...` crashes one

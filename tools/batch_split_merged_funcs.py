@@ -59,7 +59,8 @@ for line in syms.splitlines():
             bad|={b for b in bounds if lo<b<=hi}
     unresolved=False
     for i in insns:
-        if i.mnemonic=='jr' and i.op_str!='$ra':
+        # jr $zero is emitted as LOOKUP_FUNC(0), never a switch -- not a jump table (round 79).
+        if i.mnemonic=='jr' and i.op_str not in ('$ra','$zero'):
             if i.address not in jt: unresolved=True; break
             grp=jt[i.address]|{i.address}
             lo,hi=min(grp),max(grp)

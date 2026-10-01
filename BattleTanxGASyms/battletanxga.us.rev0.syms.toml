@@ -1289,7 +1289,10 @@ functions = [
     { name = "func_800ED0AC", vram = 0x800ed0ac, size = 0x104 },
     { name = "func_800ED1B0", vram = 0x800ed1b0, size = 0x170 },
     { name = "func_800ED320", vram = 0x800ed320, size = 0x1d4 },
-    { name = "func_800ED4F4", vram = 0x800ed4f4, size = 0x49c },
+    # Round 79 (STATUS.md): batch-tool split, skipped in round 78 over a stray `jr $zero` at 0x800ED98C (dead code, not a jump table).
+    { name = "func_800ED4F4", vram = 0x800ed4f4, size = 0x148 },
+    { name = "func_800ED63C", vram = 0x800ed63c, size = 0x1c8 },
+    { name = "func_800ED804", vram = 0x800ed804, size = 0x18c },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
     { name = "func_800ED990", vram = 0x800ed990, size = 0x35c },
     { name = "func_800EDCEC", vram = 0x800edcec, size = 0xe0 },
