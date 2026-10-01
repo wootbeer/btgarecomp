@@ -3,6 +3,29 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 73: four-way split of func_800DD75C (title-screen idle again)
+
+Idle at the title again: `Failed to find function at 0x800DD82C`,
+inside `func_800DD75C`'s declared `0xc18` range. The jr-$ra scan found
+three clean internal boundaries. The range has two jump tables, and each
+stays entirely inside its own piece: `jr` at `0x800DD878` targets
+`0x800DD880`-`0x800DDCAC` (all in `func_800DD82C`), and `jr` at
+`0x800DDFD8` targets `0x800DDFE0`-`0x800DE1D8` (all in `func_800DDF04`).
+No hooks or instruction patches touch the range. Split `0xd0` + `0x6d8` +
+`0x3f8` + `0x78`.
+
+Verified in-sandbox: regenerated (1337 functions, no errors), all three
+new functions are registered in `recomp_overlays.inl`, each switch is
+emitted in its expected new function, and a full build succeeded. Not
+yet confirmed against a real run.
+
+Tried to get ahead of these with a pre-emptive filter: keep only split
+pieces whose start address appears in the ROM as a literal word or a
+`lui`/`addiu` pair, i.e. something a function pointer could hold. It
+still flagged 261 pieces, many of them tiny fragments matching random
+data words or targets of jump tables N64Recomp never resolved. That's
+not reliable enough to bulk-apply, so these stay one-at-a-time.
+
 ## 2026-10-01, round 72: one more merged-function boundary from idling at the title screen
 
 Idle at the title again: `Failed to find function at 0x800D97EC`,
