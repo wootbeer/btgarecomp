@@ -619,56 +619,56 @@ text = """
 """
 
 [[patches.hook]]
-func = "func_800A2EF0"
+func = "func_800A2FBC"
 before_vram = 0x800a30ac
 text = """
     if (U32(ctx->r3) != 0) { lo = S32(U32(ctx->r2) / U32(ctx->r3)); hi = S32(U32(ctx->r2) % U32(ctx->r3)); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800D5C80"
+func = "func_800D5E2C"
 before_vram = 0x800d5f1c
 text = """
     if (S32(ctx->r2) != 0) { lo = S32(S64(S32(ctx->r4)) / S64(S32(ctx->r2))); hi = S32(S64(S32(ctx->r4)) % S64(S32(ctx->r2))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800D6E40"
+func = "func_800D6EEC"
 before_vram = 0x800d75d0
 text = """
     if (S32(ctx->r6) != 0) { lo = S32(S64(S32(ctx->r10)) / S64(S32(ctx->r6))); hi = S32(S64(S32(ctx->r10)) % S64(S32(ctx->r6))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800D6E40"
+func = "func_800D7638"
 before_vram = 0x800d7898
 text = """
     if (S32(ctx->r5) != 0) { lo = S32(S64(S32(ctx->r8)) / S64(S32(ctx->r5))); hi = S32(S64(S32(ctx->r8)) % S64(S32(ctx->r5))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800D6E40"
+func = "func_800D7638"
 before_vram = 0x800d79d0
 text = """
     if (S32(ctx->r19) != 0) { lo = S32(S64(S32(ctx->r2)) / S64(S32(ctx->r19))); hi = S32(S64(S32(ctx->r2)) % S64(S32(ctx->r19))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800D6E40"
+func = "func_800D7638"
 before_vram = 0x800d7b3c
 text = """
     if (S32(ctx->r19) != 0) { lo = S32(S64(S32(ctx->r21)) / S64(S32(ctx->r19))); hi = S32(S64(S32(ctx->r21)) % S64(S32(ctx->r19))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800D6E40"
+func = "func_800D7638"
 before_vram = 0x800d7b84
 text = """
     if (S32(ctx->r19) != 0) { lo = S32(S64(S32(ctx->r21)) / S64(S32(ctx->r19))); hi = S32(S64(S32(ctx->r21)) % S64(S32(ctx->r19))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800D6E40"
+func = "func_800D7638"
 before_vram = 0x800d7bdc
 text = """
     if (S32(ctx->r4) != 0) { lo = S32(S64(S32(ctx->r2)) / S64(S32(ctx->r4))); hi = S32(S64(S32(ctx->r2)) % S64(S32(ctx->r4))); } else { lo = 0; hi = 0; }
@@ -689,7 +689,7 @@ text = """
 """
 
 [[patches.hook]]
-func = "func_800D8C60"
+func = "func_800D8F48"
 before_vram = 0x800d9070
 text = """
     if (U32(ctx->r3) != 0) { lo = S32(U32(ctx->r2) / U32(ctx->r3)); hi = S32(U32(ctx->r2) % U32(ctx->r3)); } else { lo = 0; hi = 0; }
@@ -760,7 +760,7 @@ text = """
 """
 
 [[patches.hook]]
-func = "func_800EAC30"
+func = "func_800EAE58"
 before_vram = 0x800eae64
 text = """
     if (S32(ctx->r3) != 0) { lo = S32(S64(S32(ctx->r2)) / S64(S32(ctx->r3))); hi = S32(S64(S32(ctx->r2)) % S64(S32(ctx->r3))); } else { lo = 0; hi = 0; }
@@ -781,7 +781,7 @@ text = """
 """
 
 [[patches.hook]]
-func = "func_800ED990"
+func = "func_800EDDCC"
 before_vram = 0x800ede74
 text = """
     if (S32(ctx->r3) != 0) { lo = S32(S64(S32(ctx->r2)) / S64(S32(ctx->r3))); hi = S32(S64(S32(ctx->r2)) % S64(S32(ctx->r3))); } else { lo = 0; hi = 0; }
@@ -921,28 +921,28 @@ text = """
 """
 
 [[patches.hook]]
-func = "func_800F6650"
+func = "func_800F67F0"
 before_vram = 0x800f6930
 text = """
     if (S32(ctx->r3) != 0) { lo = S32(S64(S32(ctx->r4)) / S64(S32(ctx->r3))); hi = S32(S64(S32(ctx->r4)) % S64(S32(ctx->r3))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800F6650"
+func = "func_800F67F0"
 before_vram = 0x800f6a4c
 text = """
     if (S32(ctx->r3) != 0) { lo = S32(S64(S32(ctx->r4)) / S64(S32(ctx->r3))); hi = S32(S64(S32(ctx->r4)) % S64(S32(ctx->r3))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800F6650"
+func = "func_800F67F0"
 before_vram = 0x800f6a9c
 text = """
     if (S32(ctx->r2) != 0) { lo = S32(S64(S32(ctx->r4)) / S64(S32(ctx->r2))); hi = S32(S64(S32(ctx->r4)) % S64(S32(ctx->r2))); } else { lo = 0; hi = 0; }
 """
 
 [[patches.hook]]
-func = "func_800F6650"
+func = "func_800F67F0"
 before_vram = 0x800f6aec
 text = """
     if (S32(ctx->r2) != 0) { lo = S32(S64(S32(ctx->r4)) / S64(S32(ctx->r2))); hi = S32(S64(S32(ctx->r4)) % S64(S32(ctx->r2))); } else { lo = 0; hi = 0; }

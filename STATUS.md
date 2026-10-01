@@ -3,6 +3,39 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 78: batch split of every ROM-referenced merged-function boundary (one revertible commit)
+
+Rounds 70-77 fixed eight `Failed to find function at 0x...` crashes one
+at a time, each a merged-function boundary. Round 77's evidence (the
+ROM-reference filter flagged all 8; any split with no crossing branch and
+no jump-table target past it is semantically safe) justified doing the
+rest in one pass. `tools/batch_split_merged_funcs.py` does it:
+
+- Only unnamed `func_XXXXXXXX` entries, excluding the toml's `stubs` and
+  `ignored` lists. Named library code (libmus `F*` handlers,
+  `__udiv_w_sdiv`, `osBbCardChange`, ...) is left alone.
+- Only boundaries right after a `jr $ra` + delay slot, with no
+  branch/jump crossing them, whose start address is referenced in the
+  ROM (literal word or `lui`/`addiu|ori` constant).
+- Every resolved jump table (read from the generated `switch` statements)
+  keeps its `jr` and all case targets in one piece. Entries containing an
+  unresolved register jump are skipped entirely: `func_80082A90`,
+  `func_800ED4F4`.
+- All-zero (padding) pieces are not split off.
+- Every `[[patches.hook]]`/`[[patches.instruction]]` whose address lands
+  in a new piece is re-pointed to it. That was 15 hooks, all divide guards
+  or yields, e.g. `func_800D6E40`'s six now live in `func_800D6EEC` and
+  `func_800D7638`.
+
+Result: 78 entries split into 203 new functions (1351 -> 1554). Verified
+in-sandbox with the submodule's N64Recomp: no errors; the landing of all
+180 hooks/instruction patches (by vram) is byte-for-byte identical to
+before; all 186 jump tables are still emitted unchanged; and a full
+build links, with the extra generated `funcs_N.c` files picked up via
+round 74's `CONFIGURE_DEPENDS`. Not yet confirmed against a real run.
+**If anything that worked before round 78 regresses, `git revert` this
+one commit first.**
+
 ## 2026-10-01, round 77: three-way split of func_800F7EC0, and evidence on batching
 
 Round 76 confirmed. Next idle-at-title crash: `Failed to find function
