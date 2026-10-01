@@ -14,7 +14,10 @@ output_file_path = "rsp/n_aspMain.cpp"
 output_function_name = "n_aspMain"
 extra_indirect_branch_targets = [
     # command dispatch table, the first 16 halfwords of the ucode data
-    # (0x801262E0). Two slots are 0 and one is 0x02B0 (outside the text):
-    # unused commands, left out. All 13 below follow a `j 0x10EC` or `jr $ra`.
-    0x10EC, 0x139C, 0x119C, 0x1A64, 0x11C8, 0x17EC, 0x1208, 0x127C, 0x1348, 0x1248, 0x1C84, 0x12D4, 0x1384
+    # (0x801262E0). Two slots are 0 (unused commands). The rest follow a
+    # `j 0x10EC` or `jr $ra`, except command 0x0E's entry 0x02B0: the RSP PC
+    # is 12 bits, so that's IMEM 0x12B0 (Banjo's table has the same value) --
+    # the last store of the handler at 0x12A8. Round 91: it is used.
+    0x10EC, 0x139C, 0x119C, 0x1A64, 0x11C8, 0x17EC, 0x1208, 0x127C, 0x1348, 0x1248, 0x1C84, 0x12D4, 0x1384,
+    0x12B0
 ]

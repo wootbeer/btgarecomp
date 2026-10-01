@@ -3,6 +3,25 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 91: the audio pipeline runs -- one microcode dispatch target was wrongly excluded
+
+Round 90's first run aborted at game start with `Unhandled jump target
+0x02B0 in microcode n_aspMain` (librecomp `rsp.cpp:57`, exit reason 3).
+Command `0x0E` (`r26 = 0x0E011800`) dispatches through table slot 14,
+`0x02B0`, which round 90 had dropped as "outside the text". But the RSP PC
+is 12 bits, so it's IMEM `0x12B0`. Banjo's table holds the same value,
+and RSPRecomp normalizes targets with `| 0x1000`. The code there is
+`sh $t9, 0x4a($t8); j 0x10EC`, i.e. command `0x0E` enters the tail of the
+handler at `0x12A8`. Added `0x12B0` to `n_aspMain.us.rev0.toml`.
+
+The same log shows the pipeline round 90 enabled is alive: `[BTGA DEBUG
+v3]` read `gate_0x801147E8=0x801ec768`, so the audio thread
+(`func_80097844`) is posting real `M_AUDTASK` OSTasks and the
+microcode was executing commands until it hit this one.
+
+Verified in-sandbox: the build regenerates `rsp/n_aspMain.cpp` with
+`case 0x12B0` and links. Not yet run.
+
 ## 2026-10-01, round 90: audio -- RSP audio microcode recompiled, audio library un-stubbed and its fragmented symbols merged
 
 **Round 89 confirmed:** game speed is back to normal, motion is much
