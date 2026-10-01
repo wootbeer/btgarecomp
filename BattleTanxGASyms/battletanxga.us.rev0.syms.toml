@@ -1634,67 +1634,42 @@ functions = [
     { name = "func_800FF9F0", vram = 0x800ff9f0, size = 0x2c },
     { name = "func_800FFA1C", vram = 0x800ffa1c, size = 0x74 },
     { name = "func_800FFA90", vram = 0x800ffa90, size = 0xa0 },
-    { name = "n_alFxNew", vram = 0x800ffb30, size = 0xc4 },
-    { name = "n_drvrnew_text_00C4", vram = 0x800ffbf4, size = 0xa0 },
-    { name = "func_800FFC94", vram = 0x800ffc94, size = 0x1b8 },
-    { name = "n_drvrnew_text_031C", vram = 0x800ffe4c, size = 0x90 },
-    { name = "n_drvrnew_text_03AC", vram = 0x800ffedc, size = 0x18 },
-    { name = "func_800FFEF4", vram = 0x800ffef4, size = 0x28 },
+    # Round 90 (STATUS.md): the n_ audio library was split into fragments that
+    # fall through or branch into each other (N64Recomp doesn't follow
+    # fall-through, so each cut function returned early -- the round 57/58
+    # audio crashes). Merged back into whole functions: adjacent pieces are
+    # joined while one falls through into the next or any branch lands
+    # inside another piece. Every merged function ends at its real jr $ra.
+    # merged: n_drvrnew_text_00C4, func_800FFC94, n_drvrnew_text_031C, n_drvrnew_text_03AC, func_800FFEF4
+    { name = "n_alFxNew", vram = 0x800ffb30, size = 0x3ec },
     { name = "alN_PVoiceNew", vram = 0x800fff1c, size = 0x134 },
-    { name = "n_alEnvmixerPull", vram = 0x80100050, size = 0x60 },
-    { name = "func_801000B0", vram = 0x801000b0, size = 0x18c },
-    { name = "n_env_text_01EC", vram = 0x8010023c, size = 0xd0 },
-    { name = "n_env_text_02BC", vram = 0x8010030c, size = 0x1e8 },
-    { name = "func_801004F4", vram = 0x801004f4, size = 0x2c },
-    { name = "n_env_text_04D0", vram = 0x80100520, size = 0x8 },
-    { name = "n_env_text_04D8", vram = 0x80100528, size = 0x40 },
-    { name = "func_80100568", vram = 0x80100568, size = 0x60 },
-    { name = "n_alEnvmixerParam", vram = 0x801005c8, size = 0x8c },
-    { name = "n_env_text_0604", vram = 0x80100654, size = 0x8 },
-    { name = "n_env_text_060C", vram = 0x8010065c, size = 0x10 },
-    { name = "n_env_text_061C", vram = 0x8010066c, size = 0x1d4 },
-    { name = "n_env_text_07F0", vram = 0x80100840, size = 0x30 },
-    { name = "n_env_text_0820", vram = 0x80100870, size = 0x1c },
-    { name = "_getRate", vram = 0x8010088c, size = 0x130 },
-    { name = "n_env_text_096C", vram = 0x801009bc, size = 0x8 },
-    { name = "n_env_text_0974", vram = 0x801009c4, size = 0x8 },
-    { name = "_getVol", vram = 0x801009cc, size = 0x40 },
-    { name = "n_env_text_09BC", vram = 0x80100a0c, size = 0x14 },
-    { name = "n_alAdpcmPull", vram = 0x80100a20, size = 0xcc },
-    { name = "n_load_text_00CC", vram = 0x80100aec, size = 0x68 },
-    { name = "n_load_text_0134", vram = 0x80100b54, size = 0x184 },
-    { name = "func_80100CD8", vram = 0x80100cd8, size = 0xbc },
-    { name = "n_load_text_0374", vram = 0x80100d94, size = 0x38 },
-    { name = "func_80100DCC", vram = 0x80100dcc, size = 0x14 },
-    { name = "n_load_text_03C0", vram = 0x80100de0, size = 0x24 },
-    { name = "n_load_text_03E4", vram = 0x80100e04, size = 0x30 },
-    { name = "func_80100E34", vram = 0x80100e34, size = 0x4 },
-    { name = "n_load_text_0418", vram = 0x80100e38, size = 0x30 },
-    { name = "n_alLoadParam", vram = 0x80100e68, size = 0x178 },
-    { name = "n_load_text_05C0", vram = 0x80100fe0, size = 0x8 },
-    { name = "n_load_text_05C8", vram = 0x80100fe8, size = 0xc },
-    { name = "_decodeChunk", vram = 0x80100ff4, size = 0xa0 },
-    { name = "n_load_text_0674", vram = 0x80101094, size = 0xac },
-    { name = "n_alResamplePull", vram = 0x80101140, size = 0x19c },
-    { name = "n_resample_text_019C", vram = 0x801012dc, size = 0x20 },
-    # Round 56 (STATUS.md): n_alResampleParam (declared 0x524) is really
-    # three functions back to back -- itself (0x24, a tiny trampoline that
-    # just calls another function and returns 0), an unnamed func_80101320
-    # (0x310, the runtime's actual "Failed to find function" target, the
-    # next crash after round 55's fix), and an unnamed func_80101630
-    # (0x1f0, ending exactly at the original declared boundary with no
-    # leftover padding). 0x24+0x310+0x1f0 = 0x524, matching exactly.
-    # Verified via an automated scan that every branch/jump in all three
-    # ranges stays within its own function -- no cross-boundary branches.
+    # merged: func_801000B0, n_env_text_01EC, n_env_text_02BC, func_801004F4, n_env_text_04D0, n_env_text_04D8, func_80100568
+    { name = "n_alEnvmixerPull", vram = 0x80100050, size = 0x578 },
+    # merged: n_env_text_0604, n_env_text_060C
+    { name = "n_alEnvmixerParam", vram = 0x801005c8, size = 0xa4 },
+    # merged: n_env_text_07F0, n_env_text_0820
+    { name = "n_env_text_061C", vram = 0x8010066c, size = 0x220 },
+    # merged: n_env_text_096C, n_env_text_0974
+    { name = "_getRate", vram = 0x8010088c, size = 0x140 },
+    # merged: n_env_text_09BC
+    { name = "_getVol", vram = 0x801009cc, size = 0x54 },
+    # merged: n_load_text_00CC, n_load_text_0134, func_80100CD8, n_load_text_0374, func_80100DCC, n_load_text_03C0, n_load_text_03E4, func_80100E34, n_load_text_0418
+    { name = "n_alAdpcmPull", vram = 0x80100a20, size = 0x448 },
+    # merged: n_load_text_05C0, n_load_text_05C8
+    { name = "n_alLoadParam", vram = 0x80100e68, size = 0x18c },
+    # merged: n_load_text_0674
+    { name = "_decodeChunk", vram = 0x80100ff4, size = 0x14c },
+    # merged: n_resample_text_019C
+    { name = "n_alResamplePull", vram = 0x80101140, size = 0x1bc },
     { name = "n_alResampleParam", vram = 0x801012fc, size = 0x24 },
     { name = "func_80101320", vram = 0x80101320, size = 0x310 },
     { name = "func_80101630", vram = 0x80101630, size = 0x1f0 },
-    { name = "_n_loadOutputBuffer", vram = 0x80101820, size = 0x1e0 },
-    { name = "n_reverb_text_06E0", vram = 0x80101a00, size = 0x30 },
-    { name = "_n_loadBuffer", vram = 0x80101a30, size = 0xf0 },
-    { name = "n_reverb_text_0800", vram = 0x80101b20, size = 0x38 },
-    { name = "_n_saveBuffer", vram = 0x80101b58, size = 0xe0 },
-    { name = "n_reverb_text_0918", vram = 0x80101c38, size = 0x38 },
+    # merged: n_reverb_text_06E0
+    { name = "_n_loadOutputBuffer", vram = 0x80101820, size = 0x210 },
+    # merged: n_reverb_text_0800
+    { name = "_n_loadBuffer", vram = 0x80101a30, size = 0x128 },
+    # merged: n_reverb_text_0918
+    { name = "_n_saveBuffer", vram = 0x80101b58, size = 0x118 },
     { name = "_n_filterBuffer", vram = 0x80101c70, size = 0xa0 },
     { name = "n_alInit", vram = 0x80101d10, size = 0x44 },
     { name = "n_alClose", vram = 0x80101d54, size = 0x3c },

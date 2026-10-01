@@ -514,6 +514,22 @@ endforeach()
 
 target_sources(BattleTanxGARecompiled PRIVATE ${GENERATED_NRM_SOURCES})
 
+# RSP audio microcode (STATUS.md round 90): rsp/n_aspMain.cpp is generated
+# from the ROM by RSPRecomp (n_aspMain.us.rev0.toml), like RecompiledFuncs/,
+# so it's gitignored and only built when the ROM is present.
+set(BTGA_ROM_PATH "${CMAKE_SOURCE_DIR}/BattleTanx Global Assault (USA).z64")
+if (EXISTS "${BTGA_ROM_PATH}")
+    list(REMOVE_ITEM SOURCES ${CMAKE_SOURCE_DIR}/rsp/n_aspMain.cpp)
+    add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/rsp/n_aspMain.cpp
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rsp
+        COMMAND $<TARGET_FILE:RSPRecomp> n_aspMain.us.rev0.toml
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        DEPENDS ${CMAKE_SOURCE_DIR}/n_aspMain.us.rev0.toml RSPRecomp
+    )
+    target_sources(BattleTanxGARecompiled PRIVATE ${CMAKE_SOURCE_DIR}/rsp/n_aspMain.cpp)
+    target_compile_definitions(BattleTanxGARecompiled PRIVATE BTGA_HAS_RSP_AUDIO)
+endif()
+
 target_sources(BattleTanxGARecompiled PRIVATE ${SOURCES})
 
 set_property(TARGET BattleTanxGARecompiled PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

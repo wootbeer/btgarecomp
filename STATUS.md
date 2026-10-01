@@ -3,6 +3,54 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 90: audio -- RSP audio microcode recompiled, audio library un-stubbed and its fragmented symbols merged
+
+**Round 89 confirmed:** game speed is back to normal, motion is much
+smoother, and the tank's rear logo decal no longer flickers. Moving on to
+audio, which has been completely stubbed since rounds 57-58.
+
+**RSP side.** Modeled on BanjoRecomp, which recompiles its `n_aspMain`
+with N64Recomp's RSPRecomp. Ours came from the game's own audio-task
+setup: `func_800FF698` passes ucode text `0x800FA210` and data
+`0x801262E0`, and `0x800FA210 + 0xC60` ends exactly at round 84's
+`func_800FAE70`. It's the same size as Banjo's `n_aspMain` but a
+different build: our dispatch table (first 16 halfwords of the data)
+holds Banjo's entries minus 4, with two empty slots and one `0x02B0`
+(outside the text, an unused command). All 13 real targets follow a
+`j 0x10EC` / `jr $ra`. New `n_aspMain.us.rev0.toml` (ROM offset
+`0x8A210`, IMEM `0x04001080`). CMake now runs RSPRecomp to generate
+`rsp/n_aspMain.cpp` (gitignored, ROM-derived, only when the ROM is
+present, defining `BTGA_HAS_RSP_AUDIO`), and `get_rsp_microcode` returns
+`n_aspMain` for `M_AUDTASK`. Graphics tasks stay on RT64's HLE.
+
+**CPU side.** The n_ audio library (`0x800FFB30`-`0x80101C70`) was split
+into fragments (`n_env_text_*`, `n_load_text_*`, `n_reverb_text_*`, ...)
+that fall through or branch into each other. N64Recomp doesn't follow
+fall-through, so each cut function returned early. That's the real
+cause of the round 57/58 crashes in `n_alEnvmixerPull` / `_n_saveBuffer`
+that the native stubs papered over. Merged them back into 17 whole
+functions (35 fragments absorbed): adjacent pieces join while one falls
+through into the next or any branch lands inside another piece; jumps to
+another function's *start* stay tail calls. Every merged function ends
+at its real `jr $ra`. No absorbed piece is called directly. The one
+ROM-referenced piece, `0x801004F4`, is a case target in
+`n_alEnvmixerPull`'s own jump table at `0x80077720`, which now resolves
+(`jr $v0` at `0x80100120`, 9 targets, all inside the function).
+`ignored` is now empty and `func_801000B0` is out of `stubs` (both
+were fragments). Deleted `src/game/n_alEnvmixerPull_stub.cpp` and
+`src/game/func_801025C0_stub.cpp`.
+
+With `func_801025C0` real, `func_800FF698` should now build audio
+command lists and call the table's `func_80097844`, which posts the
+`M_AUDTASK` OSTask to `0x801147E8`; `func_800A140C` then submits it.
+Round 66's spin fix in `func_80097844` becomes relevant again.
+
+Verified in-sandbox: RSPRecomp generates `rsp/n_aspMain.cpp` from the
+ROM; N64Recomp regenerates 1546 functions (1581 - 35) with no errors or
+branch warnings and no remaining inter-fragment tail calls; hook/patch
+landings identical; full build links. Not yet run -- expect the usual
+crash-fix cycle now that audio code actually executes.
+
 ## 2026-10-01, round 89: correcting round 88 -- it fed the game double the delta time
 
 Round 88's `[BTGA DT]` log showed both of its assumptions were wrong:

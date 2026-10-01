@@ -12,6 +12,8 @@
 # Output C files
 RecompiledFuncs/
 RecompiledPatches/
+# RSP microcode recompiled from the ROM (n_aspMain.us.rev0.toml)
+rsp/
 
 # patches/ build output (patches.elf is covered by the *.elf rule below)
 patches/*.o

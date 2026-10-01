@@ -78,7 +78,9 @@ manual_funcs = [
 #    "Failed to determine size of jump table at 0x80077720 for instruction
 #    at 0x80100120", the table it reads isn't in this function's own byte
 #    range at all), so it needs the same treatment for the same reason.
-stubs = ["func_8007919C", "func_80079260", "__osException_80104FB0", "func_801000B0"]
+# Round 90: func_801000B0 removed -- it was a fragment of n_alEnvmixerPull,
+# now merged back into it (STATUS.md).
+stubs = ["func_8007919C", "func_80079260", "__osException_80104FB0"]
 
 # n_alEnvmixerPull (round 57, STATUS.md): moved out of stubs and into
 # ignored -- a plain empty stub left its return value ($v0/ctx->r2) holding
@@ -117,7 +119,10 @@ stubs = ["func_8007919C", "func_80079260", "__osException_80104FB0", "func_80100
 # path unconditionally (rather than only when the original condition
 # happens to be false) is safe and gives "no audio processed this frame"
 # instead of a crash, using the game's own no-op contract.
-ignored = ["n_alEnvmixerPull", "func_801025C0"]
+# Round 90: n_alEnvmixerPull and func_801025C0 are no longer replaced by native
+# stubs -- their crashes came from the fragmented audio-library symbols
+# (STATUS.md round 90), now merged into whole functions.
+ignored = []
 
 # Instruction patches: cop0 writes and eret (nothing is emulated) -- round 18.
 
