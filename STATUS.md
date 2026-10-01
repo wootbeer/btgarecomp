@@ -3,6 +3,27 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 75: round 73 confirmed; five-way split of func_800DE930
+
+With round 74's build fix, round 73 actually ran and worked: the next
+idle-at-title crash moved to `0x800DEB1C`, inside `func_800DE930`'s
+declared `0x47c` range. Four clean internal boundaries, no crossing
+branch, no jump table, no hooks in range. `0x800DEB1C` opens with a
+normal prologue (`addiu $sp, $sp, -0x60`). The three small pieces are
+tiny leaf functions (e.g. `andi`/`sltiu`/`jr $ra` flag checks). Split
+`0x164` + `0x2c` + `0x38` + `0x24` + `0x290`.
+
+Verified in-sandbox with the submodule's N64Recomp (1342 functions, no
+errors, all five pieces plus `func_8009F02C` registered) and a full
+build that links. Not yet confirmed against a real run.
+
+`0x800DEB1C` was on round 73's "ROM-referenced split piece" list, so
+that filter does catch real ones. Adding "the piece starts with an
+`addiu $sp, $sp, -N` prologue" narrows it to 128 pieces in 70 entries,
+55 of them in ranges with jump tables. That might be batchable with
+automated jump-table and hook checks, but each wrong split would break
+currently-working code, so it isn't applied yet.
+
 ## 2026-10-01, round 74: round 73 never actually ran -- a new generated file wasn't being compiled, so every build since failed to link
 
 Round 73's retest crashed at the same `0x800DD82C` it fixed. The source

@@ -924,7 +924,16 @@ functions = [
     { name = "func_800DE2FC", vram = 0x800de2fc, size = 0x78 },
     { name = "func_800DE374", vram = 0x800de374, size = 0x1b8 },
     { name = "func_800DE52C", vram = 0x800de52c, size = 0x404 },
-    { name = "func_800DE930", vram = 0x800de930, size = 0x47c },
+    # Round 75 (STATUS.md): merged-function boundary, a five-way split.
+    # "Failed to find function at 0x800DEB1C" after idling at the title
+    # screen. jr-$ra scan of the original 0x47c range: four clean internal
+    # boundaries, no crossing branch, no jump table, no hooks in range;
+    # 0x800DEB1C opens with a normal prologue. Sums to 0x47c.
+    { name = "func_800DE930", vram = 0x800de930, size = 0x164 },
+    { name = "func_800DEA94", vram = 0x800dea94, size = 0x2c },
+    { name = "func_800DEAC0", vram = 0x800deac0, size = 0x38 },
+    { name = "func_800DEAF8", vram = 0x800deaf8, size = 0x24 },
+    { name = "func_800DEB1C", vram = 0x800deb1c, size = 0x290 },
     { name = "func_800DEDAC", vram = 0x800dedac, size = 0x130 },
     { name = "func_800DEEDC", vram = 0x800deedc, size = 0x1e8 },
     { name = "func_800DF0D0", vram = 0x800df0d0, size = 0x2e8 },
