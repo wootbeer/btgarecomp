@@ -12,6 +12,9 @@ extern void* func_8007AF84(s32 flag);
 // diagnostic only fires from code paths this game no longer revisits).
 extern void btga_debug_vi_dispatch_live(void);
 
+// Round 87 diagnostic (src/game/vi_dispatch_diag.cpp): frame pacing per swap.
+extern void btga_debug_swap_pacing(void* state, void* frame_buffer);
+
 // func_800A1858 (RecompiledFuncs/funcs_8.c) is this game's VI-swap-throttle
 // routine: it's reached once per real VI tick (func_800A1290's VI-message
 // dispatch -> func_800A140C -> here), and is the only place that ever calls
@@ -55,6 +58,7 @@ RECOMP_PATCH void func_800A1858(void* state) {
         *unblank_pending = 0;
     }
 
+    btga_debug_swap_pacing(state, frame_buffer);
     osViSwapBuffer(frame_buffer);
     *swap_pending = 0;
 }

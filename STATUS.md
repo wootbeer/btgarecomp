@@ -3,6 +3,29 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 87: menus confirmed; investigating remaining stutter with a frame-pacing diagnostic
+
+**Round 86 confirmed:** the launcher and config menus now render text and
+icons. Switching Graphics -> Framerate to `Original` reduced the
+model stutter/flicker a lot (so RT64 interpolation was part of it), but
+some remains, mostly in the credits. Distant buildings also sometimes
+flicker or pop in and out.
+
+Re-verified `patches/recompui_patches.c`'s `func_800A1858` against the
+original disassembly: it matches instruction for instruction (threshold
+check on `0x1F0`/`0x1EC`, `func_8007AF84(1)` = the `0xB4` "queued for
+display" slot, one-shot unblank, swap, clear `0x1F0`). So frame
+*selection* isn't the bug.
+
+Added `btga_debug_swap_pacing` (`src/game/vi_dispatch_diag.cpp`, called
+from the patch right before `osViSwapBuffer`, registered in
+`patches/syms.ld` at `0x8F0000F0`). Once per second it prints `[BTGA
+PACING]`: swaps, swap interval min/avg/max in ms, VIs per swap min/max,
+repeats, A->B->A "back_and_forth" swaps, and distinct framebuffers seen.
+That separates uneven swap timing (likely a side effect of the
+cooperative-scheduler yield workarounds) from out-of-order presentation.
+Builds in-sandbox; not yet run.
+
 ## 2026-10-01, round 86: launcher/config UI text and icons -- font family name mismatch, plus assets modeled on BanjoRecomp
 
 **Round 85 confirmed:** Credits works. The user reports two remaining
