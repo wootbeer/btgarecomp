@@ -785,7 +785,13 @@ functions = [
     { name = "func_800CBE40", vram = 0x800cbe40, size = 0x270 },
     { name = "func_800CC0B0", vram = 0x800cc0b0, size = 0x248 },
     { name = "func_800CC2F8", vram = 0x800cc2f8, size = 0x27c },
-    { name = "func_800CC574", vram = 0x800cc574, size = 0x950 },
+    # Round 70 (STATUS.md): merged-function boundary, a two-way split.
+    # "Failed to find function at 0x800CCA6C" (reached at the Controller Pak
+    # check menu) -- the original 0x950-byte range has exactly one internal
+    # jr $ra (at 0x800CCA64, delay slot 0x800CCA68), 0x800CCA6C opens with
+    # a normal prologue, and no branch crosses it. Sizes sum to 0x950.
+    { name = "func_800CC574", vram = 0x800cc574, size = 0x4f8 },
+    { name = "func_800CCA6C", vram = 0x800cca6c, size = 0x458 },
     { name = "func_800CCEC4", vram = 0x800ccec4, size = 0x86c },
     { name = "func_800CD730", vram = 0x800cd730, size = 0x12c },
     { name = "func_800CD85C", vram = 0x800cd85c, size = 0x110 },

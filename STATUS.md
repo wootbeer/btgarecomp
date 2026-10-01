@@ -3,6 +3,30 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 70: round 69 worked -- the game renders and the menus play; next crash is another merged-function boundary at the Controller Pak check
+
+**Round 69 confirmed on Windows:** the game runs, renders, and plays
+through its menus, the first time it's gotten past boot. `[sp]
+osSpTaskStartGo` alternates between the two gfx task buffers
+(`0x801293E0`/`0x80129428`) indefinitely, and the throttled diagnostics
+keep printing. No audio, as expected (round 58's DSP stub).
+
+It then crashed at the menu step that checks for a Controller Pak:
+`Failed to find function at 0x800CCA6C` / `overlays.cpp:368` -- the same
+failure as round 64. `0x800CCA6C` sat inside `func_800CC574`'s declared
+`0x950` range. A jr-$ra boundary scan of that range (capstone, same
+method as rounds 56/59/64) found exactly one internal `jr $ra`
+(`0x800CCA64`, delay slot `0x800CCA68`), and no branch crosses it.
+`0x800CCA6C` opens with a normal prologue (`addiu $sp, $sp, -0x48; sw
+$ra, 0x40($sp)`). Split into `func_800CC574` (`0x4f8`) and
+`func_800CCA6C` (`0x458`), sizes summing to `0x950`.
+
+Verified in-sandbox: regenerated (1331 functions, up from 1330, no
+errors), `func_800CCA6C` is emitted (`RecompiledFuncs/funcs_13.c`) and
+registered in `recomp_overlays.inl`, and a full `ninja
+BattleTanxGARecompiled` build succeeded. Not yet confirmed against a
+real run.
+
 ## 2026-10-01, round 69: the real post-3-frames freeze is func_8007A818's framebuffer wait; rounds 67-68 were wrong and are reverted
 
 Round 68 stopped the crash but the freeze was back, identical to before:
