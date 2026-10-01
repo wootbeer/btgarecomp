@@ -3,6 +3,27 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 77: three-way split of func_800F7EC0, and evidence on batching
+
+Round 76 confirmed. Next idle-at-title crash: `Failed to find function
+at 0x800F7F6C`, inside `func_800F7EC0`'s declared `0x1dc` range. Two
+clean internal boundaries, no crossing branch, no jump table, no hooks.
+`0x800F7F6C` is a 6-instruction leaf with no stack frame
+(`lbu $v0, 0x21($a0)` ... `sw $v0, ($a1)`, `jr $ra`). Split `0xac` +
+`0x18` + `0x118`. Verified in-sandbox (1351 functions, no errors, both
+new pieces registered, full build links).
+
+Evidence on pre-emptive batching: every merged-boundary crash so far
+(`0x800CDAAC`, `0x800CCA6C`, `0x80092748`, `0x800D97EC`, `0x800DD82C`,
+`0x800DEB1C`, `0x800EA224`, `0x800F7F6C`) is referenced in the ROM,
+either as a literal data word or as a `lui`/`addiu` constant, so that
+filter has 8/8 recall. Round 75's extra "starts with a stack-frame
+prologue" filter would have *missed* this one (a frameless leaf), so
+that refinement is wrong. Separately, a split at a boundary with no
+crossing branch and no jump-table target past it is semantically safe
+whether or not the piece is a real function: the code after it is
+unreachable from the code before it.
+
 ## 2026-10-01, round 76: eight-way split of func_800EA14C, plus re-pointing a hook it displaced
 
 Round 75 confirmed. Next idle-at-title crash: `Failed to find function

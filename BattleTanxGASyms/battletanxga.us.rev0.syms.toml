@@ -1129,7 +1129,15 @@ functions = [
     { name = "func_800F757C", vram = 0x800f757c, size = 0xcc },
     { name = "func_800F7BA4", vram = 0x800f7ba4, size = 0x80 },
     { name = "func_800F7C30", vram = 0x800f7c30, size = 0x290 },
-    { name = "func_800F7EC0", vram = 0x800f7ec0, size = 0x1dc },
+    # Round 77 (STATUS.md): merged-function boundary, a three-way split.
+    # "Failed to find function at 0x800F7F6C" after idling at the title
+    # screen. Two clean internal boundaries, no crossing branch, no jump
+    # table, no hooks in range. 0x800F7F6C is a 6-instruction leaf (no
+    # stack frame) reading 0x21($a0) and storing a flag through $a1.
+    # Sums to 0x1dc.
+    { name = "func_800F7EC0", vram = 0x800f7ec0, size = 0xac },
+    { name = "func_800F7F6C", vram = 0x800f7f6c, size = 0x18 },
+    { name = "func_800F7F84", vram = 0x800f7f84, size = 0x118 },
     # round 22: split -- another hard-to-detect trailing garbage word
     # (0x800f809c, raw bytes spell "num", part of a string) that decodes as
     # a fully plausible `bne`; only surfaced because its computed branch
