@@ -17,10 +17,8 @@
 //     it submits an M_AUDTASK, printing which task type was unhandled.
 //   - `GameEntry::save_type` is `AllowAll` (accepts EEPROM/SRAM/FlashRAM)
 //     rather than this ROM's real save type, which hasn't been determined.
-//   - The registered primary font (`LatoLatin-Regular.ttf`, under
-//     `assets/`) is a bootstrap placeholder, not the game's real UI
-//     typeface -- see STATUS.md round 33 for why one has to be registered
-//     at all (RmlUi hard-requires it; recompui::start throws otherwise).
+//   - UI assets (primary font, icons, promptfont) are modeled on
+//     BanjoRecomp's, not designed for this game -- see STATUS.md round 86.
 //   - Audio playback uses a plain SDL_QueueAudio push -- no resampling or
 //     jitter smoothing. Good enough to hear whether audio works at all,
 //     not tuned for it to sound clean.
@@ -356,13 +354,13 @@ int main(int argc, char** argv) {
     }
     BTGA_CHECKPOINT("after open_audio_device");
 
-    // Lato (SIL Open Font License 1.1, assets/FONT_LICENSE.txt), reused from
-    // RmlUi's own bundled sample assets -- see the file-level comment. This
-    // is a bootstrap placeholder to get recompui::start past its hard
-    // requirement for *some* primary font (UIState's constructor throws
-    // std::runtime_error otherwise -- see STATUS.md round 33), not a
-    // considered choice of the game's real UI typeface.
-    recompui::register_primary_font("LatoLatin-Regular.ttf", "Lato");
+    // Inter Variable (SIL OFL 1.1, assets/INTER_LICENSE.txt), the same primary
+    // font BanjoRecomp registers with this same RecompFrontend. The family
+    // name must match the one stored inside the font file: recompui's
+    // generated base stylesheet sets `font-family` to it, and RmlUi draws no
+    // text for a family it never loaded (STATUS.md round 86 -- the old
+    // "Lato" didn't match LatoLatin-Regular.ttf's internal "LatoLatin").
+    recompui::register_primary_font("InterVariable.ttf", "Inter Variable");
     BTGA_CHECKPOINT("after register_primary_font");
 
     recomp::register_config_path(recompui::file::get_app_folder_path());

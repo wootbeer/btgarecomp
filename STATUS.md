@@ -3,6 +3,44 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 86: launcher/config UI text and icons -- font family name mismatch, plus assets modeled on BanjoRecomp
+
+**Round 85 confirmed:** Credits works. The user reports two remaining
+issues. First, models stutter back and forth and sprites/textures
+flicker, worst in the attract demo and credits and slight in gameplay.
+Second, the recompui launcher and config menus show no text and broken
+formatting (the user has been clicking blind).
+
+Menu text: recompui's generated base stylesheet
+(`lib/RecompFrontend/recompui/src/data/base_rcss.cpp`) sets `body {
+font-family: "<registered family>" }`, and RmlUi names a loaded face by
+the family name stored inside the font file. `main.cpp` registered
+`LatoLatin-Regular.ttf` as `"Lato"`, but the file's internal family is
+`LatoLatin` (read from its `name` table). So the stylesheet named a family
+that was never loaded, and no text was drawn. Missing icons: recompui
+loads 11 SVGs from `assets/icons/` (Caret, Cont, Keyboard, PlusKeyboard,
+Question, Quit, RecordBorder, RecordSpinner, Reset, Trash, X), and none
+existed here, leaving blank buttons and broken-looking layout.
+
+Fix, modeled on BanjoRecomp (same RecompFrontend, same GPL-3 license as
+this project): copied its `InterVariable.ttf` (OFL 1.1, notice in new
+`assets/INTER_LICENSE.txt`), its 14 top-level `assets/icons/*.svg`, and
+its `assets/promptfont/` (controller-glyph font with its own LICENSE).
+`main.cpp` now registers `("InterVariable.ttf", "Inter Variable")`,
+exactly as Banjo does. Banjo's own `recomp.rcss` is also a one-rule
+placeholder (recompui generates the real styles in C++), so ours stays
+as is. Assets resolve as `./assets/...` relative to the working
+directory, so run the exe from the repo root as usual.
+
+Builds in-sandbox; this sandbox has no GPU, so it can't render the UI.
+Not yet confirmed against a real run.
+
+On the stutter/flicker: the project's Framerate option defaults to
+`Display`, i.e. RT64 interpolates up to the monitor's refresh rate, which
+needs per-game matrix tagging this port doesn't have. That's the leading
+suspect, and it needs the now-readable config menu to test
+(Esc -> Graphics -> Framerate -> Original).
+
 ## 2026-10-01, round 85: three levels played; credits crash from a function entry starting one word early
 
 **Round 84 confirmed on Windows:** the game played through to level 3
