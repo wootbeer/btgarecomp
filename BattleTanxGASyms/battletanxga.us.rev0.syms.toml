@@ -1468,9 +1468,13 @@ functions = [
     { name = "func_800F7230", vram = 0x800f7230, size = 0x33c },
     { name = "func_800F756C", vram = 0x800f756c, size = 0x10 },
     # round 22: split -- trailing garbage word (sllv $zero,$at,$zero) right
-    # after this one's real jr $ra return; real code resumes at 0x800f764c.
+    # after this one's real jr $ra return.
+    # Round 85 (STATUS.md): real code resumes at 0x800f7650, not 0x800f764c --
+    # 0x800F764C is a padding nop (left uncovered). Only 0x800F7650 (the
+    # prologue) is referenced, so indirect calls there failed ("Failed to
+    # find function at 0x800F7650", opening the credits).
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
-    { name = "func_800F764C", vram = 0x800f764c, size = 0x224 },
+    { name = "func_800F7650", vram = 0x800f7650, size = 0x220 },
     { name = "func_800F7870", vram = 0x800f7870, size = 0x210 },
     { name = "func_800F7A80", vram = 0x800f7a80, size = 0x124 },
     { name = "func_800F757C", vram = 0x800f757c, size = 0xcc },

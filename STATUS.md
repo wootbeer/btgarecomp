@@ -3,6 +3,28 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 85: three levels played; credits crash from a function entry starting one word early
+
+**Round 84 confirmed on Windows:** the game played through to level 3
+with no crashes. Back at the main menu, selecting Credits aborted with
+`Failed to find function at 0x800F7650`. That's 4 bytes into
+`func_800F764C`. Round 22 started that entry at `0x800F764C`, but that
+word is a padding `nop` (after a data word at `0x800F7648`). The real
+prologue (`addiu $sp, $sp, -0x30`) is at `0x800F7650`, and only that
+address is referenced in the ROM. So the indirect call there found no
+function start. Moved the entry to `func_800F7650` (`0x220`), leaving
+the `nop` uncovered.
+
+A scan for entries starting on padding found no other entry where the
+start is unreferenced but the following prologue is. The other hits
+are referenced at their own start, or are data in the `0x8011xxxx`
+range.
+
+Verified in-sandbox: regenerated (1581 functions, no errors), hook/patch
+landings and switches identical, no references to the old name,
+`func_800F7650` registered, full build links. Not yet confirmed against
+a real run.
+
 ## 2026-10-01, round 84: mid-level crash in code the original syms never covered -- functions placed right after inline string data
 
 Still in level 1, near where round 82's crash was, shooting / using
