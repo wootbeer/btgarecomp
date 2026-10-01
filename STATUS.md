@@ -3,6 +3,30 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 83: a full level played; level-complete crash in a mislabeled "osBbCardChange" entry
+
+**Round 82 confirmed on Windows:** shooting works and a full level
+plays through to completion. Right after the level was beaten, the game
+aborted with `Failed to find function at 0x800CFA74`, inside the syms
+entry named `osBbCardChange`. That's an iQue Player-only libultra name
+that can't exist in this US ROM. The code is a run of small game
+getters/setters (e.g. `0x800CFA74` is `lbu $v0, 0x65f8(0x803A0000); jr
+$ra`), so the name is a mislabel like round 80's `__udiv_w_sdiv`.
+Renamed to `func_800CFA50` (nothing else used the name). The batch tool
+then split only this entry, into six pieces.
+
+Verified in-sandbox: regenerated (1569 functions, no errors), hook/patch
+landings and all switches identical, no references to the old name,
+`func_800CFA74` registered, full build links. Not yet confirmed against
+a real run.
+
+Not done (yet): the batch tool still skips the 199 named entries that
+N64Recomp recompiles normally. Some of these are known to be merged too,
+e.g. the libmus music-command handlers (`Fstop`, `Fportoff`, `Fprint`,
+...), which are dispatched through a pointer table. A full level played
+without touching any of them, so with audio stubbed the sequencer
+evidently isn't running them. Revisit once audio is implemented.
+
 ## 2026-10-01, round 82: in-game! Shooting crashed in an entry the batch tool couldn't decode
 
 **Round 81 confirmed on Windows:** the options menu works and the game

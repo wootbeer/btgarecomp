@@ -1012,7 +1012,16 @@ functions = [
     { name = "func_800CF750", vram = 0x800cf750, size = 0x40 },
     { name = "func_800CF790", vram = 0x800cf790, size = 0x18 },
     { name = "func_800CF7A8", vram = 0x800cf7a8, size = 0x2a8 },
-    { name = "osBbCardChange", vram = 0x800cfa50, size = 0x380 },
+    # Round 83 (STATUS.md): was "osBbCardChange", an iQue-only libultra name
+    # that can't exist in this US ROM; the code is a run of small game
+    # getters/setters (flags around 0x803A65F8). Renamed so the batch tool
+    # (which skips library names) can split it.
+    { name = "func_800CFA50", vram = 0x800cfa50, size = 0x10 },
+    { name = "func_800CFA60", vram = 0x800cfa60, size = 0x14 },
+    { name = "func_800CFA74", vram = 0x800cfa74, size = 0x10 },
+    { name = "func_800CFA84", vram = 0x800cfa84, size = 0xb4 },
+    { name = "func_800CFB38", vram = 0x800cfb38, size = 0xa0 },
+    { name = "func_800CFBD8", vram = 0x800cfbd8, size = 0x1f8 },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
     { name = "func_800CFDD0", vram = 0x800cfdd0, size = 0x288 },
     { name = "func_800D0058", vram = 0x800d0058, size = 0x18 },
