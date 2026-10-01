@@ -3,6 +3,58 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 80: demo crash was a function cut off mid-epilogue -- round 22's splits were chasing branches decoded from string data
+
+Round 79 confirmed: the attract demo now plays until a nuke goes off and
+its animation runs, then crashes with an access violation (no `Failed to
+find function`). Debugger: `func_800DE52C` at `lhu $a2, 0x18($s2)`
+(`0x800DE66C`), right after returning from `func_800DA4F0`. The same load
+from the same `$s2` had succeeded just before that call, so the callee
+was corrupting a callee-saved register.
+
+`func_800DA4F0`'s syms entry (`0x140`) ended at `0x800DA630`, mid-way
+through its own epilogue. The rest (`lw $s7..$s0`, `addiu $sp, 0x78`,
+`jr $ra`) was a separate entry, `func_800DA630`. **N64Recomp never emits
+a fall-through call into the next entry**, so a function cut short just
+returns early. Here that meant it never restored `$s0`-`$s7` and never
+popped its frame, corrupting every caller.
+
+Round 22 made that cut on purpose, along with one at `0x800DB258`,
+because `func_800C48F0` appeared to branch to both addresses. It
+doesn't: the 8 bytes at `0x800C6918` are `10 54 52 4F 57 4D 4F 44`
+(string data, "TROWMOD"), which disassemble as a `beq`/`bnel` pair. A
+whole-table scan for entries that end without `jr`/`j` turned up one
+more case of the same mistake and one off-by-8 boundary:
+
+- `func_800C68AC` (round 78's tail piece of `func_800C48F0`): now ends
+  at `0x800C6918`, leaving the 8 string bytes uncovered.
+- `func_800DA4F0`: restored to its full `0x16c`; `func_800DA630` removed.
+- `func_800DB1B0` + `func_800DB258` + `func_800DB4C8` (the last was the
+  original syms' entry for that function's epilogue): merged back into
+  one `0x338` function ending at its real `jr $ra`.
+- `func_80086034`: ends at `0x8008615C`. The word there is "REMA"
+  (`52 45 4D 41`), decoded as a fake `beql` into `0x80099664`.
+- `func_80099534` + `func_80099664` + `func_80099690`: merged back into
+  one `0x190` function. Same three-way cut, same cause.
+- `func_800C0608` (`+8`) / `__udiv_w_sdiv`: the latter started 8 bytes
+  early, on `func_800C0608`'s own shared `jr $ra; move $v0, $zero` exit.
+  All seven `j`s to `0x800C06FC` come from inside `func_800C0608`, and
+  its fall-through path returned without zeroing `$v0`. The real next
+  function starts at `0x800C0704` (referenced twice as a ROM data word),
+  renamed `func_800C0704`; nothing about it resembles libgcc's
+  `__udiv_w_sdiv`.
+
+The rest of that scan's game-code hits are benign: the boot entry, the
+runtime-replaced exception handler, and trailing padding or data before a
+real prologue. The audio-library (`n_*`) fall-throughs are left for when
+audio is implemented.
+
+Verified in-sandbox with the submodule's N64Recomp: 1551 functions
+(1556 - 5 merged away), no errors; every fixed function ends in its real
+`jr $ra` with no branch leaving its range; no references remain to the
+removed names; hook/patch landings and all switches identical to before;
+full build links. Not yet confirmed against a real run.
+
 ## 2026-10-01, round 79: round 78's batch confirmed -- the attract demo plays; one skipped entry fixed
 
 **Round 78 confirmed on Windows:** idling at the title now plays the

@@ -212,7 +212,10 @@ functions = [
     { name = "func_80085E4C", vram = 0x80085e4c, size = 0x64 },
     { name = "func_80085EB0", vram = 0x80085eb0, size = 0xcc },
     { name = "func_80085F7C", vram = 0x80085f7c, size = 0xb8 },
-    { name = "func_80086034", vram = 0x80086034, size = 0x12c },
+    # Round 80 (STATUS.md): ends at 0x8008615C, not 0x80086160. The word at
+    # 0x8008615C is string data ("REMA") that disassembles as a fake beql
+    # into 0x80099664 -- the reason func_80099534 had been cut there.
+    { name = "func_80086034", vram = 0x80086034, size = 0x128 },
     { name = "func_80086160", vram = 0x80086160, size = 0xc },
     { name = "func_8008616C", vram = 0x8008616c, size = 0x24 },
     { name = "func_80086190", vram = 0x80086190, size = 0x78 },
@@ -383,9 +386,10 @@ functions = [
     { name = "func_800992E0", vram = 0x800992e0, size = 0xd0 },
     { name = "func_800993B0", vram = 0x800993b0, size = 0xb4 },
     { name = "func_80099464", vram = 0x80099464, size = 0xd0 },
-    { name = "func_80099534", vram = 0x80099534, size = 0x130 },
-    { name = "func_80099664", vram = 0x80099664, size = 0x2c },
-    { name = "func_80099690", vram = 0x80099690, size = 0x34 },
+    # Round 80 (STATUS.md): one function, 0x80099534-0x800996C4 (was cut
+    # into three at 0x80099664 for func_80086034's fake data "branch" and
+    # at 0x80099690, its epilogue). Each piece fell off its end.
+    { name = "func_80099534", vram = 0x80099534, size = 0x190 },
     { name = "func_800996C4", vram = 0x800996c4, size = 0x94 },
     { name = "func_80099758", vram = 0x80099758, size = 0x2c },
     { name = "func_80099784", vram = 0x80099784, size = 0xa0 },
@@ -775,8 +779,18 @@ functions = [
     { name = "func_800C03F0", vram = 0x800c03f0, size = 0xd8 },
     { name = "func_800C04C8", vram = 0x800c04c8, size = 0x9c },
     { name = "func_800C0564", vram = 0x800c0564, size = 0xa4 },
-    { name = "func_800C0608", vram = 0x800c0608, size = 0xf4 },
-    { name = "__udiv_w_sdiv", vram = 0x800c06fc, size = 0x370 },
+    # Round 80 (STATUS.md): +8 bytes. Its shared "return 0" exit
+    # (jr $ra; move $v0, $zero at 0x800C06FC) belongs to it -- all seven
+    # j's to 0x800C06FC come from inside this function, and it also falls
+    # through into it. As two entries, the fall-through path returned
+    # without zeroing $v0.
+    { name = "func_800C0608", vram = 0x800c0608, size = 0xfc },
+    # Round 80 (STATUS.md): was "__udiv_w_sdiv" at 0x800C06FC, 8 bytes early
+    # (its first two instructions were func_800C0608's exit). The real
+    # function starts at 0x800C0704, which the ROM references as a data
+    # word twice (0x8011866C, 0x80118674). Renamed since nothing here
+    # resembles libgcc's __udiv_w_sdiv.
+    { name = "func_800C0704", vram = 0x800c0704, size = 0x368 },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
     { name = "func_800C0A6C", vram = 0x800c0a6c, size = 0x70 },
     { name = "func_800C0ADC", vram = 0x800c0adc, size = 0x9c },
@@ -860,7 +874,11 @@ functions = [
     { name = "func_800C6790", vram = 0x800c6790, size = 0x2c },
     { name = "func_800C67BC", vram = 0x800c67bc, size = 0x88 },
     { name = "func_800C6844", vram = 0x800c6844, size = 0x68 },
-    { name = "func_800C68AC", vram = 0x800c68ac, size = 0x74 },
+    # Round 80 (STATUS.md): ends at 0x800C6918, not 0x800C6920. The last 8
+    # bytes of the old range (10 54 52 4F 57 4D 4F 44) are string data that
+    # disassembles as a fake beq/bnel into 0x800DB258/0x800DA630 -- the
+    # "branches" round 22 split those two functions for. Left uncovered.
+    { name = "func_800C68AC", vram = 0x800c68ac, size = 0x6c },
     { name = "func_800C6920", vram = 0x800c6920, size = 0x448 },
     { name = "func_800C6D68", vram = 0x800c6d68, size = 0x504 },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
@@ -1066,29 +1084,23 @@ functions = [
     { name = "func_800D9D50", vram = 0x800d9d50, size = 0x488 },
     { name = "func_800DA1D8", vram = 0x800da1d8, size = 0x168 },
     { name = "func_800DA340", vram = 0x800da340, size = 0x1b0 },
-    { name = "func_800DA4F0", vram = 0x800da4f0, size = 0x140 },
-    # round 22: split at 0x800da630 -- func_800C48F0 has a conditional
-    # branch (bnel) targeting this exact mid-function address. N64Recomp's
-    # recompiler can only turn a branch leaving its function into a proper
-    # tail call when the target is the START of some known function
-    # (recompilation.cpp's `functions_by_vram.find(branch_target)` check);
-    # otherwise it emits a `goto L_<addr>` to a label that's never defined
-    # ("[Warn] ... branching outside of the function", then a real C
-    # compile error: "label 'L_800DA630' used but not defined"). Splitting
-    # here turns it into a normal tail call, the same mechanism already
-    # working for every other cross-function jump in this ROM.
-    { name = "func_800DA630", vram = 0x800da630, size = 0x2c },
+    # Round 80 (STATUS.md): restored to its full 0x16c. Round 22 had cut it
+    # at 0x800DA630 (mid-epilogue) for a "branch" from func_800C48F0 that
+    # was really string data. N64Recomp doesn't emit fall-through, so the
+    # cut version returned without restoring $s0-$s7 or popping its frame,
+    # corrupting every caller (crash in func_800DE52C during the demo).
+    { name = "func_800DA4F0", vram = 0x800da4f0, size = 0x16c },
     { name = "func_800DA65C", vram = 0x800da65c, size = 0x174 },
     { name = "func_800DA7D0", vram = 0x800da7d0, size = 0x310 },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
     { name = "func_800DAAE0", vram = 0x800daae0, size = 0x154 },
     { name = "func_800DAC34", vram = 0x800dac34, size = 0x57c },
-    { name = "func_800DB1B0", vram = 0x800db1b0, size = 0xa8 },
-    # round 22: same split reason as func_800DA630 above -- func_800C48F0
-    # also branches (beq) straight to this mid-function address.
-    { name = "func_800DB258", vram = 0x800db258, size = 0x270 },
-    # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
-    { name = "func_800DB4C8", vram = 0x800db4c8, size = 0x20 },
+    # Round 80 (STATUS.md): one function, 0x800DB1B0-0x800DB4E8. Round 22
+    # cut it at 0x800DB258 for the same fake data "branch" as
+    # func_800DA4F0, and the original syms already had its epilogue
+    # (0x800DB4C8) as a separate entry -- each piece fell off its end
+    # without returning properly.
+    { name = "func_800DB1B0", vram = 0x800db1b0, size = 0x338 },
     { name = "func_800DB4E8", vram = 0x800db4e8, size = 0x200 },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
     { name = "func_800DC3A8", vram = 0x800dc3a8, size = 0x344 },
