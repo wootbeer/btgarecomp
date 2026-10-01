@@ -221,6 +221,10 @@ functions = [
     { name = "func_80086190", vram = 0x80086190, size = 0x78 },
     { name = "func_80086208", vram = 0x80086208, size = 0x358 },
     { name = "func_80086560", vram = 0x80086560, size = 0x144 },
+    # Round 84 (STATUS.md): uncovered gap after this entry -- string "TATE_PLAYING" (12 bytes), then
+    # real code the original syms missed (functions placed right after
+    # inline string/data). Data left uncovered; each function validated.
+    { name = "func_800866B0", vram = 0x800866b0, size = 0x50 },
     { name = "func_80086700", vram = 0x80086700, size = 0x140 },
     { name = "func_80086840", vram = 0x80086840, size = 0x1e0 },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
@@ -582,6 +586,10 @@ functions = [
     { name = "func_800A6C20", vram = 0x800a6c20, size = 0x40c },
     { name = "func_800A702C", vram = 0x800a702c, size = 0x64 },
     { name = "func_800A7090", vram = 0x800a7090, size = 0x1fc },
+    # Round 84 (STATUS.md): uncovered gap after this entry -- string "ELLR" (4 bytes), then
+    # real code the original syms missed (functions placed right after
+    # inline string/data). Data left uncovered; each function validated.
+    { name = "func_800A7290", vram = 0x800a7290, size = 0x30 },
     { name = "func_800A72C0", vram = 0x800a72c0, size = 0x3a4 },
     { name = "func_800A7664", vram = 0x800a7664, size = 0x144 },
     { name = "func_800A77A8", vram = 0x800a77a8, size = 0x5c8 },
@@ -620,6 +628,10 @@ functions = [
     { name = "func_800A9F10", vram = 0x800a9f10, size = 0x148 },
     { name = "func_800AA058", vram = 0x800aa058, size = 0x540 },
     { name = "func_800AA598", vram = 0x800aa598, size = 0x2c },
+    # Round 84 (STATUS.md): uncovered gap after this entry -- 3 data words, then
+    # real code the original syms missed (functions placed right after
+    # inline string/data). Data left uncovered; each function validated.
+    { name = "func_800AA5D0", vram = 0x800aa5d0, size = 0x94 },
     { name = "func_800AA664", vram = 0x800aa664, size = 0x244 },
     { name = "func_800AA8A8", vram = 0x800aa8a8, size = 0x238 },
     { name = "func_800AAAE0", vram = 0x800aaae0, size = 0x134 },
@@ -1120,9 +1132,24 @@ functions = [
     # without returning properly.
     { name = "func_800DB1B0", vram = 0x800db1b0, size = 0x338 },
     { name = "func_800DB4E8", vram = 0x800db4e8, size = 0x200 },
+    # Round 84 (STATUS.md): 0x800DB6E8-0x800DC3A8 was an uncovered gap in
+    # the original syms. It starts with 8 bytes of data (04000000
+    # 0000072e, left uncovered), then four real functions reached only
+    # through pointers (no jal callers). Found via "Failed to find function
+    # at 0x800DC214" mid-level. Clean jr-$ra boundaries, no crossing
+    # branch, nothing branching out of the block.
+    { name = "func_800DB6F0", vram = 0x800db6f0, size = 0xb4 },
+    { name = "func_800DB7A4", vram = 0x800db7a4, size = 0xac },
+    { name = "func_800DB850", vram = 0x800db850, size = 0x9c4 },
+    { name = "func_800DC214", vram = 0x800dc214, size = 0x194 },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
     { name = "func_800DC3A8", vram = 0x800dc3a8, size = 0x344 },
     { name = "func_800DC6EC", vram = 0x800dc6ec, size = 0xb8 },
+    # Round 84 (STATUS.md): uncovered gap after this entry -- 3 data words, then
+    # real code the original syms missed (functions placed right after
+    # inline string/data). Data left uncovered; each function validated.
+    { name = "func_800DC7B0", vram = 0x800dc7b0, size = 0x54 },
+    { name = "func_800DC804", vram = 0x800dc804, size = 0x164 },
     { name = "func_800DC968", vram = 0x800dc968, size = 0x770 },
     # Round 82 (STATUS.md): batch-tool split, newly analysable with MIPS64 decoding (trailing string data).
     { name = "func_800DD0D8", vram = 0x800dd0d8, size = 0xe8 },
@@ -1406,6 +1433,11 @@ functions = [
     { name = "func_800F3D04", vram = 0x800f3d04, size = 0x154 },
     { name = "func_800F3E58", vram = 0x800f3e58, size = 0x840 },
     { name = "func_800F4698", vram = 0x800f4698, size = 0x6dc },
+    # Round 84 (STATUS.md): uncovered gap after this entry -- string "_FLAME_GANGL" (12 bytes), then
+    # real code the original syms missed (functions placed right after
+    # inline string/data). Data left uncovered; each function validated.
+    { name = "func_800F4D80", vram = 0x800f4d80, size = 0x270 },
+    { name = "func_800F4FF0", vram = 0x800f4ff0, size = 0xc8 },
     { name = "func_800F50B8", vram = 0x800f50b8, size = 0x1ac },
     { name = "func_800F5270", vram = 0x800f5270, size = 0x28 },
     { name = "func_800F5298", vram = 0x800f5298, size = 0x1d8 },
@@ -1483,6 +1515,9 @@ functions = [
     # 'L_800F9068' used but not defined"). N64Recomp not erroring during
     # analysis doesn't guarantee the generated C compiles; always check the
     # actual build, not just N64Recomp's own exit code.
+    # Round 84 (STATUS.md): 0x800F8DA4-0x800FAE70 is RSP microcode (left uncovered);
+    # the CPU function at its end (pointer-referenced, music player) was missing.
+    { name = "func_800FAE70", vram = 0x800fae70, size = 0x14c },
     { name = "func_800FAFBC", vram = 0x800fafbc, size = 0x288 },
     { name = "MusSetMasterVolume", vram = 0x800fb244, size = 0x2c },
     { name = "MusStartSong", vram = 0x800fb270, size = 0x280 },

@@ -3,6 +3,36 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 84: mid-level crash in code the original syms never covered -- functions placed right after inline string data
+
+Still in level 1, near where round 82's crash was, shooting / using
+controls: `Failed to find function at 0x800DC214`. No syms entry covers
+that address at all. It's inside a `0xCC0`-byte gap
+(`0x800DB6E8`-`0x800DC3A8`) that the original symbol file left
+uncovered, apparently because it starts with 8 bytes of data (`04000000
+0000072e`). After that come four real functions, with clean jr-$ra
+boundaries, no crossing or outgoing branches, and no `jal` callers (they
+are reached only through pointers): `func_800DB6F0`, `func_800DB7A4`,
+`func_800DB850` (its `jr $v0` at `0x800DBF04` resolves to a normal
+3-case switch), and `func_800DC214`.
+
+A scan of every uncovered gap in `.resident_first_mb` for `jr $ra`
+found six more with the same pattern. Inline string or data comes first
+(`TATE_PLAYING`, `ELLR`, `_FLAME_GANGL`, a few data words), then real
+code the generator missed. Added, each validated (fully decodes, ends in
+`jr $ra` + delay slot, no clean internal split, no branch leaving it
+except to a known function start): `func_800866B0`, `func_800A7290`,
+`func_800AA5D0`, `func_800DC7B0`, `func_800DC804`, `func_800F4D80`,
+`func_800F4FF0`. The largest gap (`0x800F8DA4`-`0x800FAFBC`) is RSP
+microcode and stays uncovered, except for the one CPU function at its
+end, `func_800FAE70`, a pointer-referenced music-player handler. All
+leading string/data bytes stay uncovered.
+
+Verified in-sandbox: regenerated (1581 functions, no errors), hook/patch
+landings identical, the only switch change is the new `0x800DBF04`
+table, all 12 new functions registered, full build links. Not yet
+confirmed against a real run.
+
 ## 2026-10-01, round 83: a full level played; level-complete crash in a mislabeled "osBbCardChange" entry
 
 **Round 82 confirmed on Windows:** shooting works and a full level
