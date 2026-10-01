@@ -1020,7 +1020,23 @@ functions = [
     { name = "func_800E9B50", vram = 0x800e9b50, size = 0x15c },
     { name = "func_800E9CAC", vram = 0x800e9cac, size = 0x1cc },
     { name = "func_800E9E80", vram = 0x800e9e80, size = 0x2cc },
-    { name = "func_800EA14C", vram = 0x800ea14c, size = 0xae0 },
+    # Round 76 (STATUS.md): merged-function boundary, an eight-way split.
+    # "Failed to find function at 0x800EA224" after idling at the title
+    # screen. jr-$ra scan of the original 0xae0 range: seven clean internal
+    # boundaries, no crossing branch. Its four jump tables each stay inside
+    # their own piece (jr 0x800EA274 -> func_800EA224, jr 0x800EA7E0 ->
+    # func_800EA714, jr 0x800EA914 -> func_800EA8F4, jr 0x800EAAFC ->
+    # func_800EAA7C). The div-by-zero hook at 0x800ea290 moved into
+    # func_800EA224 and was re-pointed there in battletanxga.us.rev0.toml.
+    # Sums to 0xae0.
+    { name = "func_800EA14C", vram = 0x800ea14c, size = 0xd8 },
+    { name = "func_800EA224", vram = 0x800ea224, size = 0x4f0 },
+    { name = "func_800EA714", vram = 0x800ea714, size = 0x1e0 },
+    { name = "func_800EA8F4", vram = 0x800ea8f4, size = 0x70 },
+    { name = "func_800EA964", vram = 0x800ea964, size = 0x5c },
+    { name = "func_800EA9C0", vram = 0x800ea9c0, size = 0xa8 },
+    { name = "func_800EAA68", vram = 0x800eaa68, size = 0x14 },
+    { name = "func_800EAA7C", vram = 0x800eaa7c, size = 0x1b0 },
     # round 21: trailing word at +0xae0 (0x800eac2c) decodes as
     # `jalr $zero, $zero` (word 0x00000009) -- N64Recomp rejects it
     # ("Invalid return address reg for jalr") and real code would never

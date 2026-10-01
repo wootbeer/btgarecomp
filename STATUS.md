@@ -3,6 +3,31 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-01, round 76: eight-way split of func_800EA14C, plus re-pointing a hook it displaced
+
+Round 75 confirmed. Next idle-at-title crash: `Failed to find function
+at 0x800EA224`, inside `func_800EA14C`'s declared `0xae0` range. Seven
+clean internal boundaries, no crossing branch. Four jump tables, each
+entirely inside its own piece (`jr 0x800EA274` -> `func_800EA224`, `jr
+0x800EA7E0` -> `func_800EA714`, `jr 0x800EA914` -> `func_800EA8F4`, `jr
+0x800EAAFC` -> `func_800EAA7C`). Split `0xd8` + `0x4f0` + `0x1e0` +
+`0x70` + `0x5c` + `0xa8` + `0x14` + `0x1b0`.
+
+New wrinkle: `battletanxga.us.rev0.toml` had a divide-by-zero guard hook
+keyed to `func = "func_800EA14C"` at `before_vram = 0x800ea290`, and
+that address now belongs to `func_800EA224`. Hooks are looked up by
+function name, so it was re-pointed to `func_800EA224`. The hook text
+only touches `lo`/`hi` and the registers it divides, so it doesn't
+depend on which function it sits in. **Any future split needs this
+check:** every `[[patches.hook]]` keyed to the function being split,
+with a `before_vram` that falls into a new piece, must move to that
+piece's name.
+
+Verified in-sandbox with the submodule's N64Recomp (1349 functions, no
+errors). Each switch and the divide guard are emitted in their expected
+new functions, and a full build links. Not yet confirmed against a real
+run.
+
 ## 2026-10-01, round 75: round 73 confirmed; five-way split of func_800DE930
 
 With round 74's build fix, round 73 actually ran and worked: the next

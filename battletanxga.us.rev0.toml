@@ -751,8 +751,9 @@ text = """
     if (S32(ctx->r18) != 0) { lo = S32(S64(S32(ctx->r21)) / S64(S32(ctx->r18))); hi = S32(S64(S32(ctx->r21)) % S64(S32(ctx->r18))); } else { lo = 0; hi = 0; }
 """
 
+# Round 76: re-pointed from func_800EA14C after the split moved 0x800ea290 into func_800EA224.
 [[patches.hook]]
-func = "func_800EA14C"
+func = "func_800EA224"
 before_vram = 0x800ea290
 text = """
     if (S32(ctx->r3) != 0) { lo = S32(S64(S32(ctx->r2)) / S64(S32(ctx->r3))); hi = S32(S64(S32(ctx->r2)) % S64(S32(ctx->r3))); } else { lo = 0; hi = 0; }
