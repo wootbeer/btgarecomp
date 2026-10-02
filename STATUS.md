@@ -3,6 +3,44 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 120: queued draws cut off by the 0xAEE0-byte display-list buffer
+
+**Round 119 result:** still flickering. `[BTGA POOL]` showed the pools
+nowhere near full: peak 534/2288 items, 93/300 meshes, matrix 0x480 of
+0xC000, and no drops. So the round 119 relocation is reverted.
+
+**Cause.** The queue consumers `func_8007B65C` and `func_8007B8EC`
+compare the display-list write head (`G+0xC8`) against `buffer base +
+0xADE0` before each queued draw (`0x8007B75C` / `0x8007B9FC`). If it is
+past that, they **return -1 and drop the rest of the queue**. The
+per-frame buffers, set up in `func_80079CB8` (descriptor `G+0x90+i*16`,
++4), are only `0xAEE0` bytes each, at `0x801420C0` and `0x8014CFA0`. So
+on busy frames (smoke, particles, widescreen's wider view) the last
+queued draws, the distant scenery, were cut. The end-of-frame check in
+`func_8007A0A0` (`0x8007A188`) compares against `0xAEE0` but takes no
+action.
+
+Descriptor layout, for reference:
+- +0: root list `0x80157E80 + i*0x100`
+- +4: display-list buffer
+- +8: 1 KB secondary list `0x801418C0 + i*0x400`
+- +0xC: matrix buffer `0x801298C0 + i*0xC000`
+
+**Fix** (`src/game/dl_buffer_fix.cpp`):
+- Hook before `0x80079E9C`: the two buffers become `0x80C40000` and
+  `0x80C80000`, `0x40000` bytes each. That's unused extended RAM below
+  mods (`0x81000000`), and RT64 masks display-list addresses to 16 MB.
+- Instruction patches at `0x8007B6E0` and `0x8007B97C`: the cut-off
+  `ori $v0, $zero, 0xADE0` becomes `lui $v0, 0x3` (0x30000).
+
+Nothing else refers to the old buffers.
+
+Temporary `[BTGA DLBUF]` diagnostic, every 120 frames:
+- peak buffer use, from the end-of-frame check (hook before `0x8007A194`)
+- frames past the old cut-off
+- queue cut-offs (hooks at the consumers' exits `0x8007B8B8` /
+  `0x8007BCB8`, `$v0 == -1`)
+
 ## 2026-10-02, round 119: distant objects dropped by full per-frame draw pools
 
 **Round 118c result.** The display-list diff is clean now. Per-object
