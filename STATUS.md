@@ -3,6 +3,46 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 102: HUD anchoring limited to the gameplay HUD; cutscene bars via func_800D56FC
+
+Round 101 test results:
+1. Cutscene side areas still sky-coloured.
+2. HUD mostly right, but should sit even closer to the edges; pickup
+   messages partly cut off.
+3. Parts of the main menu cut off.
+4. One ground piece still pops in at level start.
+
+New: the 3DO logo, the title screen and other static images were cut in
+half. They're sprite strips drawn by the same interpreter, and round
+101's per-sprite x rule anchored the left strips left and pushed the
+right ones off-screen.
+
+The script data explains the structure. The 1-player HUD script at
+`0x8011DEF0` has 16-byte elements (opcode, colour, x, y, ...,
+data/function pointer). It holds the health bar (op 16 at 129,216),
+sprite frames (op 3/10 at 262), numbers (op 8), and op 23 widgets: the
+kill counter `0x800C9A3C` at x 264, and `0x800C8484` at x 0. The map
+(`func_800C7C10`) isn't an interpreter element at all; it's drawn
+through an object table (`0x8011DDA0`, `func_800C8350`).
+
+Changes (`src/game/widescreen.cpp`):
+- At interpreter entry, a script counts as gameplay HUD only if it
+  contains the kill-counter widget. Only HUD scripts are anchored, so
+  title screens, logos and menus are left alone.
+- Each HUD element is anchored by its own script x, at dispatch
+  (`0x800BCC04`, element in `$fp`), and only for element types seen in
+  the HUD (ops 3, 8, 10, 14, 16, 23). Text is never anchored, so strings
+  aren't split.
+- The map is anchored left for the whole of `func_800C7C10`.
+- Anchored HUD elements move a further 16 px outward (rect offsets
+  of ±64 in 10.2), since the original layout keeps a TV-safe margin.
+- Round 101's interpreter fill hook didn't catch the cutscene bars, so
+  they must come from `func_800D56FC`'s box drawer (FA + F6 written
+  through its own display-list head `0x803A69E4`). The edge-bar rule is
+  applied there too (hooks at `0x800D5B10` / `0x800D5BF0`).
+- Resets now go back to the display-list head the alignment was emitted
+  on.
+
 ## 2026-10-02, round 101: widescreen HUD anchoring and cutscene letterbox bars
 
 The round 99b/100 logs settled both questions.

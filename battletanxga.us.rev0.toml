@@ -1502,9 +1502,10 @@ text = """
 """
 
 # Widescreen HUD anchoring (src/game/widescreen.cpp). func_800BC9F4 is the 2D
-# overlay script interpreter that draws the gameplay HUD and the cutscene
-# letterbox bars. These hooks tell btga_hud_* which element is being drawn;
-# the anchoring itself is emitted into the display list as RT64 extended GBI.
+# overlay script interpreter (gameplay HUD, title screens, menus); the hooks
+# tell btga_hud_* which script and element is being drawn, and the anchoring
+# is emitted into the display list as RT64 extended GBI.
+# Every texture rectangle.
 [[patches.hook]]
 func = "func_8007C364"
 before_vram = 0x8007C364
@@ -1512,8 +1513,29 @@ text = """
     { extern void btga_hud_texrect(uint8_t *rdram, recomp_context *ctx); btga_hud_texrect(rdram, ctx); }
 """
 
-# Fill-rect element: before it reads the display-list head, and after it
-# stores it back.
+# Interpreter entry, element dispatch (element in $fp), end of script.
+[[patches.hook]]
+func = "func_800BC9F4"
+before_vram = 0x800BC9F4
+text = """
+    { extern void btga_hud_script_begin(uint8_t *rdram, recomp_context *ctx); btga_hud_script_begin(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800BC9F4"
+before_vram = 0x800BCC04
+text = """
+    { extern void btga_hud_element(uint8_t *rdram, recomp_context *ctx); btga_hud_element(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800BC9F4"
+before_vram = 0x800BD844
+text = """
+    { extern void btga_hud_script_end(uint8_t *rdram, recomp_context *ctx); btga_hud_script_end(rdram, ctx); }
+"""
+
+# Fill-rect element: before it reads the display-list head, after it stores it.
 [[patches.hook]]
 func = "func_800BC9F4"
 before_vram = 0x800BCCCC
@@ -1525,50 +1547,35 @@ text = """
 func = "func_800BC9F4"
 before_vram = 0x800BCDA8
 text = """
-    { extern void btga_hud_end(uint8_t *rdram, recomp_context *ctx); btga_hud_end(rdram, ctx); }
+    { extern void btga_hud_fillrect_end(uint8_t *rdram, recomp_context *ctx); btga_hud_fillrect_end(rdram, ctx); }
 """
 
-# Sprite element (health bar frame, ammo box, weapon icon).
+# Map (func_800C7C10, single exit).
 [[patches.hook]]
-func = "func_800BC9F4"
-before_vram = 0x800BD3A8
+func = "func_800C7C10"
+before_vram = 0x800C7C10
 text = """
-    { extern void btga_hud_begin_by_x(uint8_t *rdram, recomp_context *ctx); btga_hud_begin_by_x(rdram, ctx); }
-"""
-
-[[patches.hook]]
-func = "func_800BC9F4"
-before_vram = 0x800BD3B0
-text = """
-    { extern void btga_hud_end(uint8_t *rdram, recomp_context *ctx); btga_hud_end(rdram, ctx); }
-"""
-
-# Number element (ammo count, the counter under the map).
-[[patches.hook]]
-func = "func_800BC9F4"
-before_vram = 0x800BD09C
-text = """
-    { extern void btga_hud_begin_by_x(uint8_t *rdram, recomp_context *ctx); btga_hud_begin_by_x(rdram, ctx); }
+    { extern void btga_hud_map_begin(uint8_t *rdram, recomp_context *ctx); btga_hud_map_begin(rdram, ctx); }
 """
 
 [[patches.hook]]
-func = "func_800BC9F4"
-before_vram = 0x800BD0A4
+func = "func_800C7C10"
+before_vram = 0x800C8230
 text = """
-    { extern void btga_hud_end(uint8_t *rdram, recomp_context *ctx); btga_hud_end(rdram, ctx); }
+    { extern void btga_hud_map_end(uint8_t *rdram, recomp_context *ctx); btga_hud_map_end(rdram, ctx); }
 """
 
-# Widget callback element (map, kill counter), target in $v0.
+# func_800D56FC's box fill rect (cutscene letterbox bars).
 [[patches.hook]]
-func = "func_800BC9F4"
-before_vram = 0x800BD81C
+func = "func_800D56FC"
+before_vram = 0x800D5B10
 text = """
-    { extern void btga_hud_begin_widget(uint8_t *rdram, recomp_context *ctx); btga_hud_begin_widget(rdram, ctx); }
+    { extern void btga_box_fillrect_begin(uint8_t *rdram, recomp_context *ctx); btga_box_fillrect_begin(rdram, ctx); }
 """
 
 [[patches.hook]]
-func = "func_800BC9F4"
-before_vram = 0x800BD824
+func = "func_800D56FC"
+before_vram = 0x800D5BF0
 text = """
-    { extern void btga_hud_end(uint8_t *rdram, recomp_context *ctx); btga_hud_end(rdram, ctx); }
+    { extern void btga_box_fillrect_end(uint8_t *rdram, recomp_context *ctx); btga_box_fillrect_end(rdram, ctx); }
 """

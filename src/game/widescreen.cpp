@@ -60,36 +60,52 @@ extern "C" void btga_widen_cull(uint8_t* rdram, recomp_context* ctx) {
 // In Expand, RT64 keeps 2D rectangles inside the centred 4:3 area unless the
 // display list tells it to anchor them to a screen edge (extended GBI
 // gEXSetRectAlign; the Graphics tab's HUD Ratio then sets how far out an
-// anchored edge goes). The gameplay HUD and the cutscene letterbox bars are
-// both drawn by func_800BC9F4, a 2D overlay script interpreter, so hooks
-// around its element handlers (battletanxga.us.rev0.toml) choose an anchor
-// per element:
-//   - map widget (func_800C7C10): left
-//   - kill counter widget (func_800C9A3C): right
-//   - sprites and numbers: by x -- left of x 120 left, from x 200 right, else
-//     centred (health bar). Text strings are never anchored, so centred
-//     cutscene text stays whole.
-//   - fill rects: a bar touching the left or right screen edge gets only that
-//     edge anchored, so letterbox bars reach the window edge instead of
-//     showing the stretched sky clear beside them.
-// The commands are written straight into the frame's display list at the
-// head pointer the game passes (always 0x803A5944 here) and reset to
-// unanchored after each element.
+// anchored edge goes). Commands are written straight into the display list
+// at the head pointer the game is drawing with, and reset after each
+// element.
+//
+// - Gameplay HUD: drawn by func_800BC9F4, a 2D overlay script interpreter
+//   (16-byte elements: opcode, colour, x, y, ..., data/function pointer).
+//   The same interpreter draws title screens, logos and menus, so only
+//   scripts containing the kill-counter widget are treated as HUD scripts.
+//   In those, each element is anchored by its own script x (left of 120 ->
+//   left, from 200 -> right, else centred: the health bar), and only element
+//   types seen in the HUD (sprites, numbers, bars, widgets), never text, so
+//   strings are never split. Anchored elements also move 16 pixels further
+//   out, as the original layout leaves a TV-safe margin.
+// - Map: drawn by func_800C7C10 through its own object table, anchored left
+//   for its whole call.
+// - Letterbox bars: fill rects that touch the left or right screen edge get
+//   only that edge anchored, so cutscene bars reach the window edge instead
+//   of showing the stretched sky clear beside them -- both in the
+//   interpreter and in func_800D56FC's box drawer, which draws the cutscenes.
 namespace {
     constexpr uint16_t kOriginLeft = 0x0;    // G_EX_ORIGIN_LEFT
     constexpr uint16_t kOriginRight = 0x400; // G_EX_ORIGIN_RIGHT
     constexpr uint16_t kOriginNone = 0x800;  // G_EX_ORIGIN_NONE
 
-    constexpr uint32_t kDlHeadPtr = 0x803A5944;
+    constexpr uint32_t kOverlayDlHeadPtr = 0x803A5944; // func_800BC9F4's
+    constexpr uint32_t kBoxDlHeadPtr = 0x803A69E4;     // func_800D56FC's
     constexpr uint32_t kPlayerCount = 0x802194A5;
 
-    constexpr uint32_t kMapWidget = 0x800C7C10;
     constexpr uint32_t kKillCounterWidget = 0x800C9A3C;
+    constexpr uint8_t kOpWidget = 23;
+    constexpr int kHudMarginShift = 16 * 4; // 10.2 fixed point
 
-    enum class Mode { Off, ByX, Left, Right };
-    Mode mode = Mode::Off;
-    uint16_t emitted_left = kOriginNone;
-    uint16_t emitted_right = kOriginNone;
+    struct Align {
+        uint16_t left = kOriginNone, right = kOriginNone;
+        int16_t left_offset = 0, right_offset = 0;
+        bool operator==(const Align&) const = default;
+    };
+    constexpr Align kAlignNone{};
+    constexpr Align kAlignHudLeft{ kOriginLeft, kOriginLeft, -kHudMarginShift, -kHudMarginShift };
+    constexpr Align kAlignHudRight{ kOriginRight, kOriginRight, kHudMarginShift, kHudMarginShift };
+
+    bool hud_script = false;
+    bool in_map = false;
+    Align element_align = kAlignNone; // for the current interpreter element's texture rects
+    Align emitted = kAlignNone;
+    gpr emitted_head_ptr = 0;
 
     gpr kseg0(uint32_t address) {
         return (gpr)(int32_t)address;
@@ -102,77 +118,147 @@ namespace {
     }
 
     // gEXEnable + gEXSetRectAlign at the display-list head, advancing it.
-    void emit_rect_align(uint8_t* rdram, gpr head_ptr, uint16_t left, uint16_t right) {
-        if (left == emitted_left && right == emitted_right) {
+    void emit(uint8_t* rdram, gpr head_ptr, const Align& align) {
+        if (align == emitted) {
             return;
         }
         gpr head = kseg0((uint32_t)MEM_W(0, head_ptr));
         MEM_W(0x00, head) = (int32_t)0xE0525464; // G_SPNOOP + RT64 magic
         MEM_W(0x04, head) = 0x10000064;          // enable, extended opcode 0x64
         MEM_W(0x08, head) = 0x64000006;          // G_EX_SETRECTALIGN_V1
-        MEM_W(0x0C, head) = (int32_t)((left & 0xFFF) | ((right & 0xFFF) << 12));
-        MEM_W(0x10, head) = 0;                   // no offsets
-        MEM_W(0x14, head) = 0;
+        MEM_W(0x0C, head) = (int32_t)((align.left & 0xFFF) | ((align.right & 0xFFF) << 12));
+        MEM_W(0x10, head) = (int32_t)((uint32_t)(uint16_t)align.left_offset << 16);
+        MEM_W(0x14, head) = (int32_t)((uint32_t)(uint16_t)align.right_offset << 16);
         MEM_W(0, head_ptr) = (int32_t)(head + 0x18);
-        emitted_left = left;
-        emitted_right = right;
+        emitted = align;
+        emitted_head_ptr = head_ptr;
     }
 
-    uint16_t origin_for_x(int x) {
-        if (x < 120) return kOriginLeft;
-        if (x >= 200) return kOriginRight;
-        return kOriginNone;
+    void reset(uint8_t* rdram) {
+        if (!(emitted == kAlignNone)) {
+            emit(rdram, emitted_head_ptr, kAlignNone);
+        }
     }
+
+    Align hud_align_for_x(int x) {
+        if (x < 120) return kAlignHudLeft;
+        if (x >= 200) return kAlignHudRight;
+        return kAlignNone;
+    }
+
+    bool is_anchorable_hud_op(uint8_t op) {
+        switch (op) {
+        case 3: case 10: case 14: // sprites
+        case 8:                   // numbers
+        case 16:                  // bars
+        case kOpWidget:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Letterbox bars: anchor only the edge that touches the screen edge.
+    Align bar_align(int ulx, int lrx) {
+        Align a;
+        if (ulx <= 0 && lrx < 320) {
+            a.left = kOriginLeft;
+        } else if (lrx >= 320 && ulx > 0) {
+            a.right = kOriginRight;
+        }
+        return a;
+    }
+}
+
+// func_800BC9F4 entry: a0 -> { ?, script, ... }. A script is a HUD script
+// if it contains the kill-counter widget.
+extern "C" void btga_hud_script_begin(uint8_t* rdram, recomp_context* ctx) {
+    hud_script = false;
+    uint32_t script = (uint32_t)MEM_W(4, ctx->r4);
+    if (script < 0x80000000u || script >= 0x80800000u) {
+        return;
+    }
+    for (int i = 0; i < 128; i++) {
+        gpr element = kseg0(script + i * 0x10);
+        uint8_t op = MEM_BU(0, element);
+        if (op == 0) {
+            break;
+        }
+        if (op == kOpWidget && (uint32_t)MEM_W(8, element) == kKillCounterWidget) {
+            hud_script = true;
+            break;
+        }
+    }
+}
+
+// Interpreter dispatch, current element in $fp.
+extern "C" void btga_hud_element(uint8_t* rdram, recomp_context* ctx) {
+    reset(rdram);
+    element_align = kAlignNone;
+    if (!hud_script || !anchoring_active(rdram)) {
+        return;
+    }
+    gpr element = ctx->r30;
+    if (is_anchorable_hud_op(MEM_BU(0, element))) {
+        element_align = hud_align_for_x(MEM_H(2, element));
+    }
+}
+
+// End of the script.
+extern "C" void btga_hud_script_end(uint8_t* rdram, recomp_context* ctx) {
+    element_align = kAlignNone;
+    hud_script = false;
+    reset(rdram);
+}
+
+extern "C" void btga_hud_map_begin(uint8_t* rdram, recomp_context* ctx) {
+    in_map = anchoring_active(rdram);
+}
+
+extern "C" void btga_hud_map_end(uint8_t* rdram, recomp_context* ctx) {
+    in_map = false;
+    reset(rdram);
 }
 
 // Every texture rectangle: func_8007C364(Gfx** head, sprite, x, y, ...).
 extern "C" void btga_hud_texrect(uint8_t* rdram, recomp_context* ctx) {
-    if (mode == Mode::Off || !anchoring_active(rdram)) {
-        return;
+    if (in_map) {
+        emit(rdram, ctx->r4, kAlignHudLeft);
+    } else if (!(element_align == kAlignNone)) {
+        emit(rdram, ctx->r4, element_align);
     }
-    uint16_t origin = kOriginNone;
-    switch (mode) {
-    case Mode::ByX: origin = origin_for_x((int16_t)ctx->r6); break;
-    case Mode::Left: origin = kOriginLeft; break;
-    case Mode::Right: origin = kOriginRight; break;
-    case Mode::Off: break;
-    }
-    emit_rect_align(rdram, ctx->r4, origin, origin);
 }
 
-extern "C" void btga_hud_begin_by_x(uint8_t* rdram, recomp_context* ctx) {
-    mode = Mode::ByX;
-}
-
-extern "C" void btga_hud_begin_widget(uint8_t* rdram, recomp_context* ctx) {
-    uint32_t target = (uint32_t)ctx->r2;
-    mode = target == kMapWidget ? Mode::Left : target == kKillCounterWidget ? Mode::Right : Mode::Off;
-}
-
-// Fill-rect element, before it reads the head: x in $s1, y in $s3, and the
-// element's width/height halfwords at $s0.
+// Interpreter fill-rect element, before it reads the head: x in $s1, the
+// element's width at $s0.
 extern "C" void btga_hud_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     if (!anchoring_active(rdram)) {
         return;
     }
     int ulx = (int16_t)ctx->r17;
     int lrx = ulx + (uint16_t)MEM_HU(0, ctx->r16);
-    uint16_t left = kOriginNone, right = kOriginNone;
-    if (ulx <= 0 && lrx < 320) {
-        left = kOriginLeft;           // left letterbox bar
-    } else if (lrx >= 320 && ulx > 0) {
-        right = kOriginRight;         // right letterbox bar
-    } else if (lrx <= 120) {
-        left = right = kOriginLeft;   // HUD panel on the left
-    } else if (ulx >= 200) {
-        left = right = kOriginRight;  // HUD panel on the right
+    Align a = bar_align(ulx, lrx);
+    if (a == kAlignNone) {
+        a = element_align; // a HUD panel
     }
-    emit_rect_align(rdram, kseg0(kDlHeadPtr), left, right);
+    emit(rdram, kseg0(kOverlayDlHeadPtr), a);
 }
 
-extern "C" void btga_hud_end(uint8_t* rdram, recomp_context* ctx) {
-    mode = Mode::Off;
-    if (emitted_left != kOriginNone || emitted_right != kOriginNone) {
-        emit_rect_align(rdram, kseg0(kDlHeadPtr), kOriginNone, kOriginNone);
+extern "C" void btga_hud_fillrect_end(uint8_t* rdram, recomp_context* ctx) {
+    reset(rdram);
+}
+
+// func_800D56FC's box drawer, before it reads its head: box in $s1
+// (x at +4, width at +8).
+extern "C" void btga_box_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
+    if (!anchoring_active(rdram)) {
+        return;
     }
+    int ulx = (int16_t)MEM_H(4, ctx->r17);
+    int lrx = ulx + (uint16_t)MEM_HU(8, ctx->r17);
+    emit(rdram, kseg0(kBoxDlHeadPtr), bar_align(ulx, lrx));
+}
+
+extern "C" void btga_box_fillrect_end(uint8_t* rdram, recomp_context* ctx) {
+    reset(rdram);
 }
