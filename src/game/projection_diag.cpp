@@ -104,44 +104,49 @@ extern "C" void btga_projection_diag(uint8_t* rdram) {
     fflush(stdout);
 }
 
-// TEMPORARY round 112 diagnostic: which map objects func_800AF978 draws
-// each frame (object record + chosen LOD mesh list, recorded right before
-// its func_8007B1F0 draw call at 0x800AFCD4), and how that set changes from
-// frame to frame. Printed every frame from btga_frame_dt.
+// TEMPORARY round 113 diagnostic: which meshes the shared mesh-draw routine
+// func_8007B1F0 draws each frame, keyed by (call site, mesh pointer $a0).
+// Every call site is tagged by a hook just before its jal (recompiled calls
+// never write $ra). Printed every frame from btga_frame_dt: totals, plus the
+// call sites whose set changed vs. the previous frame.
 #include <map>
 #include <utility>
 
 namespace {
-    std::set<std::pair<uint32_t, uint32_t>> objs_cur, objs_prev;
+    using DrawKey = std::pair<uint32_t, uint32_t>; // site, mesh
+    std::set<DrawKey> draws_cur, draws_prev;
+    uint32_t current_site = 0;
     int frame_index = 0;
 }
 
+extern "C" void btga_obj_diag_site(uint32_t site) {
+    current_site = site;
+}
+
 extern "C" void btga_obj_diag_draw(uint8_t* rdram, recomp_context* ctx) {
-    objs_cur.insert({ (uint32_t)ctx->r16, (uint32_t)ctx->r19 });
+    draws_cur.insert({ current_site, (uint32_t)ctx->r4 });
 }
 
 extern "C" void btga_obj_diag_frame(uint8_t* rdram) {
-    int added = 0, removed = 0, lod_changed = 0;
-    std::map<uint32_t, uint32_t> prev_lod;
-    for (auto& [obj, lod] : objs_prev) prev_lod[obj] = lod;
-    std::set<uint32_t> cur_objs;
-    for (auto& [obj, lod] : objs_cur) {
-        cur_objs.insert(obj);
-        auto it = prev_lod.find(obj);
-        if (it == prev_lod.end()) added++;
-        else if (it->second != lod) lod_changed++;
+    std::map<uint32_t, std::pair<int, int>> churn; // site -> added, removed
+    int added = 0, removed = 0;
+    for (auto& k : draws_cur) {
+        if (!draws_prev.count(k)) { added++; churn[k.first].first++; }
     }
-    for (auto& [obj, lod] : prev_lod) {
-        if (!cur_objs.count(obj)) removed++;
+    for (auto& k : draws_prev) {
+        if (!draws_cur.count(k)) { removed++; churn[k.first].second++; }
     }
-    float cx = *(float*)(rdram + (0x802194B4u - 0x80000000u));
-    float cz = *(float*)(rdram + (0x802194B8u - 0x80000000u));
-    if (!objs_cur.empty() || !objs_prev.empty()) {
-        printf("[BTGA OBJ] f=%d drawn=%zu added=%d removed=%d lodchg=%d cam=%.2f,%.2f\n",
-            frame_index, cur_objs.size(), added, removed, lod_changed, cx, cz);
+    if (!draws_cur.empty() || !draws_prev.empty() || frame_index % 60 == 0) {
+        std::string detail;
+        for (auto& [site, ar] : churn) {
+            char buf[48];
+            snprintf(buf, sizeof(buf), " %08X:+%d/-%d", site, ar.first, ar.second);
+            detail += buf;
+        }
+        printf("[BTGA OBJ] f=%d drawn=%zu added=%d removed=%d%s\n", frame_index, draws_cur.size(), added, removed, detail.c_str());
         fflush(stdout);
     }
     frame_index++;
-    objs_prev.swap(objs_cur);
-    objs_cur.clear();
+    draws_prev.swap(draws_cur);
+    draws_cur.clear();
 }

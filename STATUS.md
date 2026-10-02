@@ -3,6 +3,17 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 113: tag every mesh-draw call site
+
+The round 112 `[BTGA OBJ]` log was empty with the current build: the
+intro never draws through `func_800AF978`. Its buildings come from
+another drawer. There are 31 call sites of the shared mesh-draw routine
+`func_8007B1F0` in 17 functions. Each now gets a site-tag hook before its
+`jal`, and the routine's entry records (site, mesh `$a0`). Every frame
+prints the total drawn, the number added and removed, and the call sites
+whose set changed. A heartbeat line also prints every 60 frames, so an
+empty log can't be mistaken for a broken one.
+
 ## 2026-10-02, round 112: per-frame map-object diagnostic
 
 Round 110/111 results:
