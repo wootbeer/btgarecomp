@@ -1565,7 +1565,8 @@ text = """
     { extern void btga_hud_map_end(uint8_t *rdram, recomp_context *ctx); btga_hud_map_end(rdram, ctx); }
 """
 
-# func_800D56FC's box fill rect (cutscene letterbox bars).
+# func_800D56FC's box fill rect (cutscene letterbox bars: tracked, to find the
+# 3D view rectangle) and the frame clear in func_8007A250.
 [[patches.hook]]
 func = "func_800D56FC"
 before_vram = 0x800D5B10
@@ -1578,4 +1579,11 @@ func = "func_800D56FC"
 before_vram = 0x800D5BF0
 text = """
     { extern void btga_box_fillrect_end(uint8_t *rdram, recomp_context *ctx); btga_box_fillrect_end(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007A250"
+before_vram = 0x8007A5A4
+text = """
+    { extern void btga_frame_clear(uint8_t *rdram, recomp_context *ctx); btga_frame_clear(rdram, ctx); }
 """

@@ -296,17 +296,88 @@ extern "C" void btga_hud_fillrect_end(uint8_t* rdram, recomp_context* ctx) {
     reset(rdram);
 }
 
+// --- Letterboxed cutscenes ---------------------------------------------
+//
+// Every frame starts (func_8007A250) with a fill-mode clear of 0..319 x
+// 0..239 in the scene's sky colour, which RT64 stretches across the whole
+// window. Cutscenes then draw black letterbox bars (func_800D56FC's box
+// drawer) around a smaller 3D view, but only inside the 4:3 area, so the
+// stretched sky showed beside them. Anchoring the bars outward (round 104)
+// only works when the HUD Ratio lets anchored elements reach the window
+// edge -- at Original they stay in 4:3 by design.
+//
+// Instead, while the previous frame was letterboxed, the clear is followed
+// by a black fill of the whole screen (stretched to the window) and the sky
+// colour again over just the 3D view rectangle (not full width, so RT64
+// keeps it in place). The view rectangle is taken from the bars the box
+// drawer drew: left bar's right edge, right bar's left edge, top bar's
+// bottom, bottom area's top.
+namespace {
+    struct Letterbox {
+        int ulx = 0, uly = 0, lrx = 320, lry = 240;
+        int bars = 0;
+    };
+    Letterbox letterbox_building, letterbox_last;
+    uint32_t frame_counter = 0, letterbox_frame = 0;
+}
+
 // func_800D56FC's box drawer, before it reads its head: box in $s1
-// (x at +4, width at +8).
+// (x, y at +4/+6, width, height at +8/+0xA).
 extern "C" void btga_box_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     int ulx = (int16_t)MEM_H(4, ctx->r17);
+    int uly = (int16_t)MEM_H(6, ctx->r17);
     int lrx = ulx + (uint16_t)MEM_HU(8, ctx->r17);
-    if (!anchoring_active(rdram)) {
+    int lry = uly + (uint16_t)MEM_HU(0xA, ctx->r17);
+    Letterbox& lb = letterbox_building;
+    if (ulx <= 0 && lrx > 0 && lrx < 160 && uly <= 0) {
+        lb.ulx = lrx; lb.bars++;           // left bar
+    } else if (lrx >= 320 && ulx > 160 && uly <= 0) {
+        lb.lrx = ulx; lb.bars++;           // right bar
+    } else if (uly <= 0 && lry > 0 && lry < 120 && ulx > 0 && lrx < 320) {
+        lb.uly = lry; lb.bars++;           // top bar
+    } else if (ulx <= 0 && lrx >= 320 && uly > 120 && lry >= 240) {
+        lb.lry = uly; lb.bars++;           // bottom area
+    } else {
         return;
     }
-    emit(rdram, kseg0(kBoxDlHeadPtr), bar_align(ulx, lrx));
+    letterbox_frame = frame_counter;
 }
 
 extern "C" void btga_box_fillrect_end(uint8_t* rdram, recomp_context* ctx) {
-    reset(rdram);
+}
+
+// func_8007A250, right after the frame clear's G_FILLRECT (fill colour set
+// just before it): the display-list head is the stack variable 0x24($fp).
+extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
+    frame_counter++;
+    if (letterbox_building.bars >= 2) {
+        letterbox_last = letterbox_building;
+    }
+    letterbox_building = Letterbox{};
+
+    // Letterboxed within the last couple of frames, and in Expand.
+    if (btga::get_widescreen_scale() <= 1.0f || frame_counter - letterbox_frame > 3 || letterbox_last.bars < 2) {
+        return;
+    }
+    const Letterbox& lb = letterbox_last;
+    if (!(lb.ulx >= 0 && lb.ulx < lb.lrx && lb.lrx <= 320 && lb.uly >= 0 && lb.uly < lb.lry && lb.lry <= 240)) {
+        return;
+    }
+
+    gpr frame = ctx->r30;
+    uint32_t head = (uint32_t)MEM_W(0x24, frame);
+    gpr fill_color_cmd = kseg0(head - 16);
+    // Expect exactly the clear the game just wrote: G_SETFILLCOLOR, G_FILLRECT 0..319 x 0..239.
+    if ((uint32_t)MEM_W(0, fill_color_cmd) != 0xF7000000u || (uint32_t)MEM_W(8, fill_color_cmd) != 0xF64FC3BCu) {
+        return;
+    }
+    uint32_t sky = (uint32_t)MEM_W(4, fill_color_cmd);
+
+    DlWriter dl{ rdram, kseg0(head) };
+    dl.cmd(0xF7000000, 0x00010001);                 // black (RGBA5551, both pixels)
+    dl.cmd(0xF64FC3BC, 0);                          // whole screen
+    dl.cmd(0xF7000000, sky);
+    uint32_t lrx = (uint32_t)(lb.lrx * 4 - 4), lry = (uint32_t)(lb.lry * 4 - 4); // fill mode: inclusive
+    dl.cmd(0xF6000000 | (lrx << 12) | lry, ((uint32_t)(lb.ulx * 4) << 12) | (uint32_t)(lb.uly * 4));
+    MEM_W(0x24, frame) = (int32_t)(uint32_t)dl.head;
 }

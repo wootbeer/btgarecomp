@@ -3,6 +3,31 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 105: letterbox sides via the frame clear, independent of HUD Ratio
+
+Round 104 results:
+- The HUD is right at all three HUD Ratio settings, and menus are fine.
+- With HUD Ratio **Expand** (and 16:9 on a 16:9 window), the cutscene
+  sides are now black.
+- At **Original** they still show sky. RT64 positions anchored origins by
+  the HUD Ratio percentage, so at Original anchored bars (and their
+  widened scissor) stay in 4:3 by design.
+
+The letterbox shouldn't depend on a HUD setting, so it's now fixed at the
+source.
+- `func_8007A250` builds each frame's colour clear: `G_SETFILLCOLOR`
+  (sky RGB from `0x801144F4`), then `G_FILLRECT` `0xF64FC3BC`, with its
+  display-list head in the stack variable `0x24($fp)`.
+- A hook right after that fill rect (`0x8007A5A4`) checks whether the
+  previous frame was letterboxed. If so, it appends:
+  - a black fill of the whole screen, which RT64 stretches to the window
+  - the sky colour again over just the 3D view rectangle, which isn't
+    full width, so RT64 maps it into the 4:3 area unchanged
+- The view rectangle is derived from the bars `func_800D56FC`'s box
+  drawer drew: left bar's right edge, right bar's left edge, top bar's
+  bottom, bottom area's top. The box hooks now only track the bars; they
+  no longer anchor them.
+
 ## 2026-10-02, round 104: widen the scissor for anchored draws; right-origin offset
 
 Round 103 results:
