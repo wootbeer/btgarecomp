@@ -3,6 +3,29 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 116: fog change reverted; render-mode fingerprint diagnostic
+
+**Round 115 result:** the buildings still flicker. The user also feels
+the fog is very close, and isn't sure it was like that originally. So
+the flickering building isn't at the fog/far-clip boundary: with fog
+finishing before 0.998 it would have been invisible, not flickering.
+The fog change is reverted (back to `gSPFogPosition(995, 1000)`).
+
+What's known:
+- the game sends identical geometry every frame
+- whole objects vanish
+- only certain ones (e.g. the building stacked on another)
+
+So RT64 renders the same input differently between frames. Its
+per-frame random seed (`initRand(frameCount, ...)` in `RasterPS.hlsl`)
+drives alpha-compare dither and alpha/colour dither noise, and decal
+draws use a depth-tolerance test.
+
+Temporary `[BTGA MODE]` diagnostic (`src/game/render_mode_diag.cpp`,
+every 3 s): walks the frame display list, counts triangles per distinct
+(othermode H, othermode L, combiner, geometry mode) and flags
+`AC_DITHER`, `AC_THRESH`, `ZDECAL`, `AD_NOISE` and `CD_NOISE`.
+
 ## 2026-10-02, round 115: distant flicker = RT64's early far clip inside the game's fog band
 
 **Round 114 result.** Through the whole flickering intro shot the game

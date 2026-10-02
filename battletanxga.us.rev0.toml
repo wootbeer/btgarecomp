@@ -1609,13 +1609,3 @@ before_vram = 0x800D2AFC
 text = """
     { extern void btga_cutscene_far_plane(uint8_t *rdram, recomp_context *ctx); btga_cutscene_far_plane(rdram, ctx); }
 """
-
-# Round 115 (src/game/fog_fix.cpp): end the fog band before RT64's simulated
-# F3D far clip (depth 1022/1024), so distant geometry fades out completely
-# before it is cut away instead of flickering half-fogged at the cut-off.
-[[patches.hook]]
-func = "func_8007A250"
-before_vram = 0x8007A688
-text = """
-    { extern void btga_fog_position(uint8_t *rdram, recomp_context *ctx); btga_fog_position(rdram, ctx); }
-"""
