@@ -3,6 +3,21 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 118c: diff diagnostic ignores per-frame buffer addresses
+
+**Round 118b result:** valid walks this time. 3D frames have about
+6,000-8,700 commands and 1,700-2,400 triangles, with no `G_BRANCH_Z` or
+`G_CULLDL`. But the diffs were swamped:
+- Matrix (and other per-frame buffer) addresses are physical (segment 0,
+  e.g. `0x00129D40` vs `0x00135D40` on alternate frames), and only KSEG0
+  ones were blanked.
+- So every frame differed by about 100 commands, and most frames
+  exceeded the 300-edit cap.
+
+Physical and KSEG0 addresses are now blanked for `DL`, `MTX`, `VTX` and
+`MOVEMEM`, and colour/depth image addresses always. Texture addresses
+are kept, since textures are static. The edit cap is back up to 600.
+
 ## 2026-10-02, round 118b: diff diagnostic moved to the scheduler's task loads
 
 **Round 118 result:** the walk was broken and slowed the game badly:

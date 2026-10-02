@@ -36,6 +36,8 @@ namespace {
         }
         uint32_t w32(uint32_t p) const { return *(uint32_t*)(rdram + (p & kRamMask & ~3u)); }
         uint32_t h16(uint32_t p) const { uint32_t w = w32(p); return (p & 2) ? (w & 0xFFFF) : (w >> 16); }
+        // Per-frame buffers are referenced by physical (segment 0) or KSEG0 address.
+        static uint32_t blank_ram(uint32_t a) { uint32_t s = a >> 24; return (s == 0x00 || s == 0x80) ? 0 : a; }
         uint32_t b8(uint32_t p) const { uint32_t w = w32(p); return (w >> (24 - 8 * (p & 3))) & 0xFF; }
 
         void read_matrix(uint32_t p) {
@@ -59,7 +61,7 @@ namespace {
                 Token t{ w0, w1, 0 };
                 switch (op) {
                 case 0xDE:
-                    t.w1 = (w1 & 0xFF000000u) == 0x80000000u ? 0 : w1;
+                    t.w1 = blank_ram(w1);
                     tokens.push_back(t);
                     walk(w1, depth + 1);
                     if (((w0 >> 16) & 0xFF) != 0) return;
@@ -71,7 +73,7 @@ namespace {
                     break;
                 case 0xDA:
                     if (!have_proj && (w0 & 0x04)) read_matrix(phys(w1));
-                    t.w1 = (w1 & 0xFF000000u) == 0x80000000u ? 0 : w1;
+                    t.w1 = blank_ram(w1);
                     break;
                 case 0xDC: t.w1 = 0; break;
                 case 0x01: {
@@ -80,15 +82,15 @@ namespace {
                     uint32_t h = 2166136261u;
                     for (uint32_t i = 0; i < n; i++) { h = (h ^ w32(v + i * 16 + 12)) * 16777619u; }
                     t.extra = h;
-                    t.w1 = (w1 & 0xFF000000u) == 0x80000000u ? 0 : w1;
+                    t.w1 = blank_ram(w1);
                     break;
                 }
                 case 0x03: cull_dl++; break;
                 case 0x04: branch_z++; break;
                 case 0x05: tris += 1; break;
                 case 0x06: case 0x07: tris += 2; break;
-                case 0xFD: case 0xFF: case 0xFE:
-                    t.w1 = (w1 & 0xFF000000u) == 0x80000000u ? 0 : w1;
+                case 0xFF: case 0xFE: // colour/depth image: alternate per frame
+                    t.w1 = 0;
                     break;
                 }
                 tokens.push_back(t);
@@ -121,7 +123,7 @@ namespace {
     // Myers O(ND) diff; false if more than kMaxD edits.
     bool myers_diff(const std::vector<Token>& a, const std::vector<Token>& b, std::vector<Edit>& out) {
         const int n = (int)a.size(), m = (int)b.size();
-        const int kMaxD = 300;
+        const int kMaxD = 600;
         const int off = kMaxD + 1;
         std::vector<int> v(2 * off + 1, 0);
         std::vector<std::vector<int>> trace;
