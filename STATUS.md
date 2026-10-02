@@ -3,6 +3,35 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 100: cutscene side areas in Expand (temporary diagnostic)
+
+User screenshots:
+- **Gameplay HUD in Expand** (all of it sits in the centred 4:3 area).
+  Positions in game pixels:
+  - map: x 31-101, y 134-207
+  - "0" counter below it: x 89-94, y 211-222
+  - weapon/ammo box: x 261-285, y 192-220
+  - kill counter and icon: x 256-282, y 20-34
+  - health bar: x 130-192, y 214-222
+
+  Wanted:
+  - anchored **left**: the map, and the "0" with it
+  - anchored **right**: the ammo box and the kill counter
+  - **centred**: the health bar
+- **Letterboxed intro cutscene in Expand.** The areas left and right of
+  the 4:3 image show the scene's sky/clear colour for game y ~0-133. The
+  bottom (text area) is black across the whole window, and the 4:3
+  borders around the 3D view are black. RT64 stretches a fill rect to
+  the window edges when it spans the framebuffer pair's scissor width
+  (`rt64_framebuffer_renderer.cpp`), so some full-width rect is being
+  stretched, but the static DL doesn't show which.
+
+Temporary diagnostic: `btga_dl_fill_diag` (in `src/game/hud_diag.cpp`,
+called from `btga_fix_screen_edge_scissors` every VI, throttled to 2 s)
+walks both gfx task display lists. It prints every `G_FILLRECT` in draw
+order with its rect, cycle type, fill/prim colour and active scissor, as
+`[BTGA FILL]`.
+
 ## 2026-10-02, round 99: HUD anchoring groundwork (temporary diagnostic)
 
 Goal: in Expand, anchor the map and ammo HUD elements to the screen
