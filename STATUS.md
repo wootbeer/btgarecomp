@@ -3,6 +3,22 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 109: projection / depth diagnostic for the cutscene flicker
+
+**Round 108 result:** no difference in the intro or credits. Either the
+intro's projection isn't the one `func_800D25E0` builds, or the
+flickering buildings are flat backdrop geometry tying with the cleared
+depth (exact on hardware, unstable in floating point).
+
+Temporary `[BTGA PROJ]` diagnostic (`src/game/projection_diag.cpp`, from
+the per-VI scissor hook, every 2 s). It walks the frame display list and
+prints:
+- every projection matrix loaded (`G_MTX` with `G_MTX_PROJECTION`),
+  decoded to m00/m11 and the depth terms m22/m23/m32/m33
+- draw counts with z-compare, z-update and `G_ZS_PRIM`
+- the `G_SETPRIMDEPTH` values
+- the draw-distance variable
+
 ## 2026-10-02, round 108: cutscene camera's degenerate projection (far plane 0)
 
 **Round 106 result:** no visible difference.
