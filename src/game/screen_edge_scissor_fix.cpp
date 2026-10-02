@@ -47,10 +47,7 @@ namespace {
     };
 }
 
-extern "C" void btga_projection_diag(uint8_t* rdram); // TEMPORARY, src/game/projection_diag.cpp
-
 extern "C" void btga_fix_screen_edge_scissors(uint8_t* rdram, recomp_context* ctx) {
-    btga_projection_diag(rdram);
     uint32_t buffer = *(uint32_t*)(rdram + (kSegment1BufferPtr - 0x80000000u));
     // Not loaded yet, or not a KSEG0 RDRAM address.
     if (buffer < 0x80000000u || buffer + kSegment1Size > 0x80800000u) {

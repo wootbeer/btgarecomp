@@ -3,6 +3,39 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 115: distant flicker = RT64's early far clip inside the game's fog band
+
+**Round 114 result.** Through the whole flickering intro shot the game
+sends identical work every frame: 440 mesh draws and 1553 triangles in
+both task display lists, with no draws gained or lost. The flicker is
+renderer-side.
+
+**Cause.**
+- RT64 emulates the F3D microcodes' early far clipping by discarding
+  every fragment deeper than 1022/1024, about 0.998 (`RasterPS.hlsl`,
+  `simulateDepthClipF3D`).
+- The game's fog, from `func_8007A250`'s `G_MOVEWORD G_MW_FOG
+  0x64009D00` = `gSPFogPosition(995, 1000)`, starts at depth 0.995 and
+  is only opaque at 1.0.
+- So distant geometry was cut off while only about 60% fogged. The
+  smallest depth difference, between frames or between stacked objects
+  (the user's building-on-a-building in the credits), flipped it across
+  the line.
+- That explains the half-faded frames and the "wider area" once round
+  110 raised the draw distance (more geometry reached that depth range).
+
+**Fix** (`src/game/fog_fix.cpp`, hook before `0x8007A688`): the fog word
+becomes `gSPFogPosition(994, 998)` = `0x7D008480` (multiplier 32000,
+offset -31616), so geometry is fully fogged before it's discarded and
+fades out instead of popping. Fog starts very slightly closer.
+
+Also:
+- Round 110's draw-distance pin is reverted; the game's own scene-start
+  values and governor are back.
+- The round 109-114 diagnostics are removed.
+- Round 108's cutscene far-plane guard stays. It fixes a genuinely
+  degenerate projection, though it wasn't this flicker.
+
 ## 2026-10-02, round 114: count draws per mesh, plus display-list triangle totals
 
 Round 113 result for the intro's flickering shot: after the scene start

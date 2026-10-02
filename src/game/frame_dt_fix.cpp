@@ -23,10 +23,7 @@ static constexpr float kViUnits = 0.375f;
 
 // Hooked right before `swc1 $f0, 0x5948($at)` in func_800BF80C (0x800BFAC8,
 // gameplay) and func_800BFAEC (0x800BFC80, intro / attract demo / credits).
-extern "C" void btga_obj_diag_frame(uint8_t* rdram); // TEMPORARY, projection_diag.cpp
-
 extern "C" void btga_frame_dt(uint8_t* rdram, recomp_context* ctx) {
-    btga_obj_diag_frame(rdram);
     float raw = ctx->f0.fl;
     float snapped = std::round(raw / kViUnits) * kViUnits;
     if (snapped >= kViUnits) { // keep tiny/zero first-frame values as measured
