@@ -9,7 +9,9 @@
 // to work at all), so it gives a live, unbiased read.
 #include <cstdint>
 #include <cstdio>
+#include <algorithm>
 #include <chrono>
+#include <cstdlib>
 
 #include "recomp.h"
 
@@ -51,7 +53,10 @@ extern "C" void btga_debug_vi_dispatch_live(uint8_t* rdram, recomp_context* ctx)
 // osViSwapBuffer, with (state, frame_buffer) in a0/a1. Answers whether the
 // remaining "models stutter back and forth" is uneven swap timing, a
 // varying VI count per swap, or frames shown out of order (A -> B -> A).
+static void btga_debug_dl_extents(uint8_t* rdram);
+
 extern "C" void btga_debug_swap_pacing(uint8_t* rdram, recomp_context* ctx) {
+    btga_debug_dl_extents(rdram);
     using namespace std::chrono;
     uint32_t state = (uint32_t)ctx->r4;
     uint32_t fb = (uint32_t)ctx->r5;
@@ -97,4 +102,89 @@ extern "C" void btga_debug_swap_pacing(uint8_t* rdram, recomp_context* ctx) {
         vis_min = 1 << 30; vis_max = 0;
         nseen = 0;
     }
+}
+
+// Round 93 diagnostic: what horizontal extent does a real frame's display list
+// draw to? Walks the F3DEX2 display list of both gfx task structs
+// (0x801293E0 / 0x80129428, OSTask.data_ptr at +0x30) every 2 seconds and
+// prints the distinct scissors and viewports plus the widest fill/texture
+// rectangles, to find what leaves the right-edge columns undrawn.
+#include <set>
+#include <string>
+
+namespace {
+    struct DlScan {
+        uint8_t* rdram;
+        uint32_t seg[16] = {};
+        std::set<std::string> scissors, viewports, cimgs;
+        int fill_max_lrx = -1, tex_max_lrx = -1, cmds = 0;
+
+        static constexpr uint32_t kRamMask = 0x7FFFFF;
+        uint32_t phys(uint32_t a) const { return (seg[(a >> 24) & 0xF] + (a & 0xFFFFFF)) & kRamMask; }
+        uint32_t w32(uint32_t p) const { return *(uint32_t*)(rdram + (p & kRamMask)); }
+        int16_t h16(uint32_t p) const { return *(int16_t*)(rdram + ((p & kRamMask) ^ 2)); }
+
+        void walk(uint32_t addr, int depth) {
+            if (depth > 18) return;
+            uint32_t p = phys(addr);
+            while (cmds++ < 200000) {
+                uint32_t w0 = w32(p), w1 = w32(p + 4);
+                p += 8;
+                char buf[96];
+                switch (w0 >> 24) {
+                case 0xDE: // G_DL
+                    walk(w1, depth + 1);
+                    if (((w0 >> 16) & 0xFF) != 0) return; // branch, no return
+                    break;
+                case 0xDF: return; // G_ENDDL
+                case 0xDB: // G_MOVEWORD
+                    if (((w0 >> 16) & 0xFF) == 0x06) seg[((w0 & 0xFFFF) / 4) & 0xF] = w1 & kRamMask;
+                    break;
+                case 0xDC: // G_MOVEMEM
+                    if ((w0 & 0xFF) == 0x08) { // viewport
+                        uint32_t v = phys(w1);
+                        int sx = h16(v), sy = h16(v + 2), tx = h16(v + 8), ty = h16(v + 10);
+                        snprintf(buf, sizeof(buf), "x %.2f..%.2f y %.2f..%.2f", (tx - abs(sx)) / 4.0, (tx + abs(sx)) / 4.0, (ty - abs(sy)) / 4.0, (ty + abs(sy)) / 4.0);
+                        viewports.insert(buf);
+                    }
+                    break;
+                case 0xED: // G_SETSCISSOR
+                    snprintf(buf, sizeof(buf), "%.2f,%.2f..%.2f,%.2f", ((w0 >> 12) & 0xFFF) / 4.0, (w0 & 0xFFF) / 4.0, ((w1 >> 12) & 0xFFF) / 4.0, (w1 & 0xFFF) / 4.0);
+                    scissors.insert(buf);
+                    break;
+                case 0xF6: // G_FILLRECT
+                    fill_max_lrx = std::max(fill_max_lrx, int((w0 >> 12) & 0xFFF));
+                    break;
+                case 0xE4: case 0xE5: // G_TEXRECT / FLIP
+                    tex_max_lrx = std::max(tex_max_lrx, int((w0 >> 12) & 0xFFF));
+                    break;
+                case 0xFF: // G_SETCIMG
+                    snprintf(buf, sizeof(buf), "width %u @%08x", (w0 & 0xFFF) + 1, w1);
+                    cimgs.insert(buf);
+                    break;
+                }
+            }
+        }
+    };
+}
+
+static void btga_debug_dl_extents(uint8_t* rdram) {
+    using namespace std::chrono;
+    static steady_clock::time_point last{};
+    auto now = steady_clock::now();
+    if (now - last < seconds(2)) return;
+    last = now;
+    for (uint32_t task : { 0x801293E0u, 0x80129428u }) {
+        uint32_t dl = *(uint32_t*)(rdram + (task - 0x80000000u) + 0x30);
+        if (dl < 0x80000000u || dl >= 0x80800000u) continue;
+        DlScan s{ rdram };
+        s.walk(dl, 0);
+        std::string sc, vp, ci;
+        for (auto& x : s.scissors) sc += "[" + x + "]";
+        for (auto& x : s.viewports) vp += "[" + x + "]";
+        for (auto& x : s.cimgs) ci += "[" + x + "]";
+        printf("[BTGA DL] task %08x dl %08x cmds=%d cimg=%s scissor=%s viewport=%s fill_max_lrx=%.2f tex_max_lrx=%.2f\n",
+            task, dl, s.cmds, ci.c_str(), sc.c_str(), vp.c_str(), s.fill_max_lrx / 4.0, s.tex_max_lrx / 4.0);
+    }
+    fflush(stdout);
 }

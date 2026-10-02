@@ -3,6 +3,46 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 93: audio works; investigating a stale strip at the right edge of the image
+
+**Round 92 confirmed:** music and sound play and sound mostly right
+(occasional slight crackle, expected with the plain `SDL_QueueAudio` push
+in `main.cpp`). A crash after maxing every graphics option took about a
+second to appear, consistent with GPU memory exhaustion from
+resolution x downsampling x MSAA on an 8 GB card. Not treated as a bug.
+
+New report: a thin strip at the right edge of the 4:3 image. In gameplay
+it's the sky/clear colour; in menus it keeps "whatever colour it last
+was". It's present at every resolution, scales with the window (a fixed
+fraction of the width), and in Expand mode the whole side area shows the
+same thing. Bomberman Hero Recompiled (same RT64) on the same machine
+does not have it.
+
+Ruled out so far:
+- VI mode is libultra's standard NTSC LAF1 (`osViModeTable[3]`): width
+  320, `xScale 0x200`, hStart/hEnd 108/748. RT64's `fbSize()` gives
+  exactly 320x240.
+- Game framebuffer is 320 wide (`gDPSetColorImage` width-1 `0x13F` at
+  `0x8007A3DC`/`0x8007A494`). The full-screen scissor (`0xED000000
+  005003C0`) and clear (`0xF64FC3BC`) cover 0..320 / 0..319 inclusive.
+- Every static viewport (`0x80127E30` table for 1-4 player layouts) is
+  full width.
+- RT64 Original aspect mode doesn't widen (`aspectRatioScale` = 1.0);
+  Expand intentionally extends full-screen fill rects, which is why the
+  sides fill with clear colour there.
+- The syms entry named `osViExtendVStart` (`0x800FBD88`) is a
+  mislabeled one-line music-player setter, recompiled as normal code. It
+  has nothing to do with the VI.
+
+Since the clear reaches the strip in gameplay but the 3D scene and menu
+backgrounds don't, something in the actual frames stops short. Added
+`btga_debug_dl_extents` (`src/game/vi_dispatch_diag.cpp`, run from the
+swap diagnostic every 2 s). It walks both gfx tasks' F3DEX2 display lists
+(OSTask `data_ptr` at +0x30, following `G_DL`, segments via
+`G_MOVEWORD`) and prints `[BTGA DL]` with the distinct color images,
+scissors and viewports and the widest fill/texture rectangle. Builds;
+not yet run.
+
 ## 2026-10-01, round 92: audio tasks run; the music sequencer's command handlers split at libmus's command table
 
 Round 91's run got further: `[sp] Audio task: 801EC768` now alternates
