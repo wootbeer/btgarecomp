@@ -14,6 +14,8 @@
 // horizontal field of view). Every consumer tests |k * lateral| < forward,
 // so dividing k by RT64's widening factor widens all of them at once.
 #include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <cstdint>
 
 #include "recomp.h"
@@ -105,7 +107,8 @@ namespace {
     bool in_map = false;
     Align element_align = kAlignNone; // for the current interpreter element's texture rects
     Align emitted = kAlignNone;
-    gpr emitted_head_ptr = 0;
+    gpr emitted_home_ptr = 0;
+    gpr map_home_ptr = 0;
 
     gpr kseg0(uint32_t address) {
         return (gpr)(int32_t)address;
@@ -118,7 +121,13 @@ namespace {
     }
 
     // gEXEnable + gEXSetRectAlign at the display-list head, advancing it.
-    void emit(uint8_t* rdram, gpr head_ptr, const Align& align) {
+    // head_ptr is what the current draw call writes through -- sometimes a
+    // stack-local copy of the head (func_800C7C10 copies it to sp+0x18 and
+    // writes it back before returning). home_ptr is the global that copy
+    // goes back to, which is the only one safe to use for the later reset:
+    // the local is dead by then (round 103 -- writing through it corrupted
+    // the caller's stack and crashed at level start).
+    void emit(uint8_t* rdram, gpr head_ptr, gpr home_ptr, const Align& align) {
         if (align == emitted) {
             return;
         }
@@ -131,12 +140,16 @@ namespace {
         MEM_W(0x14, head) = (int32_t)((uint32_t)(uint16_t)align.right_offset << 16);
         MEM_W(0, head_ptr) = (int32_t)(head + 0x18);
         emitted = align;
-        emitted_head_ptr = head_ptr;
+        emitted_home_ptr = home_ptr;
+    }
+
+    void emit(uint8_t* rdram, gpr head_ptr, const Align& align) {
+        emit(rdram, head_ptr, head_ptr, align);
     }
 
     void reset(uint8_t* rdram) {
         if (!(emitted == kAlignNone)) {
-            emit(rdram, emitted_head_ptr, kAlignNone);
+            emit(rdram, emitted_home_ptr, kAlignNone);
         }
     }
 
@@ -155,6 +168,25 @@ namespace {
             return true;
         default:
             return false;
+        }
+    }
+
+    // TEMPORARY round 103 diagnostic: what the fill-rect hooks see, every 2 s.
+    struct BarDiag {
+        std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
+        int calls = 0;
+    };
+    BarDiag overlay_diag, box_diag;
+
+    void bar_diag(uint8_t* rdram, BarDiag& d, const char* path, int ulx, int lrx) {
+        d.calls++;
+        auto now = std::chrono::steady_clock::now();
+        if (now - d.last >= std::chrono::seconds(2)) {
+            printf("[BTGA BAR] %s calls=%d last x=%d..%d players=%u scale=%.3f\n", path, d.calls, ulx, lrx,
+                (unsigned)MEM_BU(0, kseg0(kPlayerCount)), btga::get_widescreen_scale());
+            fflush(stdout);
+            d.last = now;
+            d.calls = 0;
         }
     }
 
@@ -211,8 +243,10 @@ extern "C" void btga_hud_script_end(uint8_t* rdram, recomp_context* ctx) {
     reset(rdram);
 }
 
+// func_800C7C10(Gfx** head, ...) -- draws through a local copy of *head.
 extern "C" void btga_hud_map_begin(uint8_t* rdram, recomp_context* ctx) {
     in_map = anchoring_active(rdram);
+    map_home_ptr = ctx->r4;
 }
 
 extern "C" void btga_hud_map_end(uint8_t* rdram, recomp_context* ctx) {
@@ -223,20 +257,23 @@ extern "C" void btga_hud_map_end(uint8_t* rdram, recomp_context* ctx) {
 // Every texture rectangle: func_8007C364(Gfx** head, sprite, x, y, ...).
 extern "C" void btga_hud_texrect(uint8_t* rdram, recomp_context* ctx) {
     if (in_map) {
-        emit(rdram, ctx->r4, kAlignHudLeft);
+        emit(rdram, ctx->r4, map_home_ptr, kAlignHudLeft);
     } else if (!(element_align == kAlignNone)) {
-        emit(rdram, ctx->r4, element_align);
+        // Interpreter elements (and the widgets/number drawers they call)
+        // all write back to the overlay head.
+        emit(rdram, ctx->r4, kseg0(kOverlayDlHeadPtr), element_align);
     }
 }
 
 // Interpreter fill-rect element, before it reads the head: x in $s1, the
 // element's width at $s0.
 extern "C" void btga_hud_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
+    int ulx = (int16_t)ctx->r17;
+    int lrx = ulx + (uint16_t)MEM_HU(0, ctx->r16);
+    bar_diag(rdram, overlay_diag, "overlay", ulx, lrx);
     if (!anchoring_active(rdram)) {
         return;
     }
-    int ulx = (int16_t)ctx->r17;
-    int lrx = ulx + (uint16_t)MEM_HU(0, ctx->r16);
     Align a = bar_align(ulx, lrx);
     if (a == kAlignNone) {
         a = element_align; // a HUD panel
@@ -251,11 +288,12 @@ extern "C" void btga_hud_fillrect_end(uint8_t* rdram, recomp_context* ctx) {
 // func_800D56FC's box drawer, before it reads its head: box in $s1
 // (x at +4, width at +8).
 extern "C" void btga_box_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
+    int ulx = (int16_t)MEM_H(4, ctx->r17);
+    int lrx = ulx + (uint16_t)MEM_HU(8, ctx->r17);
+    bar_diag(rdram, box_diag, "box", ulx, lrx);
     if (!anchoring_active(rdram)) {
         return;
     }
-    int ulx = (int16_t)MEM_H(4, ctx->r17);
-    int lrx = ulx + (uint16_t)MEM_HU(8, ctx->r17);
     emit(rdram, kseg0(kBoxDlHeadPtr), bar_align(ulx, lrx));
 }
 

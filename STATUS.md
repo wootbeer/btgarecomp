@@ -3,6 +3,31 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 103: fix round 102's crash at level start; cutscene bar diagnostic
+
+Round 102 results:
+1. Title screen, logos and menus are fixed.
+2. The cutscene side areas are still sky-coloured.
+3. The game crashed right after picking a tank at level start.
+
+**Crash.** `func_800C7C10` (the map) copies the caller's display-list
+head to a stack local (`sp+0x18`), draws through it (`func_800C7650`
+gets the same local), and writes it back at `0x800C81F8`. Its stack frame
+is then popped before `jr $ra`. Round 102 recorded the pointer the last
+texture rect wrote through (the local) and used it for the reset at the
+map's exit hook, after the frame was gone, which corrupted the caller's
+stack. Emission now records a separate *home* pointer for the reset: the
+map's entry `a0`, or `0x803A5944` for interpreter elements and the
+widgets and number drawers they call.
+
+**Cutscene bars.** Neither the interpreter fill hook (round 101) nor the
+`func_800D56FC` hook (round 102) changed them. The only other fill-rect
+builder, the routine at `0x800BBE24` (merged into `func_800BBDC0`'s
+symbol), has no references and looks dead. Temporary `[BTGA BAR]`
+diagnostic: every 2 s each fill path prints its call count, last x
+range, the player-count byte (`anchoring_active` requires <= 2) and the
+widescreen scale.
+
 ## 2026-10-02, round 102: HUD anchoring limited to the gameplay HUD; cutscene bars via func_800D56FC
 
 Round 101 test results:
