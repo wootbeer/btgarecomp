@@ -3,6 +3,52 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 111: green UI theme
+
+User request: change the blue-tinted launcher/config UI to green. In
+`src/main/theme.cpp` (called from `main()` before the UI exists),
+`btga::apply_theme()` re-applies every blue-tinted recompui theme colour
+with its green and blue channels swapped. That keeps brightness and
+contrast and moves the hue from blue to green. The affected colours are:
+- Background1-3, BGOverlay, ModalOverlay, BGShadow2
+- Primary* (the launcher title and highlights)
+- Elevated*
+- the A* accent
+
+The warning, danger, success and player colours are unchanged. Neither
+`recomp.rcss` nor the launcher has hard-coded colours, so everything
+goes through the theme.
+
+## 2026-10-02, round 110: draw distance pinned at the governor's maximum
+
+The round 109 `[BTGA PROJ]` log showed what round 108 got wrong.
+- The intro's 3D runs on the **gameplay** engine, with the draw distance
+  at 3400 / 3450 / 3550 and resetting to 3400. The cutscene camera
+  (`func_800D25E0`) isn't used, and the round 107 camera log was
+  captured before the 3D started.
+- Nearly all draws use z-compare; none uses primitive depth. So it isn't
+  a backdrop depth tie.
+
+The map-object drawer `func_800AF978` culls each static object in
+`func_800AB980`: squared distance from the cull-record camera to the
+object's footprint vs. the draw distance squared, then the view-cone
+edge tests. The draw distance `0x8023A060`:
+- is reset to 3400 / 2866 / 1800 by `func_8009AE38` at every scene start
+- is then stepped +50 per game second (to a 5000 cap), or -50 under
+  20 fps, by the frame-rate governor `func_80099FE8`
+
+So during a shot it sits just past 3400, right where the background
+buildings are. Small camera movements flip them across the cull distance,
+and the steep fog band at the far plane gives the half-faded frames.
+
+Fix (`src/game/cutscene_projection_fix.cpp`). On PC every frame is on
+time, where the governor would always end at 5000:
+- the scene-start store (`0x8009AF4C`) now writes 5000
+- the governor's store (`0x8009A1F0`) never lowers it
+
+The round 109 diagnostic stays for one more test, to confirm
+`far_var=5000`.
+
 ## 2026-10-02, round 109: projection / depth diagnostic for the cutscene flicker
 
 **Round 108 result:** no difference in the intro or credits. Either the

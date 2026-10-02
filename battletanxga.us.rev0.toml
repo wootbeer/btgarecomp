@@ -1609,3 +1609,19 @@ before_vram = 0x800D2AFC
 text = """
     { extern void btga_cutscene_far_plane(uint8_t *rdram, recomp_context *ctx); btga_cutscene_far_plane(rdram, ctx); }
 """
+
+# Round 110 (src/game/cutscene_projection_fix.cpp): keep the draw distance at
+# the governor's 5000 maximum -- scene start and governor stores.
+[[patches.hook]]
+func = "func_8009AE38"
+before_vram = 0x8009AF4C
+text = """
+    { extern void btga_scene_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_scene_draw_distance(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_80099FE8"
+before_vram = 0x8009A1F0
+text = """
+    { extern void btga_governor_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_governor_draw_distance(rdram, ctx); }
+"""

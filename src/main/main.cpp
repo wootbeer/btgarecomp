@@ -63,6 +63,10 @@ extern "C" void recomp_entrypoint(uint8_t* rdram, recomp_context* ctx);
 // function at 0x..." -- see that file's own comment for the full story.
 void register_btga_overlays();
 
+namespace btga {
+    void apply_theme(); // theme.cpp
+}
+
 static const std::string program_name = "BattleTanx: Global Assault Recompiled";
 static const std::u8string program_id = u8"btgarecomp";
 static const std::string version_string = "0.1.0";
@@ -357,6 +361,7 @@ int main(int argc, char** argv) {
     }
 
     register_btga_overlays();
+    btga::apply_theme();
 
     NFD_Init();
 
