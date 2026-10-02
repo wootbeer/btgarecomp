@@ -3,6 +3,55 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 119: distant objects dropped by full per-frame draw pools
+
+**Round 118c result.** The display-list diff is clean now. Per-object
+PRIM/ENV changes are just particles fading. The real finding is that
+**whole objects drop out of the game's own display list** for one or a
+few frames and then come back:
+- small meshes, mostly 4-vertex/2-triangle quads plus an
+  8-vertex/4-triangle one, each a `G_MTX` + `G_DL`
+- several at once, on the same frames (515, 526, 690, 697, 701, 759),
+  while the camera pans smoothly
+
+So this was never RT64. (Round 114's "identical every frame" counted
+calls into the mesh-draw routine; the drops happen inside it.)
+
+**Cause.** `func_8007B1F0` doesn't draw. It queues the mesh in per-frame
+pools that `func_8007B65C` walks (by pointer, from the hash table at
+`0x801777E0`) to build the display list. `func_8007B03C` empties the
+pools each frame. It returns -1 and **drops the draw** when:
+- the draw-item pool is full: `0x8F0` (2288) x 24 bytes at
+  `0x80168090`, count `0x80168080`, check at `0x8007B254`
+- the mesh-entry pool is full: 300 x 28 bytes at `0x80175710`, count
+  `0x80168084`, check at `0x8007B308`
+- the 0xC000-byte matrix buffer is full (check at `0x8007B27C`)
+
+What gets dropped depends on submission order and on what else (smoke,
+particles) was queued that frame. So groups of distant objects blink
+together. Widescreen's wider cull queues more objects.
+
+**Fix** (`src/game/draw_pool_fix.cpp`). Both pools move to unused
+extended RAM, with larger limits. The patch segment at `0x80801000`
+holds only 124 bytes, and mods start at `0x81000000`.
+- Items: `0x80C00000`, limit `0x2000`. Instruction patch at
+  `0x8007B254`; hook before `0x8007B3A8` sets `$v0`.
+- Mesh entries: `0x80C30000`, limit `0x800`. Instruction patch at
+  `0x8007B308`; hook before `0x8007B344` sets `$a2`, after it was used
+  for the hash table address.
+
+The block `func_8007B020`/`func_8007B030` hand out (`0x80168090`, size
+`0x44E50`) is general scratch for other code and stays where it is.
+
+Temporary `[BTGA POOL]` diagnostic:
+- at the reset (`0x8007B054`): last frame's item/mesh counts, peak
+  matrix use, and drops by reason (pool full at the common exit
+  `0x8007B464`)
+- every 120 frames: peaks against the new and old limits
+
+If the matrix buffer turns out to be the limit too, that's next. The
+round 118 diff diagnostic and its hooks are removed.
+
 ## 2026-10-02, round 118c: diff diagnostic ignores per-frame buffer addresses
 
 **Round 118b result:** valid walks this time. 3D frames have about

@@ -1641,32 +1641,52 @@ text = """
     { extern void btga_double_far_plane(uint8_t *rdram, recomp_context *ctx); btga_double_far_plane(rdram, ctx); }
 """
 
-# TEMPORARY round 118 (src/game/dl_diff_diag.cpp): frame-to-frame display-list
-# diff, at each of the scheduler's osSpTaskLoad calls ($a0 = the task).
+# Round 119 (src/game/draw_pool_fix.cpp): func_8007B1F0 queues mesh draws in
+# fixed per-frame pools and silently drops draws once one is full, so groups
+# of distant objects blinked out for single frames. Move the draw-item and
+# mesh-entry pools to unused extended RAM with larger limits.
+[[patches.instruction]]
+func = "func_8007B1F0"
+vram = 0x8007B254
+value = 0x24022000 # addiu $v0, $zero, 0x2000 (was 0x8F0 draw items)
+
+[[patches.instruction]]
+func = "func_8007B1F0"
+vram = 0x8007B308
+value = 0x24020800 # addiu $v0, $zero, 0x800 (was 0x12C mesh entries)
+
 [[patches.hook]]
-func = "func_800A140C"
-before_vram = 0x800A151C
+func = "func_8007B1F0"
+before_vram = 0x8007B3A8
 text = """
-    { extern void btga_dl_diff_task(uint8_t *rdram, recomp_context *ctx); btga_dl_diff_task(rdram, ctx); }
+    { extern void btga_draw_item_pool(uint8_t *rdram, recomp_context *ctx); btga_draw_item_pool(rdram, ctx); }
 """
 
 [[patches.hook]]
-func = "func_800A15F0"
-before_vram = 0x800A163C
+func = "func_8007B1F0"
+before_vram = 0x8007B344
 text = """
-    { extern void btga_dl_diff_task(uint8_t *rdram, recomp_context *ctx); btga_dl_diff_task(rdram, ctx); }
+    { extern void btga_draw_mesh_pool(uint8_t *rdram, recomp_context *ctx); btga_draw_mesh_pool(rdram, ctx); }
+"""
+
+# TEMPORARY round 119 diagnostic: pool usage and dropped draws per frame.
+[[patches.hook]]
+func = "func_8007B1F0"
+before_vram = 0x8007B27C
+text = """
+    { extern void btga_draw_pool_matrix(uint8_t *rdram, recomp_context *ctx); btga_draw_pool_matrix(rdram, ctx); }
 """
 
 [[patches.hook]]
-func = "func_800A15F0"
-before_vram = 0x800A1690
+func = "func_8007B1F0"
+before_vram = 0x8007B464
 text = """
-    { extern void btga_dl_diff_task(uint8_t *rdram, recomp_context *ctx); btga_dl_diff_task(rdram, ctx); }
+    { extern void btga_draw_pool_exit(uint8_t *rdram, recomp_context *ctx); btga_draw_pool_exit(rdram, ctx); }
 """
 
 [[patches.hook]]
-func = "func_800A17F0"
-before_vram = 0x800A1824
+func = "func_8007B03C"
+before_vram = 0x8007B054
 text = """
-    { extern void btga_dl_diff_task(uint8_t *rdram, recomp_context *ctx); btga_dl_diff_task(rdram, ctx); }
+    { extern void btga_draw_pool_frame(uint8_t *rdram, recomp_context *ctx); btga_draw_pool_frame(rdram, ctx); }
 """
