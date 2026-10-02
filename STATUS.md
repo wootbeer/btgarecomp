@@ -3,6 +3,34 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 98: widescreen (Expand) culling
+
+**Round 97 confirmed:** the right/bottom strip is gone. With it fixed,
+RT64's Expand mode now widens the 1-player 3D view on its own (user
+confirmed: wider, not stretched). RT64 (`rt64_projection_processor.cpp`,
+`G_EX_ASPECT_AUTO`) does this for any projection whose viewport and
+scissor cover the full framebuffer-scissor width. The old 319-pixel
+scissor had failed that test, which is why only the full-width clear
+used to extend.
+
+New report: in Expand, ground textures (and effects) near the new side
+edges pop in and out. The game culls against its own 4:3 cone.
+`func_800AC9E8` builds a per-player cull record each frame
+(`0x802194B4`, stride 0x28): camera position, normalized ground-plane
+direction, and that direction times a per-layout factor k from
+camera+0x168. `func_800A72C0` sets k from `0x80072C8C...`: 2.29 for 1P,
+1.12 for 2P halves, 2.2 for quadrants. These are about 1/tan of the half
+horizontal FOV for fovy 37 at aspect 4:3 / 8:3. Consumers (e.g.
+`func_800ACCB4`) test `forward > 0 && |k * lateral| < forward`.
+
+Fix (`src/game/widescreen.cpp`): hooks right after both `lwc1 $f0,
+0x168($s0)` loads in `func_800AC9E8` (`0x800ACBF0`, `0x800ACC04`) divide
+k by the widen factor. That factor mirrors RT64's Expand target: window
+aspect / (4/3), at least 1, and 1 in Original. `update_gfx` in
+`main.cpp` computes it every frame. Only cameras whose viewport display
+list spans the full width are widened (`0x01000138/150/168`); RT64
+leaves quadrant views at 4:3.
+
 ## 2026-10-02, round 97: screen-edge scissor fix retargeted at the live display-list copy
 
 **Round 95/96 confirmed:** Controller Pak saving works on the user's

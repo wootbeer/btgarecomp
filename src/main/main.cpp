@@ -160,6 +160,18 @@ static void update_gfx(void*) {
     // callback and doesn't need to run again from here too (matches
     // BanjoRecomp's own update_gfx, which calls only handle_events()).
     recompinput::handle_events();
+
+    // Mirrors RT64's Expand target (rt64_workload_queue.cpp): the window's
+    // aspect ratio, never narrower than the game's 4:3.
+    float widescreen_scale = 1.0f;
+    if (ultramodern::renderer::get_graphics_config().ar_option == ultramodern::renderer::AspectRatio::Expand) {
+        int width = 0, height = 0;
+        SDL_GetWindowSize(window, &width, &height);
+        if (width > 0 && height > 0) {
+            widescreen_scale = std::max(1.0f, (float(width) / float(height)) / (4.0f / 3.0f));
+        }
+    }
+    btga::set_widescreen_scale(widescreen_scale);
 }
 
 // --- Audio ----------------------------------------------------------------

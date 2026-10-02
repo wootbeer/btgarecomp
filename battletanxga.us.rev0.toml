@@ -1482,3 +1482,21 @@ before_vram = 0x800BFAC8
 text = """
     { extern void btga_frame_dt(uint8_t *rdram, recomp_context *ctx); btga_frame_dt(rdram, ctx); }
 """
+
+# Widescreen (src/game/widescreen.cpp): widen the game's per-player cull cone
+# by RT64's Expand factor, so ground, objects and effects at the new side
+# edges aren't culled. Both loads of the cull factor k (camera+0x168) in
+# func_800AC9E8, each hooked right after the load.
+[[patches.hook]]
+func = "func_800AC9E8"
+before_vram = 0x800ACBF0
+text = """
+    { extern void btga_widen_cull(uint8_t *rdram, recomp_context *ctx); btga_widen_cull(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800AC9E8"
+before_vram = 0x800ACC04
+text = """
+    { extern void btga_widen_cull(uint8_t *rdram, recomp_context *ctx); btga_widen_cull(rdram, ctx); }
+"""

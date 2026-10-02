@@ -23,4 +23,12 @@ namespace btga::config {
     bool get_local_multiplayer();
 }
 
+// Widescreen (src/game/widescreen.cpp): how much wider than 4:3 RT64 is
+// drawing full-width 3D views -- the window aspect / (4/3) in Expand mode,
+// 1 otherwise. Updated by the frontend every frame.
+namespace btga {
+    void set_widescreen_scale(float scale);
+    float get_widescreen_scale();
+}
+
 #endif
