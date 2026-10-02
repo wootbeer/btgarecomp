@@ -3,6 +3,18 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 96: fix round 95's crash on launch
+
+Round 95's build closed immediately on launch (never reached Task
+Manager). Reproduced in the sandbox: SIGSEGV in
+`Config::get_option_value` from `btga::config::get_local_multiplayer()`
+in `main()`. `game_config.cpp` kept a pointer to the `Config&` that
+`create_general_tab()` returned, but recompui keeps the tabs in a
+`std::vector` (`ui_config.cpp`, `configs.push_back`), and creating the
+Graphics/Controls/Sound/Mods tabs afterwards reallocated it. The options
+are now read through `recompui::config::get_general_config()` on every
+call. After the fix the binary starts and idles at the launcher under Xvfb.
+
 ## 2026-10-02, round 95: cleanup of diagnostics; Controller Pak saves, rumble, multiplayer, audio fixes
 
 **Cleanup (deferred since round 65).** Removed every temporary

@@ -2,6 +2,8 @@
 // and local multiplayer. See include/btga_config.h.
 #include "btga_config.h"
 
+#include "recompui/config.h"
+
 namespace {
     using Accessory = btga::config::Accessory;
 
@@ -15,11 +17,14 @@ namespace {
         {Accessory::None, "None", "None"},
     };
 
-    recomp::config::Config* general_config = nullptr;
+    // Looked up by id on each read: the Config& create_general_tab() returns
+    // lives in a container that moves when later tabs are created, so a
+    // pointer kept from it dangles (round 96).
+    bool options_added = false;
 }
 
 void btga::config::add_general_options(recomp::config::Config& general) {
-    general_config = &general;
+    options_added = true;
 
     general.add_enum_option(
         p1_accessory_id,
@@ -54,16 +59,16 @@ void btga::config::add_general_options(recomp::config::Config& general) {
 }
 
 btga::config::Accessory btga::config::get_accessory(int port) {
-    if (general_config == nullptr) {
+    if (!options_added) {
         return Accessory::None;
     }
     const std::string& id = port == 0 ? p1_accessory_id : other_accessory_id;
-    return static_cast<Accessory>(std::get<uint32_t>(general_config->get_option_value(id)));
+    return static_cast<Accessory>(std::get<uint32_t>(recompui::config::get_general_config().get_option_value(id)));
 }
 
 bool btga::config::get_local_multiplayer() {
-    if (general_config == nullptr) {
+    if (!options_added) {
         return false;
     }
-    return std::get<bool>(general_config->get_option_value(local_multiplayer_id));
+    return std::get<bool>(recompui::config::get_general_config().get_option_value(local_multiplayer_id));
 }
