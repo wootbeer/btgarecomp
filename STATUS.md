@@ -3,6 +3,24 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 121: rounds 119-120 reverted; renderer-setting experiments
+
+**Round 120 result:** peak display-list buffer use was 0x3110 bytes,
+nowhere near the 0xADE0 cut-off, with no cut-offs. Like the round 119
+pools, it isn't the cause. Both changes are reverted, so the game's
+memory layout is original again.
+
+The round 118 diff's toggling objects (small 4-vertex quads, several on
+the same frames) were most likely ordinary short-lived effects (muzzle
+flashes, sparks), not the flickering buildings.
+
+Next: the user tries renderer settings on the same scene, with no build
+needed, to split game from renderer:
+- aspect ratio Original (no widescreen cull widening or projection
+  widening)
+- native resolution with MSAA off
+- framerate Original
+
 ## 2026-10-02, round 120: queued draws cut off by the 0xAEE0-byte display-list buffer
 
 **Round 119 result:** still flickering. `[BTGA POOL]` showed the pools
