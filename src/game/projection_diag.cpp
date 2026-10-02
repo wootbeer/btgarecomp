@@ -103,3 +103,45 @@ extern "C" void btga_projection_diag(uint8_t* rdram) {
     for (auto& d : s.prim_depths) printf("[BTGA PROJ]   primdepth %s\n", d.c_str());
     fflush(stdout);
 }
+
+// TEMPORARY round 112 diagnostic: which map objects func_800AF978 draws
+// each frame (object record + chosen LOD mesh list, recorded right before
+// its func_8007B1F0 draw call at 0x800AFCD4), and how that set changes from
+// frame to frame. Printed every frame from btga_frame_dt.
+#include <map>
+#include <utility>
+
+namespace {
+    std::set<std::pair<uint32_t, uint32_t>> objs_cur, objs_prev;
+    int frame_index = 0;
+}
+
+extern "C" void btga_obj_diag_draw(uint8_t* rdram, recomp_context* ctx) {
+    objs_cur.insert({ (uint32_t)ctx->r16, (uint32_t)ctx->r19 });
+}
+
+extern "C" void btga_obj_diag_frame(uint8_t* rdram) {
+    int added = 0, removed = 0, lod_changed = 0;
+    std::map<uint32_t, uint32_t> prev_lod;
+    for (auto& [obj, lod] : objs_prev) prev_lod[obj] = lod;
+    std::set<uint32_t> cur_objs;
+    for (auto& [obj, lod] : objs_cur) {
+        cur_objs.insert(obj);
+        auto it = prev_lod.find(obj);
+        if (it == prev_lod.end()) added++;
+        else if (it->second != lod) lod_changed++;
+    }
+    for (auto& [obj, lod] : prev_lod) {
+        if (!cur_objs.count(obj)) removed++;
+    }
+    float cx = *(float*)(rdram + (0x802194B4u - 0x80000000u));
+    float cz = *(float*)(rdram + (0x802194B8u - 0x80000000u));
+    if (!objs_cur.empty() || !objs_prev.empty()) {
+        printf("[BTGA OBJ] f=%d drawn=%zu added=%d removed=%d lodchg=%d cam=%.2f,%.2f\n",
+            frame_index, cur_objs.size(), added, removed, lod_changed, cx, cz);
+        fflush(stdout);
+    }
+    frame_index++;
+    objs_prev.swap(objs_cur);
+    objs_cur.clear();
+}

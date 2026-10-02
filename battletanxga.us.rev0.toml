@@ -1625,3 +1625,12 @@ before_vram = 0x8009A1F0
 text = """
     { extern void btga_governor_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_governor_draw_distance(rdram, ctx); }
 """
+
+# TEMPORARY round 112 diagnostic (src/game/projection_diag.cpp): record each
+# map object func_800AF978 draws.
+[[patches.hook]]
+func = "func_800AF978"
+before_vram = 0x800AFCD4
+text = """
+    { extern void btga_obj_diag_draw(uint8_t *rdram, recomp_context *ctx); btga_obj_diag_draw(rdram, ctx); }
+"""

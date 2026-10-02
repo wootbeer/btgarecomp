@@ -3,6 +3,29 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 112: per-frame map-object diagnostic
+
+Round 110/111 results:
+- The green theme is approved.
+- `far_var=5000` is confirmed.
+- The flicker now affects a **wider** area: more distant objects are
+  drawn and they flicker too.
+
+So it isn't the distance cut-off. Whatever goes wrong applies to distant
+objects generally: either a later game-side per-object decision (LOD at
+1000/1700, or the per-player visibility bits in `func_800AF978`), or
+renderer-side (e.g. the very steep fog band).
+
+Temporary `[BTGA OBJ]` diagnostic. A hook before `func_800AF978`'s
+per-mesh draw call (`0x800AFCD4`) records (object record `$s0`, chosen
+LOD mesh list `$s3`). From `btga_frame_dt`, every frame prints:
+- the number of objects drawn
+- the number added or removed vs. the previous frame, and LOD changes
+- the cull-record camera position
+
+If the set churns while the camera barely moves, it's the game; if it's
+stable, it's the renderer.
+
 ## 2026-10-02, round 111: green UI theme
 
 User request: change the blue-tinted launcher/config UI to green. In
