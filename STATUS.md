@@ -3,6 +3,37 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 118: frame-to-frame display-list diff diagnostic
+
+**Round 117 result:** the fog looks fine, but the buildings still flicker.
+
+**Credits video analysis** (user capture, 60 fps):
+- The picture only changes every 2-5 display frames, with no in-between
+  frames. So this isn't RT64 frame interpolation (no matrix groups are
+  tagged, so RT64 auto-matches transforms when interpolating).
+- The faint buildings right of the arch disappear for whole game frames
+  at irregular moments (region mean drops to the sky value, texture
+  detail gone) while the camera pans smoothly.
+- That's not a far-plane or fog threshold being crossed (which would
+  follow the smooth camera), and not dither grain.
+
+Something differs in what the game sends on those frames. The round
+112-114 diagnostics only counted draws and triangles, so a change in
+order, render state, PRIM/ENV colour or vertex colours/alpha would not
+have shown up.
+
+Temporary `[BTGA DLD]` diagnostic (`src/game/dl_diff_diag.cpp`, called
+from the frame clear hook in `src/game/widescreen.cpp`):
+- At the start of each frame, walks the previous frame's display list
+  from its clear onward and reduces it to tokens: command words, with
+  per-frame RAM buffer addresses blanked, and each vertex load's
+  colour/normal bytes hashed in.
+- Prints a per-frame line: command and triangle counts, `G_BRANCH_Z` and
+  `G_CULLDL` counts (RT64's `G_CULLDL` is a no-op), the fog word, and the
+  first projection matrix's z/w columns.
+- Prints a Myers diff against the previous frame's tokens (up to 8
+  hunks).
+
 ## 2026-10-02, round 117: keep drawn geometry clear of RT64's far clip (far x2, fog re-fit)
 
 **Round 116 `[BTGA MODE]` result.** The intro scene is almost entirely
