@@ -1,6 +1,6 @@
 // TEMPORARY round 118 diagnostic: frame-to-frame display-list diff.
-// At each frame clear (start of frame N+1) walks the display list frame N
-// built from its clear onward, reduces it to a structural token list
+// When the scheduler loads a graphics task (hooks at its osSpTaskLoad calls),
+// walks the task's display list, reduces it to a structural token list
 // (commands and state words; per-frame buffer addresses blanked; vertex
 // colour/normal bytes hashed in), and prints, per frame, a summary line plus
 // the differing span against frame N-1. Also prints the first projection
@@ -52,7 +52,7 @@ namespace {
         void walk(uint32_t addr, int depth) {
             if (depth > 18) return;
             uint32_t p = phys(addr);
-            while (cmds++ < 300000) {
+            while (cmds++ < 100000) {
                 uint32_t w0 = w32(p), w1 = w32(p + 4);
                 p += 8;
                 uint32_t op = w0 >> 24;
@@ -97,7 +97,7 @@ namespace {
     };
 
     std::vector<Token> prev_tokens;
-    uint32_t pending_start = 0;
+    uint32_t last_task = 0, last_start = 0;
     int frame = 0;
     int printed_diff_frames = 0;
 
@@ -121,7 +121,7 @@ namespace {
     // Myers O(ND) diff; false if more than kMaxD edits.
     bool myers_diff(const std::vector<Token>& a, const std::vector<Token>& b, std::vector<Edit>& out) {
         const int n = (int)a.size(), m = (int)b.size();
-        const int kMaxD = 800;
+        const int kMaxD = 300;
         const int off = kMaxD + 1;
         std::vector<int> v(2 * off + 1, 0);
         std::vector<std::vector<int>> trace;
@@ -163,10 +163,17 @@ namespace {
     }
 }
 
-extern "C" void btga_dl_diff_diag(uint8_t* rdram, recomp_context* ctx) {
-    uint32_t head = (uint32_t)MEM_W(0x24, ctx->r30);
-    uint32_t start = pending_start;
-    pending_start = head - 16;
+extern "C" void btga_dl_diff_task(uint8_t* rdram, recomp_context* ctx) {
+    // $a0 = the OSTask the scheduler is about to load. Graphics tasks only
+    // (type 1); the DL is complete at this point. A yielded task is
+    // reloaded with the same pointer, so skip repeats.
+    uint32_t task = (uint32_t)ctx->r4;
+    if (task < 0x80000000u || task >= 0x80800000u) return;
+    if ((uint32_t)MEM_W(0x00, ctx->r4) != 1) return;
+    uint32_t start = (uint32_t)MEM_W(0x30, ctx->r4);
+    if (task == last_task && start == last_start) return;
+    last_task = task;
+    last_start = start;
     if (start < 0x80000000u || start >= 0x80800000u) return;
     frame++;
 

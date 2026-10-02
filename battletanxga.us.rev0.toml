@@ -1640,3 +1640,33 @@ before_vram = 0x800D2B0C
 text = """
     { extern void btga_double_far_plane(uint8_t *rdram, recomp_context *ctx); btga_double_far_plane(rdram, ctx); }
 """
+
+# TEMPORARY round 118 (src/game/dl_diff_diag.cpp): frame-to-frame display-list
+# diff, at each of the scheduler's osSpTaskLoad calls ($a0 = the task).
+[[patches.hook]]
+func = "func_800A140C"
+before_vram = 0x800A151C
+text = """
+    { extern void btga_dl_diff_task(uint8_t *rdram, recomp_context *ctx); btga_dl_diff_task(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800A15F0"
+before_vram = 0x800A163C
+text = """
+    { extern void btga_dl_diff_task(uint8_t *rdram, recomp_context *ctx); btga_dl_diff_task(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800A15F0"
+before_vram = 0x800A1690
+text = """
+    { extern void btga_dl_diff_task(uint8_t *rdram, recomp_context *ctx); btga_dl_diff_task(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800A17F0"
+before_vram = 0x800A1824
+text = """
+    { extern void btga_dl_diff_task(uint8_t *rdram, recomp_context *ctx); btga_dl_diff_task(rdram, ctx); }
+"""

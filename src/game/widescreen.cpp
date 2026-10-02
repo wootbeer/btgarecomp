@@ -348,10 +348,7 @@ extern "C" void btga_box_fillrect_end(uint8_t* rdram, recomp_context* ctx) {
 
 // func_8007A250, right after the frame clear's G_FILLRECT (fill colour set
 // just before it): the display-list head is the stack variable 0x24($fp).
-extern "C" void btga_dl_diff_diag(uint8_t* rdram, recomp_context* ctx); // TEMPORARY, src/game/dl_diff_diag.cpp
-
 extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
-    btga_dl_diff_diag(rdram, ctx);
     frame_counter++;
     if (letterbox_building.bars >= 2) {
         letterbox_last = letterbox_building;

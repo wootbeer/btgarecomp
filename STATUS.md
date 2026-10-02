@@ -3,6 +3,24 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 118b: diff diagnostic moved to the scheduler's task loads
+
+**Round 118 result:** the walk was broken and slowed the game badly:
+- Most frames read 160k "commands" and 0 triangles.
+- The frame clear sits in a small sub-list that alternates between
+  `0x80157EE8` and `0x80157FE8`, not at the start of a contiguous frame
+  list. The walk from there ran on through zeroed memory.
+
+The diagnostic now hooks the scheduler's four `osSpTaskLoad` calls:
+- `0x800A151C` in `func_800A140C`
+- `0x800A163C` and `0x800A1690` in `func_800A15F0`
+- `0x800A1824` in `func_800A17F0`
+
+There, `$a0` is the `OSTask` and the display list is complete. Only
+graphics tasks (type 1) are walked, from `data_ptr` (+0x30), and a
+reloaded (yielded) task is skipped. The command cap is lowered to 100k
+and the diff's edit cap to 300. The frame-clear call is removed.
+
 ## 2026-10-02, round 118: frame-to-frame display-list diff diagnostic
 
 **Round 117 result:** the fog looks fine, but the buildings still flicker.
