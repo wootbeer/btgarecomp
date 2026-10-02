@@ -9,16 +9,11 @@
 // project's CMakeLists.txt comment) -- confirmed here as a real need for
 // Global Assault too, not just a suspicion.
 //
-// src/main/main.cpp's get_connected_device_info reports no Controller Pak
-// inserted for every port (`ultramodern::input::Pak::None`), so nothing
-// here needs to simulate real pak hardware protocol or storage -- every
-// function below just needs to fail the way real hardware fails when no
-// pak is present, consistently enough that this ROM's own PFS code treats
-// it as "no pak" and moves on rather than crashing or hanging. None of this
-// has been exercised against a running game (no display/GPU in this
-// environment) -- if real Controller Pak support (rumble or save-file-on-
-// pak) is ever wanted, these need to change to report a pak as connected
-// and actually implement the read/write/bank-select protocol for real.
+// These are libultra's low-level pak internals. The game reaches them only
+// through the osPfs*/osMotor* entry points, which are replaced at a higher
+// level -- src/game/controller_pak_hle.cpp emulates the Controller Pak file
+// API and the runtime handles the Rumble Pak -- so nothing below should run.
+// Each just fails the way a missing pak would.
 
 #include "ultramodern/ultra64.h"
 #include "recomp.h"

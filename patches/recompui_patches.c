@@ -7,17 +7,9 @@
 // call into the rest of the recompiled game rather than a native stub.
 extern void* func_8007AF84(s32 flag);
 
-// Round 65: src/game/vi_dispatch_diag.cpp, called unconditionally every
-// real VI tick from here (see that file for why -- round 52's equivalent
-// diagnostic only fires from code paths this game no longer revisits).
-extern void btga_debug_vi_dispatch_live(void);
-
 // Round 94 (src/game/screen_edge_scissor_fix.cpp): widens the game's off-by-one
 // screen-edge scissors in its static viewport display lists.
 extern void btga_fix_screen_edge_scissors(void);
-
-// Round 87 diagnostic (src/game/vi_dispatch_diag.cpp): frame pacing per swap.
-extern void btga_debug_swap_pacing(void* state, void* frame_buffer);
 
 // func_800A1858 (RecompiledFuncs/funcs_8.c) is this game's VI-swap-throttle
 // routine: it's reached once per real VI tick (func_800A1290's VI-message
@@ -43,7 +35,6 @@ extern void btga_debug_swap_pacing(void* state, void* frame_buffer);
 RECOMP_PATCH void func_800A1858(void* state) {
     btga_fix_screen_edge_scissors();
     recomp_run_ui_callbacks();
-    btga_debug_vi_dispatch_live();
 
     u16* swap_pending = (u16*) ((u8*) state + 0x1F0);
     u16* swap_threshold = (u16*) ((u8*) state + 0x1EC);
@@ -63,7 +54,6 @@ RECOMP_PATCH void func_800A1858(void* state) {
         *unblank_pending = 0;
     }
 
-    btga_debug_swap_pacing(state, frame_buffer);
     osViSwapBuffer(frame_buffer);
     *swap_pending = 0;
 }

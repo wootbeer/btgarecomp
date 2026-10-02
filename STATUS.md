@@ -3,6 +3,62 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 95: cleanup of diagnostics; Controller Pak saves, rumble, multiplayer, audio fixes
+
+**Cleanup (deferred since round 65).** Removed every temporary
+diagnostic, keeping the fixes they led to:
+- `src/game/vi_dispatch_diag.cpp` (the `[BTGA DEBUG v3]`, `[BTGA PACING]`
+  and `[BTGA DL]` prints) deleted, along with its calls in
+  `func_800A1858`'s RECOMP_PATCH and its two `syms.ld` entries.
+- The round-52 `[BTGA DEBUG v2]` hook on `func_800988E8` removed from
+  `battletanxga.us.rev0.toml`.
+- `[BTGA DEBUG]` logging removed from `scheduler_workaround.cpp` and
+  `[BTGA DT]` from `frame_dt_fix.cpp`; the yield and the dt snapping stay.
+- `main.cpp`'s `checkpoint:` traces, "main() started" and "SDL Video
+  Driver" prints removed; real errors and the terminate handler stay.
+
+**Feature gaps found in an audit**, all now implemented:
+
+1. **Saves.** The game has no cartridge save; it saves to a Controller
+   Pak through libultra's osPfs* API, which stock librecomp
+   (`librecomp/src/pak.cpp`) answers with "no pak". New
+   `src/game/controller_pak_hle.cpp` defines all ten osPfs*_recomp
+   functions (so the linker no longer pulls in `pak.cpp`) over a raw 32 KB
+   `.mpk` image per controller: `saves/<game id>_pak1.mpk` (pak2..4 for the
+   other ports). It uses the standard layout (ID area, mirrored inode
+   table with checksum, 16-entry note table, 123 data pages), so files are
+   interchangeable with Project64-style single-pak `.mpk` saves. The game
+   allocates one 256-byte file per save, lists saves with osPfsFileState
+   over all 16 slots, and treats error 5 as an empty slot. That flow was
+   checked offline (allocate/exist/write/reload/read/state/free/delete),
+   and the written image passes the ID and inode checksum rules.
+2. **Rumble and pak choice.** On the N64 a controller holds one pak. The
+   game probes each port with osPfsInitPak and calls osMotorInit only when
+   that returns `PFS_ERR_ID_FATAL` (10) (`func_800985A0`,
+   `func_80098CC8`). New General-tab options (`src/main/game_config.cpp`):
+   *Player 1 Accessory* (default Controller Pak) and *Players 2-4
+   Accessory* (default Rumble Pak). A Rumble Pak port answers 10 from the
+   emulated pak, and the runtime's own osMotor* drives SDL rumble.
+3. **Local multiplayer.** Ports 2-4 were hard-wired as unplugged. New
+   *Local Multiplayer* option (applies on restart). It puts recompinput in
+   multi-player mode and reports one connected port per assigned player
+   (Controls → Assign players). In single-player mode only port 1 is
+   connected, since every controller drives player 1 there.
+4. **Audio.**
+   - Stereo channels were reversed. Each stereo frame is one word-swapped
+     RDRAM word, so the halves read back right-then-left (Zelda64Recomp
+     swaps them the same way).
+   - The Sound tab's volume was never applied.
+   - The crackle came from underruns. The game sizes audio tasks from
+     osAiGetLength, the runtime reserves only about 0.25 VI of headroom,
+     and SDL drained in 1024-frame chunks. Now 2 VIs of headroom are
+     reported, with a 512-frame device buffer.
+   - Output is float. SDL resamples, because the device opens with no
+     allowed changes; before, `SDL_AUDIO_ALLOW_FREQUENCY_CHANGE` could
+     silently play the game's rate at the device's rate.
+
+Builds in-sandbox; not yet run.
+
 ## 2026-10-02, round 94: right/bottom strip found -- the game's own off-by-one screen-edge scissor
 
 The user then spotted the strip along the **bottom** edge too, a few

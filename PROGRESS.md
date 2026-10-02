@@ -180,11 +180,9 @@ well-trodden, mechanical problems compared to open-ended disassembly).
    against this ROM directly (`STATUS.md` round 18). The 9 ddiv/ddivu
    hooks are an unverified extrapolation (no reference example existed for
    64-bit division) — check those specifically before trusting them.
-6. **RSP microcode identification** — which F3DEX/audio microcode
-   variant(s) Global Assault ships (hash them and check against RT64's and
-   N64ModernRuntime's known microcode tables), and whether the checked-in
-   recompiled microcode from the original project applies or new ones need
-   generating with RSPRecomp.
+6. ~~RSP microcode identification~~ — graphics tasks run through RT64's
+   own HLE; the audio microcode (`n_aspMain`) is recompiled with RSPRecomp
+   from `n_aspMain.us.rev0.toml` at build time (`STATUS.md` round 90).
 7. ~~Stock-runtime compatibility shims~~ — all 12 written (round 24,
    `src/game/stock_runtime_compat.cpp` and `src/game/controller_pak.cpp`)
    and the binary links and runs. Not fully verified: none of this has
@@ -195,20 +193,35 @@ well-trodden, mechanical problems compared to open-ended disassembly).
    both if VI timing, timer-driven logic, or (if ever wanted) real
    Controller Pak support misbehave once this is testable on a machine
    with a real display and the ROM.
-8. ~~Patches~~ (`patches/*.c`) — the ELF-based toolchain (round 62:
-   `patches.h`, `patch_helpers.h`, `patches.toml`, plus round 22's
-   already-existing `Makefile`/`patches.ld`/`syms.ld`/vendored SDK headers)
-   is stood up and proven end-to-end in the sandbox: `func_800A1858`
-   (VI-swap throttle) is `RECOMP_PATCH`ed to call `recomp_run_ui_callbacks`
-   every VI tick, confirmed correctly linked into the final binary with a
-   clang-built configuration (see STATUS.md round 62 for why it must be
-   built with clang/clang-cl specifically, not GCC or plain MSVC). Not yet
-   confirmed on a real run — needs the user's Windows machine to have
-   clang-cl, `ld.lld`, and something that can drive `patches/Makefile`
-   (GNU `make`, or an equivalent invoked the same way) available so
-   CMake's `PatchesLib` custom commands can run. Further UI-driving
-   patches (controller pak access, cheat/level-select hooks) can follow
-   the same pattern once this one is confirmed working.
+8. ~~Patches~~ (`patches/*.c`) — the ELF-based patch toolchain works on
+   the user's Windows build: `func_800A1858` (VI-swap throttle) is
+   `RECOMP_PATCH`ed to pump recompui's UI callbacks and apply the
+   screen-edge scissor fix every VI (`STATUS.md` rounds 62, 94).
+
+## Playable — feature status (round 95)
+
+Confirmed working on the user's Windows PC: boot,
+menus, the intro/demo, campaign levels, credits, the recompui menus with
+fonts and icons, audio (music and effects), and frame pacing.
+
+Added in round 95, untested on a real run yet:
+
+- **Controller Pak saves** — `src/game/controller_pak_hle.cpp` emulates
+  libultra's osPfs* API over a standard 32 KB `.mpk` image per controller
+  in the saves folder (Project64-compatible layout).
+- **Rumble** and the per-controller pak choice — General tab, *Player 1
+  Accessory* / *Players 2-4 Accessory* (`src/main/game_config.cpp`).
+- **Local multiplayer** — General tab, *Local Multiplayer* (restart, then
+  Controls → Assign players).
+- Audio: stereo channels were swapped, the Sound tab volume was ignored,
+  and underruns caused crackle — all fixed in `main.cpp`.
+
+Not done:
+
+- Higher-framerate interpolation (RT64's "Display" framerate option):
+  needs per-game matrix/display-list tagging.
+- Widescreen beyond RT64's Expand mode.
+- Launcher/UI art specific to this game (currently BanjoRecomp's assets).
 
 ## How to help this along right now
 

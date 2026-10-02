@@ -1468,56 +1468,6 @@ text = """
     { extern void btga_yield_via_priority_drop(uint8_t *rdram); btga_yield_via_priority_drop(rdram); }
 """
 
-# Round 52 diagnostic (STATUS.md): func_800988E8 has been stuck at its very
-# first osRecvMesg (mq vram 0x80217030) since round 47, unmoved by rounds
-# 50-52's fixes. Reading source traced this queue's registration to
-# osCreateViManager (called from func_800A1150) -- and osCreateViManager is
-# a complete no-op in this runtime (librecomp/src/vi.cpp:13-15), same as
-# osCreatePiManager. Real libultra's VI/PI Managers fan out VI/timer ticks
-# to *multiple* per-object queues (raw osSetEventMesg/osViSetEvent only
-# support one global consumer each), so if this game relies on that pattern
-# for 0x80217030, it would never receive anything -- exactly matching what's
-# observed. This one-shot print (guarded by a static so it only fires once
-# even if this loop is later reached normally) dumps the actual
-# OSMesgQueue struct at 0x80217030 the first time this function runs, to
-# confirm empirically whether it was ever properly initialized
-# (osCreateMesgQueue call) and whether anything has ever been sent to it,
-# rather than continuing to guess from static analysis alone.
-# Round 52 diagnostic v2: v1 misread garbage memory. MEM_W's address math
-# (recomp.h) requires its "reg" operand to be a *sign-extended* 64-bit KSEG0
-# address (upper 32 bits all 1s, e.g. 0xFFFFFFFF80217030) -- every real call
-# site gets this by assigning through S32() into a 64-bit `gpr`, which
-# sign-extends automatically. v1 passed the bare literal 0x80217030 directly,
-# which C types as a positive 32-bit `unsigned int` (never sign-extended),
-# so the macro's `- 0xFFFFFFFF80000000` subtraction landed on a wildly wrong
-# address (off by ~4GB) instead of the real queue -- explaining the
-# all-zero read, which was therefore meaningless, not a real finding. Fixed
-# by routing the constant through S32() into a `gpr` local first, exactly
-# like the generated code does for every other address.
-[[patches.hook]]
-func = "func_800988E8"
-before_vram = 0x800988E8
-text = """
-    {
-        static int btga_mq_dumped = 0;
-        if (!btga_mq_dumped) {
-            btga_mq_dumped = 1;
-            extern int printf(const char *fmt, ...);
-            extern int fflush(void *stream);
-            gpr mq_addr = S32(0x80217030);
-            int32_t bor = MEM_W(0, mq_addr);
-            int32_t bos = MEM_W(4, mq_addr);
-            int32_t validCount = MEM_W(8, mq_addr);
-            int32_t first = MEM_W(12, mq_addr);
-            int32_t msgCount = MEM_W(16, mq_addr);
-            int32_t msgbuf = MEM_W(20, mq_addr);
-            printf("[BTGA DEBUG v2] mq 0x80217030: blocked_on_recv=0x%08X blocked_on_send=0x%08X validCount=%d first=%d msgCount=%d msg=0x%08X\\n",
-                (unsigned)bor, (unsigned)bos, validCount, first, msgCount, (unsigned)msgbuf);
-            fflush(0);
-        }
-    }
-"""
-
 # Round 88 (STATUS.md): frame-locked delta time. func_800BF80C measures each
 # frame's elapsed time with osGetTime() (host clock here) and stores it, in
 # 1/30-second units, at 0x803A5948; object/camera motion scales by it. The

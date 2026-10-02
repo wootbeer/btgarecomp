@@ -34,8 +34,6 @@
 // necessary; either alone was proven insufficient by debugger observation.
 
 #include <cstdint>
-#include <cstdio>
-#include <chrono>
 
 #include "ultramodern/ultramodern.hpp"
 
@@ -49,34 +47,6 @@ extern "C" void osSetThreadPri(uint8_t* rdram, int32_t t, int32_t pri);
 // one. See btga_yield_via_priority_drop below for why that distinction
 // turned out to matter.
 void dequeue_external_messages(uint8_t* rdram);
-
-// Round 52 diagnostic: traced the full chain that's supposed to unblock
-// func_800988E8 -- ultramodern's VI thread should enqueue an external
-// message (event 0x29A) targeting mq vram 0x80222930, which func_800A1290
-// (the audio dispatcher thread, seen idle/blocked in every debugger dump
-// so far) receives and dispatches to func_800A140C -> func_80098AFC,
-// which finally sends to func_800988E8's queue. Since func_800A1290 still
-// hasn't moved after the round 52 drain fix, print is_game_started() and
-// mq 0x80222930's live queue state (throttled to ~once/second, since this
-// runs on every spin iteration) to check empirically whether the VI thread
-// is even sending anything yet, rather than assuming it must be.
-static void btga_debug_check_vi_dispatch(uint8_t* rdram) {
-    using namespace std::chrono;
-    static steady_clock::time_point last_print{};
-    auto now = steady_clock::now();
-    if (now - last_print < seconds(1)) {
-        return;
-    }
-    last_print = now;
-
-    uint8_t* mq_ptr = rdram + (0x80222930u - 0x80000000u);
-    int32_t validCount = *(int32_t*)(mq_ptr + 8);
-    int32_t msgCount = *(int32_t*)(mq_ptr + 16);
-
-    printf("[BTGA DEBUG] is_game_started=%d mq 0x80222930: validCount=%d msgCount=%d\n",
-        (int)ultramodern::is_game_started(), validCount, msgCount);
-    fflush(stdout);
-}
 
 // Round 65 (part 2, STATUS.md): the round 65 fix (a fourth hook, at
 // func_8009D3A4's loop-back label) unblocked func_800A1290 exactly once,
@@ -93,8 +63,6 @@ static void btga_debug_check_vi_dispatch(uint8_t* rdram) {
 // entire queue in one pass instead of one entry, which can't starve this
 // way regardless of relative production rates.
 extern "C" void btga_yield_via_priority_drop(uint8_t* rdram) {
-    btga_debug_check_vi_dispatch(rdram);
-
     dequeue_external_messages(rdram);
 
     int32_t saved_pri = osGetThreadPri(rdram, 0);
