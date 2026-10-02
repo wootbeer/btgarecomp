@@ -27,6 +27,12 @@ Findings so far:
   above) prints each call site's sprite position range every 3 seconds
   as `[BTGA HUD] site=...`, to match call sites to the map and ammo.
 
+Round 99b: the first log reported every site as `00000000`. Recompiled
+code turns `jal` into a direct C call and never writes `$ra`, so an entry
+hook can't see its caller. Each of the 36 `jal`s to these functions now
+gets a hook that records its own address first, and the log also counts
+distinct sprite pointers per site.
+
 ## 2026-10-02, round 98: widescreen (Expand) culling
 
 **Round 97 confirmed:** the right/bottom strip is gone. With it fixed,
