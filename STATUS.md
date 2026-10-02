@@ -3,6 +3,24 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 97: screen-edge scissor fix retargeted at the live display-list copy
+
+**Round 95/96 confirmed:** Controller Pak saving works on the user's
+machine. The right/bottom strip was still there.
+
+Round 94 patched the viewport display lists where they sit in the loaded
+image (`0x80127F68...`), but the game never draws from there. Nothing
+references those addresses directly; the frame calls them through
+segment 1 (`0x01000138`, `0x01000150`, ...). Segment 1's base comes from
+`0x801144F0`, set at init (`0x80079F70`-`0x80079FD0`): the game DMAs the
+0x400-byte block at ROM `0xB7E30` (the image's `0x80127E30`-`0x80128230`)
+into a buffer at `0x803B17B0` and stores that address there. Round 94's
+writes landed in the unused original.
+
+`btga_fix_screen_edge_scissors` now reads the buffer address from
+`0x801144F0` and patches the same six `G_SETSCISSOR` words at the same
+offsets in the copy, still only while each holds its ROM value.
+
 ## 2026-10-02, round 96: fix round 95's crash on launch
 
 Round 95's build closed immediately on launch (never reached Task
