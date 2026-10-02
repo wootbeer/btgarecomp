@@ -3,6 +3,52 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 122: distant flicker = RT64's view/projection decomposition in Expand (RT64 fix)
+
+**User test:** the flicker happens only with Aspect Ratio **Expand**, and
+it predates our widescreen work. Original is clean in every combination
+of resolution, MSAA and framerate.
+
+**Cause (RT64).**
+- The game loads one combined camera x perspective matrix as
+  `G_MTX_PROJECTION`. `RSP::matrixCommon` sees it's a view-projection
+  (`isMatrixViewProj`: m33 not 0 or 1) and splits it with
+  `matrixDecomposeViewProj`.
+- When the aspect ratio is adjusted (or when interpolating),
+  `ProjectionProcessor` renders with `view x proj` rebuilt from those
+  parts. In plain Original, the game's own matrix is used.
+- The decomposition takes the depth term from a single element ratio,
+  `p[2][2] = vp[0][2] / -vp[0][3]`: the x component of the camera's
+  forward axis over itself, both quantized to 1/65536. The log showed
+  that component around 0.11, drifting through 0.0027 -> -0.0027 as the
+  camera turns.
+- Simulated with the game's numbers, the rebuilt matrix's depth error
+  is 1e-5 to 1e-3, jumping with the fixed-point rounding every frame.
+  RT64's simulated far clip (0.998) and the fog band (~0.0025 deep)
+  sit right there, so the distant, heavily fogged buildings flick in
+  and out.
+
+**Fix** (`lib-patches/rt64/0001-expand-exact-view-projection.patch`):
+- `ProjectionProcessor::processScene`: when the projection wasn't
+  interpolated or replaced by the debugger camera, Expand scales column
+  0 of the game's own view-projection matrix. That's exactly equivalent
+  to scaling the projection's x column, and involves no decomposition.
+- `matrixDecomposeViewProj` (still used for interpolation): `p[2][2]` is
+  now a least-squares fit over the three rotation rows. Its simulated
+  error is about 1e-6.
+
+**Applying it.** `lib/rt64` is the upstream submodule, so the fix is a
+patch file. `cmake/ApplyLibPatches.cmake` (`btga_apply_lib_patches`,
+called before `add_subdirectory(lib/rt64)`) applies every
+`lib-patches/<submodule>/*.patch` with `git apply --ignore-whitespace` at
+configure time. It skips a patch that already reverse-applies, and was
+tested fresh, re-run and on CRLF working trees. The submodule pointer is
+unchanged; the user's `lib/rt64` will just show as modified. Worth
+offering upstream.
+
+Round 117's fog/far change stays for now (the user is happy with the
+fog). It can be revisited once this is confirmed.
+
 ## 2026-10-02, round 121: rounds 119-120 reverted; renderer-setting experiments
 
 **Round 120 result:** peak display-list buffer use was 0x3110 bytes,

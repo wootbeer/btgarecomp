@@ -65,6 +65,10 @@ if (RECOMP_FLATPAK)
     add_compile_definitions(RECOMP_FLATPAK)
 endif()
 
+# Local RT64 fixes (lib-patches/rt64/), applied to the submodule at configure time.
+include(${CMAKE_SOURCE_DIR}/cmake/ApplyLibPatches.cmake)
+btga_apply_lib_patches(rt64)
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/rt64 ${CMAKE_BINARY_DIR}/rt64)
 
 set(BUILD_SHARED_LIBS OFF)
