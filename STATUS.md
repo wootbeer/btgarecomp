@@ -3,6 +3,31 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 94: right/bottom strip found -- the game's own off-by-one screen-edge scissor
+
+The user then spotted the strip along the **bottom** edge too, a few
+screen pixels thick. Round 93's `[BTGA DL]` log settled it: besides the
+full-screen clear's `0..320 x 0..240`, every frame draws with scissor
+**`0..319 x 0..239`**. Scissor lower-right corners are exclusive, so the
+last column and row are never drawn. This is the classic
+`SCREEN_WD-1, SCREEN_HT-1` off-by-one, hidden by TV overscan on hardware.
+It explains everything: right *and* bottom, 1 framebuffer pixel (scales
+with the window), clear colour in gameplay, stale in menus, and absent
+from Bomberman Hero Recompiled on the same machine.
+
+The scissors live in the game's static viewport display lists at
+`0x80127F68...` (one per 1-3 player layout; the 4-player ones at
+`0x8011CA00...` have deliberate margins). These are RDRAM data, so
+`btga_fix_screen_edge_scissors` (`src/game/screen_edge_scissor_fix.cpp`,
+called at the top of `func_800A1858`'s RECOMP_PATCH, `syms.ld`
+`0x8F0000F4`) rewrites the six `G_SETSCISSOR` w1 words whose right or
+bottom edge touches the screen border (319 -> 320, 239 -> 240). Each word
+is written only while it still holds the original value (checked against
+the ROM). Split-screen inner seams (x 159, y 119) are left as designed.
+
+Builds in-sandbox; not yet run. The `[BTGA DL]` line should now show
+`0..320 x 0..240` instead of `0..319 x 0..239`.
+
 ## 2026-10-02, round 93: audio works; investigating a stale strip at the right edge of the image
 
 **Round 92 confirmed:** music and sound play and sound mostly right

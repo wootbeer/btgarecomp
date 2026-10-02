@@ -12,6 +12,10 @@ extern void* func_8007AF84(s32 flag);
 // diagnostic only fires from code paths this game no longer revisits).
 extern void btga_debug_vi_dispatch_live(void);
 
+// Round 94 (src/game/screen_edge_scissor_fix.cpp): widens the game's off-by-one
+// screen-edge scissors in its static viewport display lists.
+extern void btga_fix_screen_edge_scissors(void);
+
 // Round 87 diagnostic (src/game/vi_dispatch_diag.cpp): frame pacing per swap.
 extern void btga_debug_swap_pacing(void* state, void* frame_buffer);
 
@@ -37,6 +41,7 @@ extern void btga_debug_swap_pacing(void* state, void* frame_buffer);
 //   0x1F0 (u16): pending-swap counter; cleared once a swap happens.
 //   0x1F2 (u16): one-shot "unblank display" flag.
 RECOMP_PATCH void func_800A1858(void* state) {
+    btga_fix_screen_edge_scissors();
     recomp_run_ui_callbacks();
     btga_debug_vi_dispatch_live();
 
