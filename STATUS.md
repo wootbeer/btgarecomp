@@ -3,6 +3,36 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 117: keep drawn geometry clear of RT64's far clip (far x2, fog re-fit)
+
+**Round 116 `[BTGA MODE]` result.** The intro scene is almost entirely
+plain two-cycle, fogged (`G_FOG`, fog blend in cycle 1), z-buffered
+opaque geometry:
+- no alpha-compare dither and no alpha noise
+- colour-dither noise everywhere, which is per-pixel grain only
+- decals on only ~30-90 triangles
+
+Nothing renders with per-frame randomness that could drop whole objects.
+Back to the fog/clip interaction: the flickering building looks hazy
+when visible, so it is inside the fog band. Round 115 only pulled the
+fog in (the user found it too close) and still left geometry at RT64's
+clip line.
+
+**Fix** (`src/game/fog_fix.cpp`):
+- Double the far argument at every gameplay/cutscene `guPerspectiveF`
+  call: hooks before `0x800A7640` (`func_800A72C0`), `0x800A7744`
+  (`func_800A7664`) and `0x800D2B0C` (`func_800D25E0`). The game still
+  culls at its own draw distance; only the depth mapping changes. Drawn
+  geometry stays well short of the 1022/1024 clip, or is fully fogged
+  when it reaches it.
+- Re-fit the fog word to `gSPFogPosition(992.5, 997.5)` = `0x64009D80`
+  (hook before `0x8007A688`). With the doubled far plane the fog keeps
+  almost its original distances: about 1630 to 3300 units at the usual
+  3400 draw distance, vs. 1655 to 3400.
+
+On-screen x/y projection (also used CPU-side by `func_800ACCB4`) doesn't
+depend on the far plane. The round 116 diagnostic is removed.
+
 ## 2026-10-02, round 116: fog change reverted; render-mode fingerprint diagnostic
 
 **Round 115 result:** the buildings still flicker. The user also feels
