@@ -1599,3 +1599,13 @@ before_vram = 0x8007A5A4
 text = """
     { extern void btga_frame_clear(uint8_t *rdram, recomp_context *ctx); btga_frame_clear(rdram, ctx); }
 """
+
+# Round 108 (src/game/cutscene_projection_fix.cpp): the cutscene camera's far
+# plane comes from the draw distance, which is still 0 outside gameplay -- a
+# degenerate projection RT64's floating-point clipping randomly culls.
+[[patches.hook]]
+func = "func_800D25E0"
+before_vram = 0x800D2AFC
+text = """
+    { extern void btga_cutscene_far_plane(uint8_t *rdram, recomp_context *ctx); btga_cutscene_far_plane(rdram, ctx); }
+"""

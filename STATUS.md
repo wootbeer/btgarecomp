@@ -3,6 +3,49 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 108: cutscene camera's degenerate projection (far plane 0)
+
+**Round 106 result:** no visible difference.
+
+**Video analysis.** The user's 60 fps capture of the intro, split into
+frames, shows the back-middle building:
+- missing in irregular runs of 1-3 game frames
+- occasionally half-faded
+
+**Ruled out:**
+- The frame-rate governor `func_80099FE8` pulls the far plane in by 50
+  when fps drops under 20, or pushes it out by 50 (up to 5000), but only
+  once a second.
+- Cutscene scripts set the far plane only to fixed values (`0x800D289C`:
+  the scene value from `0x803A66BE`; `0x800D28B0`: 5000).
+- LOD selection (`func_800AE4D0`) uses fixed squared-distance thresholds
+  (300 / 1000 / 1700).
+
+**Round 107 diagnostic.** A per-frame `[BTGA CAM]` log during the intro
+showed the gameplay camera and cull records unused (all zero), and the
+draw-distance variable `0x8023A060` = **0** throughout.
+
+**Cause.** The cutscene camera `func_800D25E0` calls `guPerspectiveF(37,
+4:3, near 16, far = *(s32*)0x8023A060)`. The 4096 fallback is never
+taken, because `func_800B0444()` always returns 1. Only `func_8009AE38`
+(gameplay entry, from `func_8009C524`) initialises the variable (3400 /
+2866 / 1800 for 1 / 2 / 3-4 players), so in the intro and credits it is
+still 0.
+- near 16 / far 0 is degenerate: `(n+f)/(n-f) = 1` and `2nf/(n-f) = 0`,
+  so every vertex gets clip z == -w, exactly on the near plane.
+- The RSP's fixed-point clip test is exact, so on hardware nothing is
+  clipped (and nothing fogged).
+- RT64 clips in floating point, so rounding lands distant triangles
+  randomly on either side of the plane: the flicker.
+
+**Fix** (`src/game/cutscene_projection_fix.cpp`): a hook before `mtc1
+$v1, $f0` (`0x800D2AFC`) replaces a far plane <= near with 32767. That's
+deliberately not the function's own 4096. The game's fog band is the
+last 0.5% of the depth range (`G_MOVEWORD` fog `0x64009D00` in
+`func_8007A250`), so at 4096 everything past about 2500 units would fog
+out. With far 0 nothing was fogged, and at 32767 fog starts past about
+5000 units. The round 107 diagnostic is removed.
+
 ## 2026-10-02, round 106: snap delta time in the intro/demo/credits update too
 
 **Round 105 confirmed:**
