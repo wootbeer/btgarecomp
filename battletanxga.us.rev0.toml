@@ -1500,3 +1500,34 @@ before_vram = 0x800ACC04
 text = """
     { extern void btga_widen_cull(uint8_t *rdram, recomp_context *ctx); btga_widen_cull(rdram, ctx); }
 """
+
+# TEMPORARY round 99 diagnostic (src/game/hud_diag.cpp): log which call
+# sites draw sprites where, to find the HUD map and ammo code.
+[[patches.hook]]
+func = "func_8007C364"
+before_vram = 0x8007C364
+text = """
+    { extern void btga_hud_diag_C364(uint8_t *rdram, recomp_context *ctx); btga_hud_diag_C364(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007C9B8"
+before_vram = 0x8007C9B8
+text = """
+    { extern void btga_hud_diag_C9B8(uint8_t *rdram, recomp_context *ctx); btga_hud_diag_C9B8(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007CE64"
+before_vram = 0x8007CE64
+text = """
+    { extern void btga_hud_diag_CE64(uint8_t *rdram, recomp_context *ctx); btga_hud_diag_CE64(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007D39C"
+before_vram = 0x8007D39C
+text = """
+    { extern void btga_hud_diag_D39C(uint8_t *rdram, recomp_context *ctx); btga_hud_diag_D39C(rdram, ctx); }
+"""
+

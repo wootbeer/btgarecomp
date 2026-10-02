@@ -3,6 +3,30 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 99: HUD anchoring groundwork (temporary diagnostic)
+
+Goal: in Expand, anchor the map and ammo HUD elements to the screen
+corners and leave the health bar centred. RT64 does this with extended
+GBI: `gEXEnable` (an F3DEX2 `G_SPNOOP` with RT64's magic number), then
+`gEXSetRectAlign(left/right origin)` around the element's texture
+rectangles. The Graphics tab's HUD Ratio setting then scales how far
+toward the edges they move.
+
+Findings so far:
+- Every texture rectangle is built by `func_8007C364` (the only code
+  that builds `G_TEXRECT`). It's called directly from `func_80096A54` and
+  through the wrappers `func_8007C9B8` (26 callers), `func_8007CE64` and
+  `func_8007D39C`.
+- The frame display-list write pointer is the global `0x803A5944`, and
+  the matrix allocator is `0x803A5930` (`func_800BC6EC`). Native code can
+  append RT64 commands at `*0x803A5944`.
+- `func_800BC6EC` (fovy 37, 4:3, own look-at) and the `func_800C7650`
+  9-slice box drawer look like menu code, not the in-game HUD.
+- Every HUD sprite position is computed at runtime, so a temporary
+  diagnostic (`src/game/hud_diag.cpp`, entry hooks on the four functions
+  above) prints each call site's sprite position range every 3 seconds
+  as `[BTGA HUD] site=...`, to match call sites to the map and ammo.
+
 ## 2026-10-02, round 98: widescreen (Expand) culling
 
 **Round 97 confirmed:** the right/bottom strip is gone. With it fixed,
