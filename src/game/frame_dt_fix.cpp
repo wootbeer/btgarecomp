@@ -21,7 +21,8 @@
 
 static constexpr float kViUnits = 0.375f;
 
-// Hooked right before `swc1 $f0, 0x5948($at)` (0x800BFAC8) in func_800BF80C.
+// Hooked right before `swc1 $f0, 0x5948($at)` in func_800BF80C (0x800BFAC8,
+// gameplay) and func_800BFAEC (0x800BFC80, intro / attract demo / credits).
 extern "C" void btga_frame_dt(uint8_t* rdram, recomp_context* ctx) {
     float raw = ctx->f0.fl;
     float snapped = std::round(raw / kViUnits) * kViUnits;

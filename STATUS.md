@@ -3,6 +3,37 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 106: snap delta time in the intro/demo/credits update too
+
+**Round 105 confirmed:**
+- Cutscene sides are black at every HUD Ratio.
+- Gameplay HUD and edges are fine; other cutscenes are fine.
+- The one ground piece that pops in at level start only happens at one
+  spot in level 1. Left as is.
+
+Next report: distant objects flicker in and out rapidly in the intro movie
+and the credits (the credits flicker reported back in rounds 86-89).
+
+Findings:
+- Ruled out a frame-time draw budget. The 64-bit value the render-side
+  `osGetTime` users compare against (`0x80126E50`) is `osClockRate`
+  (62.5 MHz), i.e. delta-time conversion, not a budget.
+- The routine at `0x800BF618` (inside `func_800BF484`'s symbol, no
+  references) is a dead copy of it.
+- `0x80116840` is just the display-list and matrix double-buffer index.
+- The cutscene camera (`func_800D25E0`) uses fovy 37, near 16 and a
+  normal far plane, so depth precision isn't the cause either.
+- **Found:** `func_800BFAEC` is the per-frame update for the non-gameplay
+  modes (driven by `func_8009C524`, which also runs the cutscene box
+  drawer). It computes delta time from `osGetTime` exactly like
+  `func_800BF80C`, then stores it raw at `0x800BFC80`. So round 89's
+  snapping never applied to the intro, attract demo or credits, the modes
+  where stutter and flicker were always worst.
+
+Fix: `btga_frame_dt` is also hooked before `0x800BFC80` (after the
+`L_800BFC7C` join, so both its measured path and its fixed-value path
+from `0x80219488` are covered).
+
 ## 2026-10-02, round 105: letterbox sides via the frame clear, independent of HUD Ratio
 
 Round 104 results:
