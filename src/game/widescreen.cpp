@@ -14,8 +14,6 @@
 // horizontal field of view). Every consumer tests |k * lateral| < forward,
 // so dividing k by RT64's widening factor widens all of them at once.
 #include <atomic>
-#include <chrono>
-#include <cstdio>
 #include <cstdint>
 
 #include "recomp.h"
@@ -93,6 +91,11 @@ namespace {
     constexpr uint32_t kKillCounterWidget = 0x800C9A3C;
     constexpr uint8_t kOpWidget = 23;
     constexpr int kHudMarginShift = 16 * 4; // 10.2 fixed point
+    // RT64 adds the framebuffer width to right-anchored coordinates
+    // (RDP::movedFromOrigin), so they must be given relative to the right
+    // edge: offset by -320 (Zelda64Recomp's HUD does the same with
+    // -SCREEN_WIDTH * 4).
+    constexpr int kRightOriginShift = -320 * 4;
 
     struct Align {
         uint16_t left = kOriginNone, right = kOriginNone;
@@ -101,7 +104,7 @@ namespace {
     };
     constexpr Align kAlignNone{};
     constexpr Align kAlignHudLeft{ kOriginLeft, kOriginLeft, -kHudMarginShift, -kHudMarginShift };
-    constexpr Align kAlignHudRight{ kOriginRight, kOriginRight, kHudMarginShift, kHudMarginShift };
+    constexpr Align kAlignHudRight{ kOriginRight, kOriginRight, kRightOriginShift + kHudMarginShift, kRightOriginShift + kHudMarginShift };
 
     bool hud_script = false;
     bool in_map = false;
@@ -120,25 +123,52 @@ namespace {
         return btga::get_widescreen_scale() > 1.0f && MEM_BU(0, kseg0(kPlayerCount)) <= 2;
     }
 
-    // gEXEnable + gEXSetRectAlign at the display-list head, advancing it.
-    // head_ptr is what the current draw call writes through -- sometimes a
-    // stack-local copy of the head (func_800C7C10 copies it to sp+0x18 and
+    // Writes RT64 extended-GBI commands at the display-list head, advancing
+    // it. head_ptr is what the current draw call writes through -- sometimes
+    // a stack-local copy of the head (func_800C7C10 copies it to sp+0x18 and
     // writes it back before returning). home_ptr is the global that copy
-    // goes back to, which is the only one safe to use for the later reset:
-    // the local is dead by then (round 103 -- writing through it corrupted
-    // the caller's stack and crashed at level start).
+    // goes back to, the only one safe to use for the later reset: the local
+    // is dead by then (round 103 -- writing through it corrupted the
+    // caller's stack and crashed at level start).
+    //
+    // RT64 clips every rect to the current scissor, which (unanchored) is
+    // squeezed into the centred 4:3 area, so anchored rects past it were
+    // cut off (round 104). While anything is anchored, the scissor is
+    // pushed and widened to the whole window, then popped on reset.
+    struct DlWriter {
+        uint8_t* rdram;
+        gpr head;
+        void cmd(uint32_t w0, uint32_t w1) {
+            MEM_W(0, head) = (int32_t)w0;
+            MEM_W(4, head) = (int32_t)w1;
+            head += 8;
+        }
+    };
+
+    bool scissor_pushed = false;
+
     void emit(uint8_t* rdram, gpr head_ptr, gpr home_ptr, const Align& align) {
         if (align == emitted) {
             return;
         }
-        gpr head = kseg0((uint32_t)MEM_W(0, head_ptr));
-        MEM_W(0x00, head) = (int32_t)0xE0525464; // G_SPNOOP + RT64 magic
-        MEM_W(0x04, head) = 0x10000064;          // enable, extended opcode 0x64
-        MEM_W(0x08, head) = 0x64000006;          // G_EX_SETRECTALIGN_V1
-        MEM_W(0x0C, head) = (int32_t)((align.left & 0xFFF) | ((align.right & 0xFFF) << 12));
-        MEM_W(0x10, head) = (int32_t)((uint32_t)(uint16_t)align.left_offset << 16);
-        MEM_W(0x14, head) = (int32_t)((uint32_t)(uint16_t)align.right_offset << 16);
-        MEM_W(0, head_ptr) = (int32_t)(head + 0x18);
+        DlWriter dl{ rdram, kseg0((uint32_t)MEM_W(0, head_ptr)) };
+        dl.cmd(0xE0525464, 0x10000064); // gEXEnable (G_SPNOOP + RT64 magic, opcode 0x64)
+        bool anchored = !(align == kAlignNone);
+        if (anchored && !scissor_pushed) {
+            dl.cmd(0x64000017, 0);      // gEXPushScissor
+            // gEXSetScissor(G_SC_NON_INTERLACE, LEFT, RIGHT, 0, 0, 0, 240):
+            // the whole window.
+            dl.cmd(0x64000005, (kOriginLeft << 2) | (kOriginRight << 14));
+            dl.cmd(0, (0u << 16) | (240u * 4));
+            scissor_pushed = true;
+        }
+        dl.cmd(0x64000006, (align.left & 0xFFF) | ((align.right & 0xFFF) << 12)); // gEXSetRectAlign
+        dl.cmd((uint32_t)(uint16_t)align.left_offset << 16, (uint32_t)(uint16_t)align.right_offset << 16);
+        if (!anchored && scissor_pushed) {
+            dl.cmd(0x64000018, 0);      // gEXPopScissor
+            scissor_pushed = false;
+        }
+        MEM_W(0, head_ptr) = (int32_t)(uint32_t)dl.head;
         emitted = align;
         emitted_home_ptr = home_ptr;
     }
@@ -171,25 +201,6 @@ namespace {
         }
     }
 
-    // TEMPORARY round 103 diagnostic: what the fill-rect hooks see, every 2 s.
-    struct BarDiag {
-        std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
-        int calls = 0;
-    };
-    BarDiag overlay_diag, box_diag;
-
-    void bar_diag(uint8_t* rdram, BarDiag& d, const char* path, int ulx, int lrx) {
-        d.calls++;
-        auto now = std::chrono::steady_clock::now();
-        if (now - d.last >= std::chrono::seconds(2)) {
-            printf("[BTGA BAR] %s calls=%d last x=%d..%d players=%u scale=%.3f\n", path, d.calls, ulx, lrx,
-                (unsigned)MEM_BU(0, kseg0(kPlayerCount)), btga::get_widescreen_scale());
-            fflush(stdout);
-            d.last = now;
-            d.calls = 0;
-        }
-    }
-
     // Letterbox bars: anchor only the edge that touches the screen edge.
     Align bar_align(int ulx, int lrx) {
         Align a;
@@ -197,6 +208,7 @@ namespace {
             a.left = kOriginLeft;
         } else if (lrx >= 320 && ulx > 0) {
             a.right = kOriginRight;
+            a.right_offset = kRightOriginShift;
         }
         return a;
     }
@@ -270,7 +282,6 @@ extern "C" void btga_hud_texrect(uint8_t* rdram, recomp_context* ctx) {
 extern "C" void btga_hud_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     int ulx = (int16_t)ctx->r17;
     int lrx = ulx + (uint16_t)MEM_HU(0, ctx->r16);
-    bar_diag(rdram, overlay_diag, "overlay", ulx, lrx);
     if (!anchoring_active(rdram)) {
         return;
     }
@@ -290,7 +301,6 @@ extern "C" void btga_hud_fillrect_end(uint8_t* rdram, recomp_context* ctx) {
 extern "C" void btga_box_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     int ulx = (int16_t)MEM_H(4, ctx->r17);
     int lrx = ulx + (uint16_t)MEM_HU(8, ctx->r17);
-    bar_diag(rdram, box_diag, "box", ulx, lrx);
     if (!anchoring_active(rdram)) {
         return;
     }

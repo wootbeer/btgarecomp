@@ -3,6 +3,37 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 104: widen the scissor for anchored draws; right-origin offset
+
+Round 103 results:
+- No crash.
+- Pickup messages are good.
+- With HUD Ratio at 16:9 or Expand, the map and ammo box are cut off or
+  missing. At Original they're fine.
+- The cutscene side areas are still sky-coloured. `[BTGA BAR]` showed
+  `func_800D56FC`'s box path drawing the bars (x 286..320, players=1,
+  scale 1.333), so the anchoring was being emitted.
+
+Two RT64 behaviours (`rt64_framebuffer_renderer.cpp`, `rt64_rdp.cpp`)
+explain both:
+1. Every rect is clipped to the call's scissor. The scissor is converted
+   with its own origins, so the game's 0..320 scissor (no origin) maps to
+   the centred 4:3 area, and anything anchored past it is clipped. That
+   cut off the bars' extensions and the HUD at the wider HUD ratios.
+   While anything is anchored, `emit()` now sends `gEXPushScissor` +
+   `gEXSetScissor(G_SC_NON_INTERLACE, LEFT, RIGHT, 0, 0, 0, 240)` (the
+   whole window), and `gEXPopScissor` on reset. No HUD or box routine
+   sets its own scissor, so a single push/pop around each element is
+   safe.
+2. `RDP::movedFromOrigin` adds the framebuffer width to right-anchored
+   coordinates, so they must be given relative to the right edge.
+   Right-anchored HUD elements and the right bar's right edge now get a
+   -320*4 offset (as Zelda64Recomp's HUD does with -SCREEN_WIDTH*4).
+   Before, the right-anchored ammo box was placed a screen width to the
+   right.
+
+Diagnostic removed.
+
 ## 2026-10-02, round 103: fix round 102's crash at level start; cutscene bar diagnostic
 
 Round 102 results:
