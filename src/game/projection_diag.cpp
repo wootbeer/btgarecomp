@@ -114,9 +114,18 @@ extern "C" void btga_projection_diag(uint8_t* rdram) {
 
 namespace {
     using DrawKey = std::pair<uint32_t, uint32_t>; // site, mesh
-    std::set<DrawKey> draws_cur, draws_prev;
+    std::map<DrawKey, int> draws_cur, draws_prev;  // draw count per key
     uint32_t current_site = 0;
     int frame_index = 0;
+
+    // Triangle commands in a task's display list (any drawer).
+    int count_tris(uint8_t* rdram, uint32_t task) {
+        uint32_t dl = *(uint32_t*)(rdram + (task - 0x80000000u) + 0x30);
+        if (dl < 0x80000000u || dl >= 0x80800000u) return -1;
+        DlProjScan s{ rdram };
+        s.walk(dl, 0);
+        return s.draws;
+    }
 }
 
 extern "C" void btga_obj_diag_site(uint32_t site) {
@@ -124,26 +133,31 @@ extern "C" void btga_obj_diag_site(uint32_t site) {
 }
 
 extern "C" void btga_obj_diag_draw(uint8_t* rdram, recomp_context* ctx) {
-    draws_cur.insert({ current_site, (uint32_t)ctx->r4 });
+    draws_cur[{ current_site, (uint32_t)ctx->r4 }]++;
 }
 
 extern "C" void btga_obj_diag_frame(uint8_t* rdram) {
-    std::map<uint32_t, std::pair<int, int>> churn; // site -> added, removed
-    int added = 0, removed = 0;
-    for (auto& k : draws_cur) {
-        if (!draws_prev.count(k)) { added++; churn[k.first].first++; }
+    std::map<uint32_t, std::pair<int, int>> churn; // site -> more, fewer draws
+    int total = 0, more = 0, fewer = 0;
+    for (auto& [k, n] : draws_cur) {
+        total += n;
+        auto it = draws_prev.find(k);
+        int before = it == draws_prev.end() ? 0 : it->second;
+        if (n > before) { more += n - before; churn[k.first].first += n - before; }
+        if (n < before) { fewer += before - n; churn[k.first].second += before - n; }
     }
-    for (auto& k : draws_prev) {
-        if (!draws_cur.count(k)) { removed++; churn[k.first].second++; }
+    for (auto& [k, n] : draws_prev) {
+        if (!draws_cur.count(k)) { fewer += n; churn[k.first].second += n; }
     }
-    if (!draws_cur.empty() || !draws_prev.empty() || frame_index % 60 == 0) {
+    if (total != 0 || !draws_prev.empty() || frame_index % 60 == 0) {
         std::string detail;
-        for (auto& [site, ar] : churn) {
+        for (auto& [site, mf] : churn) {
             char buf[48];
-            snprintf(buf, sizeof(buf), " %08X:+%d/-%d", site, ar.first, ar.second);
+            snprintf(buf, sizeof(buf), " %08X:+%d/-%d", site, mf.first, mf.second);
             detail += buf;
         }
-        printf("[BTGA OBJ] f=%d drawn=%zu added=%d removed=%d%s\n", frame_index, draws_cur.size(), added, removed, detail.c_str());
+        printf("[BTGA OBJ] f=%d calls=%d more=%d fewer=%d tris=%d/%d%s\n", frame_index, total, more, fewer,
+            count_tris(rdram, 0x801293E0u), count_tris(rdram, 0x80129428u), detail.c_str());
         fflush(stdout);
     }
     frame_index++;

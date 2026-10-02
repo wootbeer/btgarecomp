@@ -3,6 +3,24 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 114: count draws per mesh, plus display-list triangle totals
+
+Round 113 result for the intro's flickering shot: after the scene start
+(frames 290-291), the set of (call site, mesh) drawn through
+`func_8007B1F0` is constant (28) for about 4.5 s, with nothing added or
+removed. Identical buildings share a mesh pointer, though, so a set can't
+see one instance of a pair dropping out.
+
+The diagnostic now counts draws per (site, mesh) and prints per frame:
+- total calls
+- draws gained/lost vs. the previous frame, per call site
+- the triangle (+texrect) command count of both gfx task display lists,
+  which catches any geometry change whichever code draws it
+
+The user also notes that in the credits only a building standing on top
+of another building flickers, which suggests a different kind of object
+(or overlapping geometry).
+
 ## 2026-10-02, round 113: tag every mesh-draw call site
 
 The round 112 `[BTGA OBJ]` log was empty with the current build: the
