@@ -1501,287 +1501,74 @@ text = """
     { extern void btga_widen_cull(uint8_t *rdram, recomp_context *ctx); btga_widen_cull(rdram, ctx); }
 """
 
-# TEMPORARY round 99 diagnostic (src/game/hud_diag.cpp): log which call
-# sites draw sprites where, to find the HUD map and ammo code.
+# Widescreen HUD anchoring (src/game/widescreen.cpp). func_800BC9F4 is the 2D
+# overlay script interpreter that draws the gameplay HUD and the cutscene
+# letterbox bars. These hooks tell btga_hud_* which element is being drawn;
+# the anchoring itself is emitted into the display list as RT64 extended GBI.
 [[patches.hook]]
 func = "func_8007C364"
 before_vram = 0x8007C364
 text = """
-    { extern void btga_hud_diag_C364(uint8_t *rdram, recomp_context *ctx); btga_hud_diag_C364(rdram, ctx); }
+    { extern void btga_hud_texrect(uint8_t *rdram, recomp_context *ctx); btga_hud_texrect(rdram, ctx); }
+"""
+
+# Fill-rect element: before it reads the display-list head, and after it
+# stores it back.
+[[patches.hook]]
+func = "func_800BC9F4"
+before_vram = 0x800BCCCC
+text = """
+    { extern void btga_hud_fillrect_begin(uint8_t *rdram, recomp_context *ctx); btga_hud_fillrect_begin(rdram, ctx); }
 """
 
 [[patches.hook]]
-func = "func_8007C9B8"
-before_vram = 0x8007C9B8
+func = "func_800BC9F4"
+before_vram = 0x800BCDA8
 text = """
-    { extern void btga_hud_diag_C9B8(uint8_t *rdram, recomp_context *ctx); btga_hud_diag_C9B8(rdram, ctx); }
+    { extern void btga_hud_end(uint8_t *rdram, recomp_context *ctx); btga_hud_end(rdram, ctx); }
 """
 
-[[patches.hook]]
-func = "func_8007CE64"
-before_vram = 0x8007CE64
-text = """
-    { extern void btga_hud_diag_CE64(uint8_t *rdram, recomp_context *ctx); btga_hud_diag_CE64(rdram, ctx); }
-"""
-
-[[patches.hook]]
-func = "func_8007D39C"
-before_vram = 0x8007D39C
-text = """
-    { extern void btga_hud_diag_D39C(uint8_t *rdram, recomp_context *ctx); btga_hud_diag_D39C(rdram, ctx); }
-"""
-
-# Round 99b: recompiled code never writes $ra on a call, so the entry hooks
-# above can't see their caller. Tag each call site instead.
-[[patches.hook]]
-func = "func_8007C364"
-before_vram = 0x8007C920
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x8007C920u); }
-"""
-
-[[patches.hook]]
-func = "func_8007C9B8"
-before_vram = 0x8007CDC4
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x8007CDC4u); }
-"""
-
-[[patches.hook]]
-func = "func_8007CE64"
-before_vram = 0x8007D29C
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x8007D29Cu); }
-"""
-
-[[patches.hook]]
-func = "func_8007D39C"
-before_vram = 0x8007D3E0
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x8007D3E0u); }
-"""
-
-[[patches.hook]]
-func = "func_8007D39C"
-before_vram = 0x8007D450
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x8007D450u); }
-"""
-
-[[patches.hook]]
-func = "func_80096A54"
-before_vram = 0x80096B5C
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x80096B5Cu); }
-"""
-
-[[patches.hook]]
-func = "func_800BC020"
-before_vram = 0x800BC348
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800BC348u); }
-"""
-
-[[patches.hook]]
-func = "func_800BC020"
-before_vram = 0x800BC3EC
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800BC3ECu); }
-"""
-
-[[patches.hook]]
-func = "func_800BC020"
-before_vram = 0x800BC4D8
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800BC4D8u); }
-"""
-
-[[patches.hook]]
-func = "func_800BC020"
-before_vram = 0x800BC59C
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800BC59Cu); }
-"""
-
-[[patches.hook]]
-func = "func_800BC020"
-before_vram = 0x800BC678
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800BC678u); }
-"""
-
+# Sprite element (health bar frame, ammo box, weapon icon).
 [[patches.hook]]
 func = "func_800BC9F4"
 before_vram = 0x800BD3A8
 text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800BD3A8u); }
+    { extern void btga_hud_begin_by_x(uint8_t *rdram, recomp_context *ctx); btga_hud_begin_by_x(rdram, ctx); }
 """
 
 [[patches.hook]]
 func = "func_800BC9F4"
-before_vram = 0x800BD524
+before_vram = 0x800BD3B0
 text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800BD524u); }
+    { extern void btga_hud_end(uint8_t *rdram, recomp_context *ctx); btga_hud_end(rdram, ctx); }
+"""
+
+# Number element (ammo count, the counter under the map).
+[[patches.hook]]
+func = "func_800BC9F4"
+before_vram = 0x800BD09C
+text = """
+    { extern void btga_hud_begin_by_x(uint8_t *rdram, recomp_context *ctx); btga_hud_begin_by_x(rdram, ctx); }
 """
 
 [[patches.hook]]
 func = "func_800BC9F4"
-before_vram = 0x800BD5EC
+before_vram = 0x800BD0A4
 text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800BD5ECu); }
+    { extern void btga_hud_end(uint8_t *rdram, recomp_context *ctx); btga_hud_end(rdram, ctx); }
+"""
+
+# Widget callback element (map, kill counter), target in $v0.
+[[patches.hook]]
+func = "func_800BC9F4"
+before_vram = 0x800BD81C
+text = """
+    { extern void btga_hud_begin_widget(uint8_t *rdram, recomp_context *ctx); btga_hud_begin_widget(rdram, ctx); }
 """
 
 [[patches.hook]]
-func = "func_800C31D4"
-before_vram = 0x800C3398
+func = "func_800BC9F4"
+before_vram = 0x800BD824
 text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C3398u); }
+    { extern void btga_hud_end(uint8_t *rdram, recomp_context *ctx); btga_hud_end(rdram, ctx); }
 """
-
-[[patches.hook]]
-func = "func_800C31D4"
-before_vram = 0x800C3424
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C3424u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C7714
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7714u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C7770
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7770u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C77D8
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C77D8u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C7830
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7830u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C7890
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7890u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C78EC
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C78ECu); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C7954
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7954u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C79B0
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C79B0u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C79E0
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C79E0u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C7A08
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7A08u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C7A40
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7A40u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7650"
-before_vram = 0x800C7A60
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7A60u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7C10"
-before_vram = 0x800C7CA0
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7CA0u); }
-"""
-
-[[patches.hook]]
-func = "func_800C7C10"
-before_vram = 0x800C7FFC
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C7FFCu); }
-"""
-
-[[patches.hook]]
-func = "func_800C8484"
-before_vram = 0x800C8728
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C8728u); }
-"""
-
-[[patches.hook]]
-func = "func_800C9A3C"
-before_vram = 0x800C9DF4
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C9DF4u); }
-"""
-
-[[patches.hook]]
-func = "func_800C9A3C"
-before_vram = 0x800C9ED0
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C9ED0u); }
-"""
-
-[[patches.hook]]
-func = "func_800C9A3C"
-before_vram = 0x800C9FB4
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800C9FB4u); }
-"""
-
-[[patches.hook]]
-func = "func_800CFBD8"
-before_vram = 0x800CFC68
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800CFC68u); }
-"""
-
-[[patches.hook]]
-func = "func_800D56FC"
-before_vram = 0x800D5AD4
-text = """
-    { extern void btga_hud_diag_site(uint32_t site); btga_hud_diag_site(0x800D5AD4u); }
-"""
-

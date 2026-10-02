@@ -3,6 +3,49 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-02, round 101: widescreen HUD anchoring and cutscene letterbox bars
+
+The round 99b/100 logs settled both questions.
+
+**Cutscene sides.** The intro frame draws:
+- a sky-coloured fill-mode clear of 0..319 x 0..239 (RT64 snaps it to the
+  scissor and stretches it, since it spans the full width)
+- black 1-cycle bars: 0..34 x 0..134, 286..320 x 0..134, 34..286 x 0..19
+- a black 0..320 x 134..240 area, which is also stretched
+
+The side bars aren't full width, so they stay inside the 4:3 frame, and
+the stretched sky shows beside them.
+
+**HUD.** The call sites map onto the screenshot:
+- `func_800C7C10`: the map (frame through `func_800C7650`, image at
+  `0x800C7CA0`, marker at `0x800C7FFC`)
+- `func_800C9A3C`: the kill counter
+- interpreter sprite call `0x800BD3A8`: health frame, ammo box and weapon
+  icon
+- `0x800BD524`: the health fill
+- numbers through `func_8009700C`, text through `func_80096F48`
+
+All of it is drawn by `func_800BC9F4`, a 2D overlay script interpreter (a
+jump table of 23 element types at `0x800731A0`), which also draws the
+cutscene bars. Every element writes to the display-list head at
+`0x803A5944`.
+
+Fix (`src/game/widescreen.cpp` plus hooks in `func_800BC9F4` and
+`func_8007C364`). In Expand, with 1-2 players, each element gets an RT64
+`gEXEnable` + `gEXSetRectAlign` written at the display-list head, then a
+reset after it:
+- map widget: left; kill counter widget: right
+- sprite and number elements: by x (left of 120 → left, from 200 →
+  right, else centred), so the health bar stays centred and the counter
+  under the map follows it. Text strings are never anchored, so centred
+  cutscene text stays whole.
+- fill rects: a bar touching the left or right edge gets only that edge
+  anchored (letterbox bars reach the window edge); other HUD panels use
+  the x rule
+
+How far an anchored element moves follows the Graphics tab's HUD Ratio
+(default Clamp 16:9). The round 99/100 diagnostics are removed.
+
 ## 2026-10-02, round 100: cutscene side areas in Expand (temporary diagnostic)
 
 User screenshots:
