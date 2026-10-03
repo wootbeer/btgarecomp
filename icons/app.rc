@@ -1,0 +1,2 @@
+// The .exe icon (Explorer, taskbar). Built from app.png at 16-256 px.
+1 ICON "app.ico"

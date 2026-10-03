@@ -3,6 +3,25 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-03, round 123: app icon
+
+**Round 122 result: fixed.** The distant buildings in the intro and
+credits are steady in Expand. The user thinks the flickering smoke in the
+credits is fixed too, which fits: it's distant, fogged geometry hitting
+the same depth error.
+
+**App icon** (user-supplied 128x128 RGBA badge, transparent corners):
+- `icons/app.png`: embedded as `icon_bytes` by the existing CMake rule,
+  which now also defines `BTGA_HAS_APP_ICON`. `set_window_icon()` in
+  `src/main/main.cpp` decodes it with the `stb_image` RT64 already links
+  and sets it with `SDL_SetWindowIcon` after the window is created
+  (window title bar, taskbar, alt-tab).
+- `icons/app.ico`: 16/24/32/48/64/128/256 px, the 256 px upscaled with
+  Lanczos.
+- `icons/app.rc`: `1 ICON "app.ico"`, the .exe icon in Explorer. Picked
+  up by the existing `if (EXISTS icons/app.rc)` in CMakeLists; checked
+  with `llvm-rc`.
+
 ## 2026-10-02, round 122: distant flicker = RT64's view/projection decomposition in Expand (RT64 fix)
 
 **User test:** the flicker happens only with Aspect Ratio **Expand**, and

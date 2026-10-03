@@ -52,6 +52,11 @@
 
 #include "btga_config.h"
 
+#if defined(BTGA_HAS_APP_ICON)
+#include "icon_bytes.h"
+#include "stb/stb_image.h"
+#endif
+
 // Generated into RecompiledFuncs/funcs.h by N64Recomp from this project's
 // own battletanxga.us.rev0.toml (renamed from func_80071000 -- see
 // [input] entrypoint in that file).
@@ -121,6 +126,27 @@ static ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
     return {};
 }
 
+// The window/taskbar icon, from icons/app.png (embedded as icon_bytes, decoded
+// with the stb_image that RT64 already links in). The .exe's own icon comes
+// from icons/app.rc on Windows.
+static void set_window_icon(SDL_Window* window) {
+#if defined(BTGA_HAS_APP_ICON)
+    int width, height, channels;
+    stbi_uc* pixels = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(icon_bytes), (int)icon_bytes_size, &width, &height, &channels, 4);
+    if (pixels == nullptr) {
+        return;
+    }
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(pixels, width, height, 32, width * 4, SDL_PIXELFORMAT_RGBA32);
+    if (surface != nullptr) {
+        SDL_SetWindowIcon(window, surface);
+        SDL_FreeSurface(surface);
+    }
+    stbi_image_free(pixels);
+#else
+    (void)window;
+#endif
+}
+
 static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::gfx_data_t) {
 
     uint32_t flags = SDL_WINDOW_RESIZABLE;
@@ -138,6 +164,7 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     if (window == nullptr) {
         exit_error("Failed to create window: %s", SDL_GetError());
     }
+    set_window_icon(window);
 
 #if defined(_WIN32)
     SDL_SysWMinfo wm_info;

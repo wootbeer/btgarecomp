@@ -280,14 +280,15 @@ target_include_directories(BattleTanxGARecompiled PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-# Generate icon_bytes.c from the app icon PNG, once this project has its own
-# (not the original BattleTanx's -- see PROGRESS.md).
+# Generate icon_bytes.c from the app icon PNG (the window icon, set in
+# create_window in src/main/main.cpp).
 if (EXISTS ${CMAKE_SOURCE_DIR}/icons/app.png)
     add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.c ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.h
         COMMAND file_to_c ${CMAKE_SOURCE_DIR}/icons/app.png icon_bytes ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.c ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.h
         DEPENDS ${CMAKE_SOURCE_DIR}/icons/app.png
     )
     target_sources(BattleTanxGARecompiled PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/icon_bytes.c)
+    target_compile_definitions(BattleTanxGARecompiled PRIVATE BTGA_HAS_APP_ICON)
 endif()
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
@@ -353,11 +354,7 @@ if (WIN32)
             LINK_FLAGS_MINSIZEREL "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
     )
 
-    # icons/app.rc (the .exe icon resource) doesn't exist yet -- this
-    # project has no game art of its own yet (asset extraction from the ROM
-    # hasn't started, see PROGRESS.md). Same conditional-on-existence
-    # approach as icons/app.png below; add app.rc once there's an icon to
-    # embed.
+    # The .exe icon resource (icons/app.ico, built from icons/app.png).
     if (EXISTS ${CMAKE_SOURCE_DIR}/icons/app.rc)
         target_sources(BattleTanxGARecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.rc)
     endif()
