@@ -1,9 +1,11 @@
 # Builds a Release copy of the game and packages it as a zip for distribution.
 #
-# Run from a "Developer PowerShell for VS 2022" (x64) in the repo root, after
-# the usual one-time steps in BUILDING.md (N64Recomp built and run, so
-# RecompiledFuncs/, RecompiledPatches/ and rsp/ exist):
+# Run from any PowerShell in the repo root, after the usual one-time steps in
+# BUILDING.md (N64Recomp built and run, so RecompiledFuncs/, RecompiledPatches/
+# and rsp/ exist). The script sets up Visual Studio's x64 build environment
+# itself (a Developer PowerShell often defaults to x86, which can't link x64):
 #
+#   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 #   .\tools\package-windows.ps1 -Version 0.1.0-beta
 #
 # Output: dist\BattleTanxGARecompiled-<version>-windows.zip containing the exe,
@@ -13,11 +15,22 @@
 param(
     [string]$Version = "beta",
     [string]$BuildDir = "build-release",
-    [string]$ClangCl = $(if ($env:BTGA_CLANGCL) { $env:BTGA_CLANGCL } else { "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe" })
+    [string]$ClangCl = $env:BTGA_CLANGCL
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
+
+# Visual Studio's x64 build environment (compiler libraries, Windows SDK, Ninja).
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+if (-not (Test-Path $vswhere)) { throw "Visual Studio not found (no vswhere.exe) -- see BUILDING.md." }
+$vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+if (-not $vsPath) { throw "No Visual Studio install with the C++ tools found -- see BUILDING.md." }
+if ($env:VSCMD_ARG_TGT_ARCH -ne "x64") {
+    & (Join-Path $vsPath "Common7\Tools\Launch-VsDevShell.ps1") -Arch amd64 -HostArch amd64 -SkipAutomaticLocation | Out-Null
+}
+if (-not $ClangCl) { $ClangCl = Join-Path $vsPath "VC\Tools\Llvm\x64\bin\clang-cl.exe" }
+
 Set-Location $root
 
 foreach ($required in @("RecompiledFuncs", "RecompiledPatches", "rsp")) {
