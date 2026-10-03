@@ -3,6 +3,36 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-03, round 126: going public for beta testing
+
+**Round 125 result:** the build works with the precompiled icon resource.
+
+The user wants the repo public and a Windows release for beta testers.
+
+**Pre-publication checks (all commits on all branches):**
+- No ROM or other game binary was ever committed. The largest blob ever
+  is `assets/InterVariable.ttf` (880 KB). `RecompiledFuncs/`,
+  `RecompiledPatches/`, `rsp/`, `*.z64` and patch build outputs have
+  always been ignored.
+- `src_probes/` holds only splat `GLOBAL_ASM` stubs; `syms/` holds
+  addresses and names.
+- No tokens or keys (scanned for GitHub/Anthropic/AWS/private-key
+  patterns in the full `git log -p`).
+- No temporary diagnostics left in `src/`. The only log line is the
+  rare `[BTGA AUDIO] ... resyncing`.
+
+**Release packaging** (`tools/package-windows.ps1`, run from Developer
+PowerShell):
+- configures and builds Release in `build-release/`, so the Debug dev
+  build is untouched
+- stages the exe, `SDL2.dll`, `dxil.dll`, `dxcompiler.dll`, `assets/`,
+  README and COPYING
+- zips them to `dist/BattleTanxGARecompiled-<version>-windows.zip`
+
+Assets load from `assets/` relative to the working directory, which is
+the exe's folder when launched from Explorer. `build-release/` and
+`dist/` are gitignored.
+
 ## 2026-10-03, round 125: shield-hit flashes never go away (frame step just under 1.0)
 
 **Round 124 result:** the audio stays in sync, the README is good, and the

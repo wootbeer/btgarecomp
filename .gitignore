@@ -73,3 +73,7 @@ ghidra_exports/
 # Never commit raw excerpts of the ROM itself, however they're captured
 assets/unk_*.bin
 *.7z
+
+# Release packaging (tools/package-windows.ps1)
+build-release/
+dist/
