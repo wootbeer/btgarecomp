@@ -1,4 +1,18 @@
-# BattleTanx: Global Assault Recompiled
+# BattleTanx: Global Assault Recompiled  
+
+This is an extreme beta build.  
+
+Don't worry changes and improvements to come as needed.  
+Is very bug-free thus far from what I can see.  
+But I am in it for the long haul unlike the ones you are worried about.  
+If you find any issues let me know, try to take screenshots, and I will fix.  
+Any issues will most likely be with rendering, but I've stomped most of them out.  
+
+You will see this space change a lot in the coming days and everything will be cleaned up.  
+I just wanted to get you guys something to play over the weekend, have fun.  
+
+Other platforms and Android to come.  
+Stay tuned for updates in the coming days over the next week or so.  
 
 A native PC port of BattleTanx: Global Assault, made by statically
 recompiling the N64 game with [N64Recomp](https://github.com/N64Recomp/N64Recomp)
