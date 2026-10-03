@@ -22,22 +22,13 @@ with [RT64](https://github.com/rt64/rt64) for rendering.
 Unofficial, and not affiliated with the rights holders. **No game data is
 included.** You need your own dump of the game to build or play this.
 
-Global Assault is the sequel to the original BattleTanx and a distinct
-binary, so this port has its own reverse-engineered symbol table and its own
-set of instruction/hook patches.
-
 ## Status
-
-This project is in the early reverse-engineering stage — no symbol table or
-working build yet. See [STATUS.md](STATUS.md) for the detailed, dated
-research log (ROM identification, splat-based disassembly progress, the
-current open question about the game's overlay system) and
-[PROGRESS.md](PROGRESS.md) for the build-system side (what the eventual
-N64Recomp/CMake build still needs once real symbols exist).
 
 ## Getting started
 
-There is nothing runnable yet — see PROGRESS.md and BUILDING.md.
+You need your own data files BattleTanx - Global Assault (USA).n64  
+SHA-1: 08A9037488C47D1E26CE6F709955639E9F0F0BB8  
+Other ones might work but this is the one I used.  
 
 ## Building
 
