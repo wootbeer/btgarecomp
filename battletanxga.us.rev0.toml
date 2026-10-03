@@ -1609,34 +1609,3 @@ before_vram = 0x800D2AFC
 text = """
     { extern void btga_cutscene_far_plane(uint8_t *rdram, recomp_context *ctx); btga_cutscene_far_plane(rdram, ctx); }
 """
-
-# Round 117 (src/game/fog_fix.cpp): keep distant geometry clear of RT64's
-# simulated F3D far clip -- double the projections' far plane and re-fit the
-# fog band so it keeps its original distances.
-[[patches.hook]]
-func = "func_8007A250"
-before_vram = 0x8007A688
-text = """
-    { extern void btga_fog_position(uint8_t *rdram, recomp_context *ctx); btga_fog_position(rdram, ctx); }
-"""
-
-[[patches.hook]]
-func = "func_800A72C0"
-before_vram = 0x800A7640
-text = """
-    { extern void btga_double_far_plane(uint8_t *rdram, recomp_context *ctx); btga_double_far_plane(rdram, ctx); }
-"""
-
-[[patches.hook]]
-func = "func_800A7664"
-before_vram = 0x800A7744
-text = """
-    { extern void btga_double_far_plane(uint8_t *rdram, recomp_context *ctx); btga_double_far_plane(rdram, ctx); }
-"""
-
-[[patches.hook]]
-func = "func_800D25E0"
-before_vram = 0x800D2B0C
-text = """
-    { extern void btga_double_far_plane(uint8_t *rdram, recomp_context *ctx); btga_double_far_plane(rdram, ctx); }
-"""

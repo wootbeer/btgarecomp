@@ -3,6 +3,38 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-03, round 124: audio latency cap; round 117 reverted
+
+**Audio delay bug** (user): after several levels, every sound played
+several seconds late, possibly starting after skipping a cutscene
+partway through. `queue_samples` (`src/main/main.cpp`) queued
+everything into SDL's audio queue with no upper bound. When the game
+delivers a burst faster than real time (likely when a skip fast-forwards
+the sequencer), the surplus stays queued and every later sound plays
+late by that much.
+
+Fix: a latency cap in `queue_samples`.
+- Over 500 ms queued (`audio_hard_cap_ms`): clear the queue at once (one
+  blip, back in sync) and log `[BTGA AUDIO] <n> ms queued, resyncing`.
+- Over 200 ms (`audio_soft_cap_ms`): drop incoming chunks until it's
+  back under, so a small surplus drains without a gap.
+
+Normal play keeps roughly 50-70 ms queued: the game paces itself
+against `get_frames_remaining`, plus 2 VIs of headroom. So the caps
+shouldn't trigger.
+
+**Round 117 reverted** (user wants the game original). Round 122 found
+the real flicker cause in RT64, so the doubled far plane and re-fitted
+fog word are gone (`src/game/fog_fix.cpp` and its hooks). Fog and far
+plane are the game's own again.
+
+Kept, as compatibility fixes rather than behaviour changes:
+- the frame-time snapping (rounds 88-89/106), which removes host-timing
+  wobble hardware doesn't have
+- round 108's far-plane guard for the cutscene camera's degenerate far =
+  0 projection, which hardware's exact fixed-point clip tolerates but
+  RT64's float clip doesn't
+
 ## 2026-10-03, round 123: app icon
 
 **Round 122 result: fixed.** The distant buildings in the intro and

@@ -220,6 +220,14 @@ static uint32_t game_frequency = 44100;
 // not hardware interrupts) lets the queue run dry for a moment: crackle.
 static constexpr uint32_t audio_headroom_vis = 2;
 
+// Latency cap. Nothing drains a surplus on its own: when the game delivers a
+// burst faster than real time (e.g. skipping a cutscene), the extra stays
+// queued and every sound after it plays late by that much. Above the soft
+// cap incoming chunks are dropped until it's back under (a small surplus
+// drains without a gap); above the hard cap the queue is cleared at once.
+static constexpr uint32_t audio_soft_cap_ms = 200;
+static constexpr uint32_t audio_hard_cap_ms = 500;
+
 static bool open_audio_device(uint32_t frequency) {
     std::lock_guard<std::mutex> lock(audio_mutex);
 
@@ -263,6 +271,16 @@ static void queue_samples(int16_t* audio_data, size_t sample_count) {
     }
 
     std::lock_guard<std::mutex> lock(audio_mutex);
+    const size_t bytes_per_ms = game_frequency * audio_channels * sizeof(float) / 1000;
+    const size_t queued_bytes = SDL_GetQueuedAudioSize(audio_device);
+    if (queued_bytes > audio_hard_cap_ms * bytes_per_ms) {
+        printf("[BTGA AUDIO] %zu ms queued, resyncing\n", queued_bytes / bytes_per_ms);
+        fflush(stdout);
+        SDL_ClearQueuedAudio(audio_device);
+    }
+    else if (queued_bytes > audio_soft_cap_ms * bytes_per_ms) {
+        return;
+    }
     SDL_QueueAudio(audio_device, buffer.data(), static_cast<Uint32>(sample_count * sizeof(float)));
 }
 
