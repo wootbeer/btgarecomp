@@ -8,12 +8,9 @@ with [RT64](https://github.com/rt64/rt64) for rendering.
 Unofficial, and not affiliated with the rights holders. **No game data is
 included.** You need your own dump of the game to build or play this.
 
-This project follows the same approach as
-[battle-tanx-recomp](https://github.com/bdragoncore/battle-tanx-recomp) (a
-recompilation of the original BattleTanx), but targets the sequel,
-**BattleTanx: Global Assault**, which is a distinct binary requiring its own
-reverse-engineered symbol table and its own set of instruction/hook patches.
-Nothing from the original game's symbol table carries over directly.
+Global Assault is the sequel to the original BattleTanx and a distinct
+binary, so this port has its own reverse-engineered symbol table and its own
+set of instruction/hook patches.
 
 ## Status
 
@@ -39,17 +36,9 @@ See [BUILDING.md](BUILDING.md).
 - [RT64](https://github.com/rt64/rt64) by Dario and contributors, the renderer
 - [RecompFrontend](https://github.com/N64Recomp/RecompFrontend) by the N64Recomp
   contributors, the launcher and input layer
-- [battle-tanx-recomp](https://github.com/bdragoncore/battle-tanx-recomp) by
-  bdragoncore, the recompilation of the original BattleTanx this project's
-  build-system layout is modeled on
 - [splat](https://github.com/ethteck/splat) and its N64 tooling
   (`spimdisasm`, `rabbitizer`), used for the ROM-splitting work in
   `tools/` and logged in STATUS.md
-- [VPW64Recomp](https://github.com/jessetbh/VPW64Recomp) and
-  [GGA-Recomp](https://github.com/dantheman11294/GGA-Recomp), the closest
-  public precedents for reverse-engineering a previously-undocumented N64
-  game from scratch for a recomp, and the main references the
-  splat-based side of this project borrows its approach from
 
 ## License
 
