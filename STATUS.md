@@ -81,9 +81,14 @@ the same depth error.
   (window title bar, taskbar, alt-tab).
 - `icons/app.ico`: 16/24/32/48/64/128/256 px, the 256 px upscaled with
   Lanczos.
-- `icons/app.rc`: `1 ICON "app.ico"`, the .exe icon in Explorer. Picked
-  up by the existing `if (EXISTS icons/app.rc)` in CMakeLists; checked
-  with `llvm-rc`.
+- The .exe icon (Explorer): CMakeLists generates `build/app.rc`
+  (`1 ICON "<abs path>/icons/app.ico"`) with `file(CONFIGURE)`.
+  - The first version was a checked-in `icons/app.rc` with a relative
+    `"app.ico"`. It failed on Windows: CMake's `cmake_llvm_rc`
+    preprocesses the script into `CMakeFiles/.../app.rc.res.pp` before
+    running rc.exe, so relative paths resolve from the build tree.
+  - The generated script is checked with `llvm-rc` from an unrelated
+    directory.
 
 ## 2026-10-02, round 122: distant flicker = RT64's view/projection decomposition in Expand (RT64 fix)
 

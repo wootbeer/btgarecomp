@@ -354,9 +354,14 @@ if (WIN32)
             LINK_FLAGS_MINSIZEREL "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
     )
 
-    # The .exe icon resource (icons/app.ico, built from icons/app.png).
-    if (EXISTS ${CMAKE_SOURCE_DIR}/icons/app.rc)
-        target_sources(BattleTanxGARecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.rc)
+    # The .exe icon resource (icons/app.ico, built from icons/app.png). The
+    # .rc is generated with an absolute path: CMake preprocesses resource
+    # scripts into the build tree before rc.exe runs, so a path relative to
+    # icons/ wouldn't resolve.
+    if (EXISTS ${CMAKE_SOURCE_DIR}/icons/app.ico)
+        file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/app.rc
+            CONTENT "1 ICON \"${CMAKE_SOURCE_DIR}/icons/app.ico\"\n")
+        target_sources(BattleTanxGARecompiled PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/app.rc)
     endif()
     target_link_libraries(BattleTanxGARecompiled PRIVATE SDL2 Winmm.lib)
 endif()
