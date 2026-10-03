@@ -3,6 +3,37 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-03, round 125: shield-hit flashes never go away (frame step just under 1.0)
+
+**Round 124 result:** the audio stays in sync, the README is good, and the
+fog looks right.
+
+**Bug** (user screenshot): with the shield powerup, each hit's flash
+(white translucent shards around the tank) never fully goes away, and
+they build up over time.
+
+**Trace:**
+- "PICKED UP SHIELDS" (`0x80071D00`) is set in the pickup handler
+  `func_8008ECB4`: the player's `+0x1DC` (shield) = 100.
+- The damage code `func_8008BF5C` calls `func_800F0ED0` while the shield
+  is up, spawning an object of type `0x39` (`func_800A18D0(0x39, 0x30)`)
+  with life `+0x24` = 10.0.
+- Its update (`0x800F11D0`) deletes it once `life <= step` and otherwise
+  does `life -= (float)(int)step`, where step is the float at
+  `0x80219488`.
+
+**Cause.** `func_80099FE8` (the frame-rate governor) stores the step as
+osGetTime() microseconds * 30 / 1e6, i.e. the frame time in 1/30 s.
+- On hardware, a 30 fps frame is two 59.826 Hz VIs: step = 1.003,
+  `(int)step` = 1, and the flash dies after about 10 frames.
+- Here VIs are exactly 60 Hz: step = 0.99999, `(int)step` = 0. Life never
+  drops and the flash is never deleted.
+
+**Fix** (`src/game/frame_dt_fix.cpp`, hook before `0x8009A398`): snap the
+step to whole VIs at the N64's rate, `round(step / 0.5) * 30 / 59.826`,
+like the rounds 88-89 delta-time snap. Anything else that uses this step
+now sees hardware values too.
+
 ## 2026-10-03, round 124: audio latency cap; round 117 reverted
 
 **Audio delay bug** (user): after several levels, every sound played

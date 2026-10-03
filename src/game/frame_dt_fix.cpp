@@ -30,3 +30,24 @@ extern "C" void btga_frame_dt(uint8_t* rdram, recomp_context* ctx) {
         ctx->f0.fl = snapped;
     }
 }
+
+// Round 125: the frame step at 0x80219488.
+//
+// func_80099FE8 (the frame-rate governor) also stores the time since the
+// previous frame in 1/30 s units: osGetTime() microseconds * 30 / 1e6. Some
+// effects use only its whole part -- the shield-hit flash (update at
+// 0x800F11D0) loses (int)step of its 10.0 life each frame and is deleted
+// once life <= step. On hardware a 30 fps frame is two 59.826 Hz VIs, so
+// step = 1.003 and (int)step = 1. Here VIs are exactly 60 Hz, so step comes
+// out just under 1.0, (int)step = 0, and the flashes never fade or go away:
+// they pile up around a shielded tank. Snap the step to whole VIs at the
+// N64's own rate.
+static constexpr float kStepPerVi = 30.0f / 59.826f;
+
+// Hooked right before `swc1 $f0, -0x6B78($at)` in func_80099FE8 (0x8009A398).
+extern "C" void btga_frame_step(uint8_t* rdram, recomp_context* ctx) {
+    float vis = std::round(ctx->f0.fl / (30.0f / 60.0f));
+    if (vis >= 1.0f) { // keep tiny/zero first-frame values as measured
+        ctx->f0.fl = vis * kStepPerVi;
+    }
+}
