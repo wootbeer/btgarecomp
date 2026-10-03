@@ -32,6 +32,8 @@ You need your own data files BattleTanx - Global Assault (USA).n64
 SHA-1: 08A9037488C47D1E26CE6F709955639E9F0F0BB8  
 Other ones might work but this is the one I used.  
 
+Add portable.txt to make portable.  
+
 ## Building
 
 See [BUILDING.md](BUILDING.md).
