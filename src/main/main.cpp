@@ -3,9 +3,9 @@
 // (recompui + recompinput): graphics/window, audio, input and config
 // callbacks. Game-specific behaviour lives in src/game/.
 //
-// The launcher/UI assets (fonts, icons, promptfont) come from BanjoRecomp,
-// another GPL-3.0 port on the same RecompFrontend (see STATUS.md round 86);
-// the fonts carry their own licenses in assets/.
+// Launcher/UI assets: the Exo 2 UI font, Noto Emoji and PromptFont (which
+// RecompFrontend loads itself), each with its license in assets/, and our
+// own icons (tools/make_icons.py).
 //
 // Not done yet: no mod/texture-pack content types and no launcher menu
 // customization (the library's default_launcher_init_callback runs).
@@ -420,12 +420,12 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Continuing without sound.\n");
     }
 
-    // Inter Variable (SIL OFL 1.1, assets/INTER_LICENSE.txt). The family
-    // name must match the one stored inside the font file: recompui's
-    // generated base stylesheet sets `font-family` to it, and RmlUi draws no
-    // text for a family it never loaded (STATUS.md round 86 -- the old
-    // "Lato" didn't match LatoLatin-Regular.ttf's internal "LatoLatin").
-    recompui::register_primary_font("InterVariable.ttf", "Inter Variable");
+    // Exo 2 (SIL OFL 1.1, assets/EXO2_LICENSE.txt), a variable font covering
+    // every weight the UI uses. The family name must match the one stored
+    // inside the font file: recompui's generated base stylesheet sets
+    // `font-family` to it, and RmlUi draws no text for a family it never
+    // loaded (STATUS.md round 86).
+    recompui::register_primary_font("Exo2.ttf", "Exo 2");
 
     recomp::register_config_path(recompui::file::get_app_folder_path());
 

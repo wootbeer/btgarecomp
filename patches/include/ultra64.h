@@ -1,40 +1,27 @@
+#ifndef BTGA_PATCHES_ULTRA64_H
+#define BTGA_PATCHES_ULTRA64_H
 
-/**************************************************************************
- *                                                                        *
- *               Copyright (C) 1994, Silicon Graphics, Inc.               *
- *                                                                        *
- *  These coded instructions, statements, and computer programs  contain  *
- *  unpublished  proprietary  information of Silicon Graphics, Inc., and  *
- *  are protected by Federal copyright  law.  They  may not be disclosed  *
- *  to  third  parties  or copied or duplicated in any form, in whole or  *
- *  in part, without the prior written consent of Silicon Graphics, Inc.  *
- *                                                                        *
- *************************************************************************/
+// The few N64 types and libultra functions the MIPS patch code uses. Written
+// for this project in place of the original SDK headers: only what
+// patches/*.c needs, with libultra's names and calling conventions.
 
-/**************************************************************************
- *
- *  $Revision: 1.10 $
- *  $Date: 1997/02/11 08:37:33 $
- *  $Source: /exdisk2/cvs/N64OS/Master/cvsmdev2/PR/include/ultra64.h,v $
- *
- **************************************************************************/
+typedef signed char s8;
+typedef unsigned char u8;
+typedef signed short s16;
+typedef unsigned short u16;
+typedef signed long s32;
+typedef unsigned long u32;
+typedef signed long long s64;
+typedef unsigned long long u64;
+typedef float f32;
+typedef double f64;
 
-#ifndef _ULTRA64_H_
-#define _ULTRA64_H_
-
-#include <PR/ultratypes.h>
-#include <PR/rcp.h>
-#include <PR/os.h>
-#include <PR/region.h>
-#include <PR/rmon.h>
-#include <PR/sptask.h>
-#include <PR/mbi.h>
-#include <PR/libaudio.h>
-#include <PR/gu.h>
-#include <PR/ramrom.h>
-#include <PR/sp.h>
-#include <PR/ucode.h>
-#include <PR/ultraerror.h>
-#include <PR/ultralog.h>
-
+#ifndef NULL
+#define NULL 0
 #endif
+
+// Video interface (provided by the runtime; see patches.h's renames).
+void osViBlack(u8 active);
+void osViSwapBuffer(void* frameBufPtr);
+
+#endif // BTGA_PATCHES_ULTRA64_H

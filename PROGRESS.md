@@ -30,7 +30,8 @@ and leave the game's own behaviour, look and balance alone.
   proportionally (`src/game/frame_dt_fix.cpp`).
 - **Crash reports**: `crash_log.txt` names the game function that faulted
   (`src/main/crash_handler.cpp`).
-- **Windows release** packaging (`tools/package-windows.ps1`).
+- **Windows release** packaging (`tools/package-windows.ps1`), with the
+  third-party license notices and no build-machine paths in the exe.
 
 ## Known issues
 
@@ -43,9 +44,6 @@ and leave the game's own behaviour, look and balance alone.
 
 - Bug reports from beta testers.
 - A Linux release (it builds and runs in development).
-- Offer the RT64 fix upstream.
-- Release hygiene: strip build paths from the exe, an issue template and a
-  short tester guide.
 - macOS is not set up.
 
 ## Where things are
@@ -58,6 +56,8 @@ and leave the game's own behaviour, look and balance alone.
 | `src/main/` | Frontend: window, audio, input, config, crash reporting |
 | `src/game/` | Game-specific fixes called from hooks |
 | `patches/` | Whole-function replacements compiled for MIPS |
+| `assets/` | UI font, icons (`tools/make_icons.py`) and their licenses |
+| `licenses/` | License notices for shipped files not in a submodule |
 | `lib-patches/` | Patches applied to submodules at configure time |
 | `tools/` | Analysis scripts and release packaging |
 | `syms/` | Raw symbol lists from the original analysis |

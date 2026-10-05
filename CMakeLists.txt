@@ -27,6 +27,19 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_SIMULATE_ID STREQUAL "M
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-everything /W4")
 endif()
 
+# Keep the build machine's folders (e.g. the Windows user name) out of the
+# binaries: source paths that end up in them, through __FILE__ in asserts and
+# log messages or in debug info, are made relative to the repo root. Both
+# slash styles are mapped, since Windows tools pass either.
+file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}" BTGA_SOURCE_DIR_NATIVE)
+foreach (prefix IN ITEMS "${CMAKE_SOURCE_DIR}" "${BTGA_SOURCE_DIR_NATIVE}")
+    if (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
+        add_compile_options("/clang:-ffile-prefix-map=${prefix}=.")
+    elseif (CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        add_compile_options("-ffile-prefix-map=${prefix}=.")
+    endif()
+endforeach()
+
 # Opt out of constexpr mutex constructor on windows to prevent vcredist issues
 if (WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR")

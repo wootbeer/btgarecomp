@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 132)
+## Overview (as of round 133)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -29,9 +29,10 @@ and higher framerates. A first beta (0.1.0) is public.
   freeze (round 69).
 - **Windows toolchain** (rounds 25-33): clang-cl, x86 vs x64 shells; the
   results are in BUILDING.md's troubleshooting section.
-- **Frontend and UI** (rounds 34-38, 61-62, 86, 111, 123). Fonts and
+- **Frontend and UI** (rounds 34-38, 61-62, 86, 111, 123, 133). Fonts and
   assets, event pumping, the per-frame UI pump as a whole-function patch
-  (`patches/`), theme and icon.
+  (`patches/`), theme and icon. Since round 133 the UI font is Exo 2 and
+  the icons are our own.
 - **Audio** (rounds 90-93, 95, 124). The RSP audio microcode recompiled
   from the ROM, the audio library un-stubbed, stereo order, underruns, and a
   latency cap.
@@ -49,8 +50,9 @@ and higher framerates. A first beta (0.1.0) is public.
   are fixed proportionally (`src/game/frame_dt_fix.cpp`,
   `tools/scan_frame_time_truncation.py`). Round 125's step snap was wrong
   and was reverted in round 131.
-- **Crash reporting and release** (rounds 126, 128). `crash_log.txt`, and
-  Windows packaging (`tools/package-windows.ps1`).
+- **Crash reporting and release** (rounds 126, 128, 133). `crash_log.txt`,
+  and Windows packaging (`tools/package-windows.ps1`) with license notices
+  and no build-machine paths.
 
 **Principle.** The game stays original: fixes cover only what differs from
 the N64 (timing, rendering, the runtime), not the game's look or behaviour.
@@ -63,6 +65,42 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-05, round 133: own UI font and icons; licensing; build paths
+
+**UI assets.** The launcher/config icons and primary font had been copied
+from BanjoRecomp (round 86). Now:
+- **Icons:** 11 new SVGs drawn for this project (`tools/make_icons.py`
+  generates `assets/icons/`): angular, chamfered shapes, and an N64-style
+  controller. `Arrow`, `Plus` and `Port` were unused and are gone.
+- **Font:** Exo 2 (SIL OFL 1.1, `assets/EXO2_LICENSE.txt`), a variable
+  font like Inter, with similar metrics, so layouts shouldn't shift.
+  Registered as family `"Exo 2"`, its internal name.
+- Noto Emoji and PromptFont stay: RecompFrontend loads them by name, and
+  neither is BanjoRecomp's (Google; Yukari Hafner). Noto Emoji's license
+  now has its own file. LatoLatin (unused since round 86) and the RmlUi
+  sample-font license file are removed.
+
+**Licensing.**
+- `patches/include/` held 51 of the original N64 SDK headers, marked as
+  proprietary SGI/Nintendo source. Replaced with a short `ultra64.h` of our
+  own declaring only what `patches/*.c` uses (integer types, `osViBlack`,
+  `osViSwapBuffer`). The recompiled patch output is byte-identical.
+- The release zip now carries the third-party license notices
+  (`licenses\` in the zip): the runtime, N64Recomp, RT64 and its libraries,
+  RmlUi, lunasvg, FreeType, SDL2, the DirectX Shader Compiler
+  (`licenses/DirectXShaderCompiler.txt` in the repo), and others.
+- Checked the early (2026-09-27) note about two archives containing the
+  ROM: no branch or tag holds them and GitHub doesn't serve those commits.
+
+**Build paths.** Source paths reached the exe through `__FILE__` (asserts
+and log messages in the runtime, sljit, recompui). `CMakeLists.txt` now
+passes `-ffile-prefix-map=<repo>=.` (`/clang:` form for clang-cl, both
+slash styles), so they're relative. Release builds have no debug info, so
+no PDB path is embedded either.
+
+**STATUS.md:** older entries no longer name battle-tanx-recomp,
+VPW64Recomp or GGA-Recomp.
 
 ## 2026-10-05, round 132: cleanup pass
 
@@ -4186,11 +4224,8 @@ rather than fighting the force-include mechanism further.
 Wrote `src/game/stock_runtime_compat.cpp` (COP0 status read, the 4 thread-
 scheduler internals, SI access-queue creation, timer/VI internals) and
 `src/game/controller_pak.cpp` (the 7 Controller Pak filesystem internals),
-filling every symbol round 23 found missing. `bdragoncore/battle-tanx-
-recomp`'s own files of the same name/path are the reason these exact paths
-were already anticipated in `CMakeLists.txt`'s `BTGA_FORKED_RUNTIME` check --
-same reasoning as round 23, only the generic shape carries over, not any of
-that project's own values or logic.
+filling every symbol round 23 found missing. These exact paths were
+already anticipated in `CMakeLists.txt`'s `BTGA_FORKED_RUNTIME` check.
 
 None of this could be derived from public documentation alone with
 confidence, so each function's real argument registers were checked
@@ -4251,13 +4286,9 @@ which this cloud sandbox is not.
 
 Wrote `src/main/main.cpp`, the piece round 22 flagged as missing (nothing
 called `recomp_entrypoint`, so the linker dropped all the recompiled game
-code as unreferenced). Structurally modeled on
-`bdragoncore/battle-tanx-recomp`'s own `src/main/main.cpp` (cloned to
-`/home/user/bdragoncore/battle-tanx-recomp` for reference, same as before --
-only the generic ultramodern/librecomp/recompui plumbing carries over, none
-of BattleTanx's own game logic, addresses, or polish like its audio
-resampling bridge or launcher theming, which this file deliberately leaves
-out for now):
+code as unreferenced). It is the generic ultramodern/librecomp/recompui
+plumbing every project on this runtime needs, with no audio resampling
+bridge or launcher theming yet:
 
 - Registers one `recomp::GameEntry` for this ROM: real entry point
   (`0x80071000`), and a real `rom_hash` -- **not** the N64 header CRC1/CRC2,
@@ -4325,10 +4356,9 @@ built-in `reimplemented_funcs` list expects some runtime to provide, and
 neither `librecomp` nor `ultramodern` do (confirmed by grepping their
 entire source for each name -- zero matches, not a link-order problem this
 time). This is precisely PROGRESS.md item 7,
-"stock-runtime compatibility shims" -- the original BattleTanx needed its
-own hand-written `stock_runtime_compat.cpp`/`controller_pak.cpp` for the
-same reason, and it's now confirmed (not just suspected) that Global
-Assault needs its own equivalent too. The 12 symbols split into four real
+"stock-runtime compatibility shims" -- it's now confirmed (not just
+suspected) that Global Assault needs hand-written implementations of
+these. The 12 symbols split into four real
 subsystems, none implemented yet:
   - `__osGetSR_recomp` -- COP0 Status register read.
   - `__osDequeueThread_recomp`, `__osDispatchThread_recomp`,
@@ -4448,8 +4478,7 @@ and `rsp/` are still empty (see `CMakeLists.txt`'s own placeholder-`main()`
 fallback), so nothing calls `recomp_entrypoint` or drives the
 ultramodern runtime loop yet, and the linker drops the unreferenced
 `RecompiledFuncs`/`PatchesLib` object code entirely (hence the ~15KB
-binary). Writing that entry point (`bdragoncore/battle-tanx-recomp`'s
-equivalent is `src/main/*.cpp`) is the next real step toward the game
+binary). Writing that entry point (`src/main/*.cpp`) is the next real step toward the game
 actually running, ahead of or alongside PROGRESS.md's items 6-8.
 
 ## 2026-09-27, round 21: first clean N64Recomp run -- `N64Recomp battletanxga.us.rev0.toml` exits 0
@@ -4596,8 +4625,7 @@ rabbitizer specifically, not capstone.
 Merged rounds 13-19's pieces (the symbol table, the 71-entry ignored/
 renamed list, the 30 cop0/eret instruction patches, the 101 division
 hooks) into one file, `battletanxga.us.rev0.toml` at the repo root,
-matching `bdragoncore/battle-tanx-recomp`'s exact structure
-(`[input]` / `[patches]` / `[[patches.instruction]]` / `[[patches.hook]]`
+in N64Recomp's usual structure (`[input]` / `[patches]` / `[[patches.instruction]]` / `[[patches.hook]]`
 in one config). Validated it parses as well-formed TOML and that every
 section round-trips to the right counts (Python's `tomllib`: 71 ignored,
 71 renamed, 30 instruction patches, 101 hooks).
@@ -4606,9 +4634,9 @@ This is the first time this project has had an actual config file to hand
 N64Recomp -- everything before this was symbol-table/patch-list pieces
 that hadn't been assembled into the thing the tool actually reads. Still
 only covers the first MB's code (see round 17 for why that's believed to
-be ~all of it), and still missing the by-inspection stubs
-`bdragoncore/battle-tanx-recomp`'s own list has a couple of (not found by
-name-matching, so not caught by anything done so far). Running this
+be ~all of it), and still missing any stubs that would have to be found
+by inspection (not by name-matching, so not caught by anything done so
+far). Running this
 config through a real `N64Recomp` build is the natural next checkpoint,
 once the toolchain itself is built (`lib/N64ModernRuntime/N64Recomp` per
 `BUILDING.md` — not yet done this session, since the submodules aren't
@@ -4629,22 +4657,20 @@ Cross-referenced against the trusted symbol table's ~430 n64sym-identified
 names: **71 direct matches** -- real functions in this ROM, at real
 addresses, that duplicate something librecomp already provides. Generated
 `[patches] ignored = [...] renamed = [...]` for all 71
-(`BattleTanxGASyms/battletanxga.us.rev0.renamed_ignored.toml`), matching
-`bdragoncore/battle-tanx-recomp`'s exact pattern for this (same name in
-both lists: `ignored` skips recompiling this ROM's own copy, `renamed`
+(`BattleTanxGASyms/battletanxga.us.rev0.renamed_ignored.toml`), using the
+usual N64Recomp pattern for this (same name in both lists: `ignored` skips recompiling this ROM's own copy, `renamed`
 points calls at librecomp's implementation instead).
 
 **Caveat**: this only covers names n64sym already matched by signature.
-`bdragoncore/battle-tanx-recomp`'s own list also stubs functions found by
-inspection rather than name-matching (e.g. two cache-invalidate loops the
-host doesn't need) -- nothing here does the equivalent search yet, so this
-71-entry list is a solid start, not a complete `[patches]` section.
+Configs like this often also stub functions found by inspection rather
+than name-matching (e.g. cache-invalidate loops the host doesn't need) --
+nothing here does that search yet, so this 71-entry list is a solid start,
+not a complete `[patches]` section.
 
 ## 2026-09-27, round 18: generated the instruction-level patches N64Recomp's config needs -- cop0/eret nops and guarded div hooks, for real addresses this time
 
 With a trusted, sized symbol table in hand (round 14), did the mechanical
-scan `bdragoncore/battle-tanx-recomp`'s own config comments describe as
-needed: every `cop0` write and `eret` needs a nop (nothing is emulated),
+scan an N64Recomp config needs: every `cop0` write and `eret` needs a nop (nothing is emulated),
 every `div`/`divu`/`ddiv`/`ddivu` needs a guarded hook instead of running
 raw (a real divide-by-zero in the game would otherwise be a host
 `SIGFPE`). Decoded these directly from each trusted function's raw
@@ -4663,10 +4689,9 @@ Generated real `[[patches.instruction]]` entries for the cop0/eret nops
 instruction's actual `rs`/`rt` operands so the hook text references the
 right `ctx->rN` registers rather than being copy-pasted boilerplate.
 
-**Caveat on the div hooks**: the `div`/`divu` (32-bit) hook text exactly
-mirrors a confirmed-real pattern from `bdragoncore/battle-tanx-recomp`'s
-own config. The `ddiv`/`ddivu` (64-bit) hooks are this project's own
-extrapolation -- no 64-bit division example existed in the reference to
+**Caveat on the div hooks**: the `div`/`divu` (32-bit) hook text follows
+the usual N64Recomp pattern. The `ddiv`/`ddivu` (64-bit) hooks are this
+project's own extrapolation -- no 64-bit division example was available to
 confirm the exact syntax/available macros against. Marked inline in the
 file; verify before trusting those 9 specifically.
 
@@ -5002,7 +5027,7 @@ right to disassemble anything correctly. See `syms/rom_info.md` for the
 corrected formula and `tools/splat.yaml` for the fixed segment config.
 
 **How this surfaced**: round 9's n64sym scan (built while checking the
-reference projects Matt pointed at) returned matches like `__osDisableInt
+reference project Matt pointed at) returned matches like `__osDisableInt
 = 0x80105DB0` -- the exact vram address round 7 had already probed and
 called "texture-like data, an overlay slot." Rather than trust either
 tool, checked the raw ROM bytes directly:
@@ -5069,23 +5094,15 @@ to really be the game's first substantial function) actually do, and does
 tracing its real call graph (not the wrong-header one) lead anywhere near
 an actual overlay/asset-loading mechanism this time.
 
-## 2026-09-27, round 9: checked reference projects Matt pointed at -- a real methodology gap, and the right splat feature for the overlay slot
+## 2026-09-27, round 9: checked a reference project Matt pointed at -- a real methodology gap, and the right splat feature for the overlay slot
 
-Matt asked to check the original BattleTanx's recomp repo for reusable
-names, and separately pointed at
+Matt pointed at
 [RevoSucks/BMHeroRecomp](https://github.com/RevoSucks/BMHeroRecomp)
-(Bomberman Hero) as an example of this toolchain done well. Both led
-somewhere more useful than literal names.
-
-**bdragoncore/battle-tanx-recomp has no game-specific names to borrow.**
-Checked its full symbol table: every non-generic name in it (`osCreateThread`,
-`sprintf`, `memcpy`, `cosf`, ~150 total) is a standard libultra/libc name,
-almost certainly auto-identified by a signature-matching tool rather than
-found by hand -- there is not one manually-named game-specific function
-(no `player_update`-style name anywhere). So there's nothing to transplant
-address-for-address (the two games don't share code layout anyway), but it
-pointed at the actual reusable thing: the *tool* that generates exactly
-that kind of match automatically.
+(Bomberman Hero) as an example of this toolchain done well. That, and the
+question of where function names could come from at all, led somewhere
+more useful than borrowing names: standard libultra/libc names in projects
+like this are auto-identified by a signature-matching *tool*, not found by
+hand.
 
 **Found and built that tool: `n64sym`** (https://github.com/shygoo/n64sym).
 Ships a built-in signature database covering OS 2.0c through 2.0L
@@ -5096,8 +5113,7 @@ cleanly in this sandbox (`make n64sym`, plain g++/make, no special
 dependencies) and kicked off a thorough scan
 (`n64sym rom/battletanx_ga_usa.z64 -s -t -f splat -o ...`) against the GA
 ROM -- if this finds real matches, it should identify a good chunk of GA's
-own libultra surface automatically, the same way bdragoncore's ~150 names
-likely got found. Results not in yet as of this entry; check the next one.
+own libultra surface automatically. Results not in yet as of this entry; check the next one.
 
 **BMHeroRecomp turned out to be a bigger methodological finding than
 expected: it's not a from-scratch reverse-engineering effort at all.**
@@ -5110,9 +5126,8 @@ patches. That's a fundamentally stronger foundation than anything possible
 here: **no decompilation project exists for BattleTanx: Global Assault**
 (confirmed by the 2026-09-18 entry's own README research, and nothing
 found since contradicts that). So this project is necessarily doing the
-harder, lower-rigor tier of recomp -- closer to what
-`bdragoncore/battle-tanx-recomp` itself did (address+size symbols only,
-no matching decomp behind it) -- which is a real, previously-shipped
+harder, lower-rigor tier of recomp (address+size symbols only, no
+matching decomp behind it) -- which is a real, previously-shipped
 approach, just slower and more error-prone without a full decomp's
 byte-level verification to catch mistakes. Worth being upfront about that
 gap rather than implying this project has BMHeroRecomp-level rigor.
@@ -5428,9 +5443,7 @@ before spending the time.
   in parallel -- see below) -- all from the 2026-09-18 upload.
 - `tools/symbols_to_n64recomp_toml.py` -- new. Converts a Ghidra CSV export
   or a splat-style `name = 0xADDR;` list into the `[[section]].functions`
-  TOML array N64Recomp's own symbol file format expects (see
-  `bdragoncore/battle-tanx-recomp`'s `BattleTanxSyms/*.syms.toml` for the
-  target format). Not yet run against anything real -- there's no confirmed
+  TOML array N64Recomp's own symbol file format expects. Not yet run against anything real -- there's no confirmed
   full function list yet to feed it.
 - The ROM (`rom/battletanx_ga_usa.z64`) and the large raw probe dumps
   (`assets/unk_*.bin`, several megabytes each, essentially fragments of the
@@ -5442,25 +5455,18 @@ before spending the time.
 Before finding this uploaded work, a parallel scaffolding pass (same
 session) set up `CMakeLists.txt`, `.gitmodules` (N64Recomp,
 N64ModernRuntime, RecompFrontend, rt64), `patches/`, `include/`, and
-`BattleTanxGASyms/` following `bdragoncore/battle-tanx-recomp`'s structure
-directly -- the build-system side of what this project will eventually
+`BattleTanxGASyms/` in the usual N64Recomp project layout -- the build-system side of what this project will eventually
 need, once real symbols exist. That's still in the repo and still correct;
 it just hasn't been exercised against anything yet, since the symbol table
 it expects doesn't exist. The splat-based work above is the actual path to
 producing that symbol table. See `PROGRESS.md` for that side's status.
 
-### Heads up: the ROM ended up in this repo's history
+### Heads up: the ROM ended up in this repo's history (resolved)
 
-The uploaded `battletanx-recomp.7z` / `battletanx-recomp-scaffold.zip`
-archives (commits `d1abf2d` and `52b0132` on `main`) contain the full ROM
-dump and several multi-megabyte raw excerpts of it, because they're
-straight archives of a working directory that had those files present
-locally (correctly gitignored *within* that nested project, but the
-archive tool doesn't know about `.gitignore`). They're sitting in this
-repo's git history on GitHub now. Worth deciding whether to scrub that
-history (e.g. rewriting `main`, or just deleting-and-force-pushing once
-the useful bits are extracted) -- didn't do this myself since rewriting
-`main`'s history isn't something to do without asking first.
+Two archives uploaded early on contained the ROM dump and raw excerpts of
+it. That history was rewritten before the repository went public: no
+branch or tag contains them, and GitHub no longer serves those commits
+(checked in round 133).
 
 ## 2026-09-18 (evening, after seven rounds of real splat runs)
 
@@ -5524,7 +5530,7 @@ guessing more addresses.
   identification (`NBQE`) -- see `syms/rom_info.md`.
 - Scaffolded the repo: `lib/` submodules for N64Recomp, N64ModernRuntime,
   RT64, RecompFrontend; `src/`, `include/`, `syms/`, `patches/`, `tools/`
-  layout following VPW64Recomp/GGA-Recomp.
+  layout.
 - Documented the known USA-ROM boot-timing race as a patch to expect --
   see `patches/README.md`.
 - Got real, clean disassembly confirming the crt0 stub and ~19KB of
@@ -5554,8 +5560,7 @@ interactively from this session.
    overlay ID/address to a ROM source location) -- that turns "guess a jal
    target and hope" into "look it up properly."
 3. Check whether the original 1998 BattleTanx N64 ROM is available, to
-   byte-match shared engine/libultra functions against it (the trick both
-   VPW64Recomp and GGA-Recomp used against their own sister titles) --
+   byte-match shared engine/libultra functions against it --
    still useful for identifying functions within the confirmed resident
    block, independent of the overlay question.
 4. Locate the USA boot-race branch (`patches/README.md`) in the real

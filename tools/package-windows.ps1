@@ -10,7 +10,8 @@
 #
 # Output: dist\BattleTanxGARecompiled-<version>-windows.zip containing the exe,
 # its DLLs, the assets folder (loaded relative to the working directory, which
-# is the exe's folder when launched from Explorer), README and license.
+# is the exe's folder when launched from Explorer), README, license, and the
+# third-party license notices (licenses\).
 # Uses its own build folder (build-release) so a Debug dev build is untouched.
 param(
     [string]$Version = "beta",
@@ -57,6 +58,50 @@ foreach ($file in @("BattleTanxGARecompiled.exe", "SDL2.dll", "dxil.dll", "dxcom
 }
 Copy-Item "assets" $stage -Recurse
 Copy-Item "README.md", "COPYING" $stage
+
+# License notices for the third-party code built into the exe or shipped
+# beside it. Each library's own file, gathered under licenses\.
+$licenseDir = Join-Path $stage "licenses"
+New-Item -ItemType Directory -Path $licenseDir | Out-Null
+$licenses = [ordered]@{
+    "N64ModernRuntime"      = "lib\N64ModernRuntime\COPYING"
+    "N64Recomp"             = "lib\N64ModernRuntime\N64Recomp\LICENSE"
+    "RT64"                  = "lib\rt64\LICENSE"
+    "plume"                 = "lib\rt64\src\contrib\plume\LICENSE"
+    "hlslpp"                = "lib\rt64\src\contrib\hlslpp\LICENSE"
+    "imgui"                 = "lib\rt64\src\contrib\imgui\LICENSE.txt"
+    "implot"                = "lib\rt64\src\contrib\implot\LICENSE"
+    "im3d"                  = "lib\rt64\src\contrib\im3d\LICENSE"
+    "ddspp"                 = "lib\rt64\src\contrib\ddspp\LICENSE"
+    "nativefiledialog-extended" = "lib\rt64\src\contrib\nativefiledialog-extended\LICENSE"
+    "stb"                   = "lib\rt64\src\contrib\stb\LICENSE"
+    "xxHash"                = "lib\rt64\src\contrib\xxHash\LICENSE"
+    "zstd"                  = "lib\rt64\src\contrib\zstd\LICENSE"
+    "re-spirv"              = "lib\rt64\src\contrib\re-spirv\LICENSE"
+    "miniz"                 = "lib\N64ModernRuntime\thirdparty\miniz\LICENSE"
+    "o1heap"                = "lib\N64ModernRuntime\thirdparty\o1heap\LICENSE"
+    "RmlUi"                 = "lib\RecompFrontend\recompui\lib\RmlUi\LICENSE.txt"
+    "lunasvg"               = "lib\RecompFrontend\recompui\lib\lunasvg\LICENSE"
+    "plutovg"               = "lib\RecompFrontend\recompui\lib\lunasvg\plutovg\LICENSE"
+    "FreeType"              = "lib\RecompFrontend\recompui\lib\freetype-windows-binaries\LICENSE.TXT"
+    "GamepadMotionHelpers"  = "lib\RecompFrontend\lib\GamepadMotionHelpers\LICENSE"
+    "SlotMap"               = "lib\SlotMap\README.md"
+    "DirectXShaderCompiler" = "licenses\DirectXShaderCompiler.txt"
+}
+foreach ($entry in $licenses.GetEnumerator()) {
+    if (Test-Path $entry.Value) {
+        Copy-Item $entry.Value (Join-Path $licenseDir "$($entry.Key).txt")
+    }
+    else {
+        Write-Warning "License file not found: $($entry.Value)"
+    }
+}
+# SDL2 comes from CMake's download, in the build folder.
+$sdlLicense = Get-ChildItem -Path (Join-Path $BuildDir "_deps") -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -in @("LICENSE.txt", "COPYING.txt") -and $_.FullName -match "sdl2" } |
+    Sort-Object { $_.FullName.Length } | Select-Object -First 1
+if ($sdlLicense) { Copy-Item $sdlLicense.FullName (Join-Path $licenseDir "SDL2.txt") }
+else { Write-Warning "SDL2 license not found under $BuildDir\_deps" }
 
 $zip = Join-Path $root "dist\$name.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }

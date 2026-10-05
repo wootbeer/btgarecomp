@@ -4,8 +4,8 @@
 #
 # Located from the game's own audio-task setup: func_800FF698 passes ucode
 # text 0x800FA210 / data 0x801262E0. ROM offset = vram - 0x80070000.
-# Same 0xC60-byte size as Banjo's n_aspMain but a slightly different build:
-# every dispatch entry is 4 bytes below Banjo's.
+# Same 0xC60-byte size as Banjo-Kazooie's n_aspMain but a slightly different
+# build: every dispatch entry is 4 bytes below Banjo-Kazooie's.
 text_offset = 0x8A210
 text_size = 0xC60
 text_address = 0x04001080
@@ -16,8 +16,8 @@ extra_indirect_branch_targets = [
     # command dispatch table, the first 16 halfwords of the ucode data
     # (0x801262E0). Two slots are 0 (unused commands). The rest follow a
     # `j 0x10EC` or `jr $ra`, except command 0x0E's entry 0x02B0: the RSP PC
-    # is 12 bits, so that's IMEM 0x12B0 (Banjo's table has the same value) --
-    # the last store of the handler at 0x12A8. Round 91: it is used.
+    # is 12 bits, so that's IMEM 0x12B0 (Banjo-Kazooie's table has the same
+    # value) -- the last store of the handler at 0x12A8. Round 91: it is used.
     0x10EC, 0x139C, 0x119C, 0x1A64, 0x11C8, 0x17EC, 0x1208, 0x127C, 0x1348, 0x1248, 0x1C84, 0x12D4, 0x1384,
     0x12B0
 ]
