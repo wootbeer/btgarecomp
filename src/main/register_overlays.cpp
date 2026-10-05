@@ -17,6 +17,8 @@
 
 #include "../../RecompiledFuncs/recomp_overlays.inl"
 
+void btga_install_crash_handler(const SectionTableEntry* sections, size_t num_sections);
+
 void register_btga_overlays() {
     recomp::overlays::overlay_section_table_data_t sections{
         .code_sections = section_table,
@@ -30,6 +32,9 @@ void register_btga_overlays() {
     };
 
     recomp::overlays::register_overlays(sections, overlays);
+
+    // Crash reports name the faulting game function (src/main/crash_handler.cpp).
+    btga_install_crash_handler(section_table, ARRLEN(section_table));
 }
 
 #else

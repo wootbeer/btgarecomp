@@ -3,6 +3,39 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-05, round 128: crash reporting (for the mission 13 crash)
+
+**Bug report:** the game crashes at the start of mission 13 (Eiffel
+Tower), which the user says also happens on N64 emulators. Event Viewer
+shows an access violation inside the exe (offset `0x31c443` in the 0.1.0
+release). A second crash, while alt-tabbing (possibly also at that
+mission start), faulted in ntdll. A raw offset in a user-built exe can't
+be mapped back from here.
+
+**Crash handler** (`src/main/crash_handler.cpp`):
+- Installed from `register_btga_overlays()` with N64Recomp's
+  `section_table`.
+- On Windows it's an unhandled-exception filter; on Linux, `sigaction`
+  for SIGSEGV/SIGBUS/SIGILL/SIGFPE.
+- It writes `crash_log.txt` (working directory, i.e. the exe folder) and
+  stderr with:
+  - the exception and module-relative fault offset (as Event Viewer
+    shows it)
+  - the game function containing the faulting PC (nearest recompiled
+    function start; Debug builds' incremental-link `jmp` thunks are
+    followed)
+  - for memory faults, the N64 address accessed (host address minus
+    rdram, which the per-VI scissor hook records via
+    `btga_crash_note_rdram`)
+  - game functions found in up to 64 KB of the faulting thread's stack,
+    bounded by the thread's real stack top
+- On Windows it also shows a message box pointing at the log, since
+  Release builds have no console.
+
+Tested on Linux with a fake function table and a deliberate out-of-range
+read: it reports the function, the N64 address and the caller. The full
+game builds.
+
 ## 2026-10-05, round 127: score screen Kills / Tanks Lost stuck at 0
 
 **Context:** 0.1.0 is public (29 downloads, no issues filed yet). The user
