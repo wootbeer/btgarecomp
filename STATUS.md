@@ -33,6 +33,25 @@ screen at 3+ VIs per frame, where `(int)dt >= 1`. The other count-ups
 don't stall: Tank Bucks adds `(int)(rate*dt)` and `0x65D8` adds
 `(int)(dt*3)`.
 
+**Audit for the same pattern.** A scan of all recompiled code for loads
+of the frame-time globals followed by a float-to-int conversion found 53
+sites.
+- **31 use the governor step** (`0x80219488`). Since round 125 that equals
+  hardware's 1.003 per 30 fps frame, so they behave as on console. That
+  includes the plain `(int)step` sites `func_80087DF4` and
+  `func_80088030`.
+- **22 use dt** (`0x803A5948`, 0.75 per 30 fps frame). Evaluated with their
+  real constants:
+  - fades x15; timers x2 / x3
+  - score x200; other rates x50 / x400
+  - Tank Bucks `rate*dt`: rate = total/120, at least 100
+  - `func_800BE0BC` subtracts dt from a float timer, keeping fractions
+  - all give >= 1 per frame or keep the remainder
+- **The only stalling sites were the four count-ups fixed here.**
+- **One data-dependent site to watch:** `func_800BDF34` (in
+  `func_800BDDC8`, a 2D element animation) adds `(int)(s16 speed * dt)`.
+  It would stall only for a speed of 1 in its data table.
+
 **Fix** (`src/game/frame_dt_fix.cpp`): `btga_score_count_step`, hooked at
 each routine's join label before the add (`0x800CF478`, `0x800CF534`,
 `0x800CF624`, `0x800CF6E0`), makes a zero step 1 while dt > 0. The
