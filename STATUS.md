@@ -3,6 +3,71 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-05, round 131: round 125's step snap reverted; proportional fixes instead
+
+**Round 130 result.** The user's A/B test, at their usual higher framerate:
+**B (snap off) is "way smoother, not even close"**. The pacing log shows
+why:
+- Gameplay runs a steady 30 fps (frame interval 28-38 ms, average 33.6).
+- The raw frame step at `0x80219488` is **0.63-0.86 per frame, about
+  0.75**, not the ~1.0 round 125 assumed.
+- Round 125 rounded `step/0.5` to whole VIs, so it flipped between 1 and
+  2 VIs (0.5 and 1.0) on alternate frames. Everything moved by that step
+  lurched at half and full speed in turn, which shows most when turning
+  the camera.
+
+**What the wrong assumption affected:**
+- Round 125, and the step-site half of round 127's audit (which assumed
+  1.003 per frame).
+- **Not** round 127's score-screen fix: that uses dt at `0x803A5948`,
+  0.75 per frame, and is confirmed in game.
+- Not rounds 122, 124 or 129, which don't touch the step.
+
+**Re-audit of the 31 step sites at 0.75:**
+- Most multiply by large constants (x728, x512, x512x3, x255/30,
+  x255/45) and are fine.
+- Plain `(int)step` gives 0 at 30 fps (about 1 on hardware, where
+  gameplay ran around 20 fps with step ~1.1):
+  - `func_800F11D0`: the shield-flash life; flashes never die
+  - `func_80087DF4`: an angle turn limit of `(int)step << 10`, masked
+    `& 0xFC00`; the angle never turns
+  - `func_80088030`: a deadline at object `+0xC` extended by
+    `(int)step`
+  - These three were helped, unevenly, by round 125's flipping step.
+- Data-dependent sites, `int x step` (`func_800D2B44`, `func_800DB850`,
+  `func_800E3460`, `func_80087A80`, `func_800A6C20`, `func_800F708C`),
+  are left alone: fine for any integer factor of 2 or more.
+
+**Fix** (`src/game/frame_dt_fix.cpp`). The step is left as measured, and
+each stalled site uses the real fractional step, proportional to time as
+the game intends and within about 12% of hardware's truncated rate:
+- `btga_shield_flash_step`, before `0x800F1268`: subtract the real step
+  (10.0 of life, about 0.44 s at 30 fps vs 0.5 s on hardware).
+- `btga_turn_step`, at `L_80087E90`: limit = `step*1024`. The delay-slot
+  mask at `0x80087E94` is patched from `0xFC00` to `0xFFFF`.
+- `btga_deadline_step`, before `0x800885CC`: the real step, with the
+  fraction carried per object (keyed by `$s4`).
+
+`BTGA_NO_FRAME_STEP_SNAP` is gone; `BTGA_PACING_LOG` stays.
+
+**Missing-function scan, without its prologue filter.** All code-built
+(`lui`/`addiu`) pointers into other functions that miss a function start:
+28 hits, none of them function entries. They are exception-vector code
+the runtime replaces, audio/OS global data inside library symbols, and
+coincidental data addresses. (`func_800F11D0`, a leaf function with no
+prologue, is already a symbol.)
+
+**Quit crash.** Both A/B logs ended with an access violation in
+`func_8007A818` reading `0x80129494` on exit.
+- `recomp::start` frees rdram (`VirtualFree`) before returning, while the
+  game's threads, never joined, are still running.
+- Before round 128 that died silently; the new handler turned it into a
+  crash box on every quit.
+- The handler now treats a fault inside the 512 MB KSEG0 window (always
+  mapped while running) as this shutdown race and exits quietly
+  (`TerminateProcess` / `_exit`). Tested on Linux: freed-memory faults
+  exit quietly, real faults are still reported.
+
 ## 2026-10-05, round 130: frame pacing log and A/B switches
 
 **Reports this session:**

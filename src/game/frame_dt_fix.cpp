@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <unordered_map>
 
 #include "recomp.h"
 
@@ -34,29 +35,33 @@ extern "C" void btga_frame_dt(uint8_t* rdram, recomp_context* ctx) {
     }
 }
 
-// Round 125: the frame step at 0x80219488.
+// The frame step at 0x80219488 (rounds 125, 131).
 //
-// func_80099FE8 (the frame-rate governor) also stores the time since the
-// previous frame in 1/30 s units: osGetTime() microseconds * 30 / 1e6. Some
-// effects use only its whole part -- the shield-hit flash (update at
-// 0x800F11D0) loses (int)step of its 10.0 life each frame and is deleted
-// once life <= step. On hardware a 30 fps frame is two 59.826 Hz VIs, so
-// step = 1.003 and (int)step = 1. Here VIs are exactly 60 Hz, so step comes
-// out just under 1.0, (int)step = 0, and the flashes never fade or go away:
-// they pile up around a shielded tank. Snap the step to whole VIs at the
-// N64's own rate.
-static constexpr float kStepPerVi = 30.0f / 59.826f;
-
-// Hooked right before `swc1 $f0, -0x6B78($at)` in func_80099FE8 (0x8009A398).
+// func_80099FE8 (the frame-rate governor) stores the time since the previous
+// frame, measured with osGetTime(): about 0.75 per 30 fps frame (0.63-0.86
+// measured, round 130). A few sites use only its whole part, which is >= 1
+// on hardware, where gameplay ran slower (about 20 fps, step ~1.1), but 0 at
+// our 30 fps -- so they stall:
+//   - the shield-hit flash (update 0x800F11D0) never loses life and piles up
+//   - func_80087DF4 turns an angle by at most (int)step * 1024 per frame
+//   - func_80088030 pushes a deadline forward by (int)step per frame
+// Each is fixed below to use the real, fractional step -- proportional to
+// time, as the game intends, and within ~12% of hardware's truncated rate.
 //
-// Testing switches (environment variables, read once):
-//   BTGA_NO_FRAME_STEP_SNAP=1  leave the step as measured
-//   BTGA_PACING_LOG=1          every 150 gameplay frames, print how many VIs
-//                              frames took and the host frame interval spread
+// (Round 125 instead snapped the step to whole VIs, assuming it was ~1.0 per
+// frame. At 0.75 that flipped it between 0.5 and 1.0 every other frame and
+// made motion visibly uneven -- reverted in round 131.)
+//
+// Testing switch: BTGA_PACING_LOG=1 prints, every 150 gameplay frames, how
+// many VIs frames took and the host frame interval spread.
 namespace {
     bool env_flag(const char* name) {
         const char* v = std::getenv(name);
         return v != nullptr && v[0] != '\0' && v[0] != '0';
+    }
+
+    float frame_step(uint8_t* rdram) {
+        return *(float*)(rdram + (0x80219488u - 0x80000000u));
     }
 
     struct PacingStats {
@@ -68,8 +73,9 @@ namespace {
         std::chrono::steady_clock::time_point window_start{};
     };
 
-    void log_pacing(float raw, float vis) {
+    void log_pacing(float raw) {
         static PacingStats st;
+        float vis = std::round(raw / 0.375f);
         auto now = std::chrono::steady_clock::now();
         if (st.last.time_since_epoch().count() != 0) {
             double ms = std::chrono::duration<double, std::milli>(now - st.last).count();
@@ -98,20 +104,40 @@ namespace {
     }
 }
 
+// Hooked right before `swc1 $f0, -0x6B78($at)` in func_80099FE8 (0x8009A398).
+// The step is left as measured.
 extern "C" void btga_frame_step(uint8_t* rdram, recomp_context* ctx) {
-    static const bool no_snap = env_flag("BTGA_NO_FRAME_STEP_SNAP");
     static const bool pacing_log = env_flag("BTGA_PACING_LOG");
-    float raw = ctx->f0.fl;
-    float vis = std::round(raw / (30.0f / 60.0f));
     if (pacing_log) {
-        log_pacing(raw, vis);
+        log_pacing(ctx->f0.fl);
     }
-    if (no_snap) {
-        return;
-    }
-    if (vis >= 1.0f) { // keep tiny/zero first-frame values as measured
-        ctx->f0.fl = vis * kStepPerVi;
-    }
+}
+
+// Shield-hit flash update (func_800F11D0): before `sub.s $f0, $f0, $f2`
+// (0x800F1268), $f2 = (float)(int)step. Subtract the real step instead.
+extern "C" void btga_shield_flash_step(uint8_t* rdram, recomp_context* ctx) {
+    ctx->f2.fl = frame_step(rdram);
+}
+
+// func_80087DF4: at L_80087E90, $a2 = (int)step << 10, the most an angle may
+// turn this frame (masked to 0xFC00 in the call's delay slot, patched to
+// 0xFFFF in the TOML). Use step * 1024.
+extern "C" void btga_turn_step(uint8_t* rdram, recomp_context* ctx) {
+    float step = frame_step(rdram);
+    int32_t amount = step > 0.0f ? (int32_t)(step * 1024.0f) : 0;
+    ctx->r6 = amount > 0xFFFF ? 0xFFFF : amount;
+}
+
+// func_80088030: before `addu $v0, $v0, $v1` (0x800885CC), $v1 = (int)step is
+// added to an integer deadline at +0xC of the object in $s4. Add the real
+// step, carrying the fraction per object between frames.
+extern "C" void btga_deadline_step(uint8_t* rdram, recomp_context* ctx) {
+    static std::unordered_map<uint32_t, float> remainders;
+    float& rem = remainders[(uint32_t)ctx->r20];
+    float total = frame_step(rdram) + rem;
+    int32_t whole = total > 0.0f ? (int32_t)total : 0;
+    rem = total - (float)whole;
+    ctx->r3 = whole;
 }
 
 // Round 127: the end-of-level score screen's Kills and Tanks Lost count-ups.

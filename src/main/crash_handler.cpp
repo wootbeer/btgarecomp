@@ -68,6 +68,14 @@ namespace {
         return (uint32_t)(addr - (uintptr_t)rdram_base) + 0x80000000u;
     }
 
+    // On quit, librecomp frees rdram while the game's threads (never joined)
+    // can still be running; their next access faults. While the game runs,
+    // the whole 512 MB KSEG0 window is mapped, so a fault inside it can only
+    // be that -- exit quietly instead of reporting a crash.
+    bool is_shutdown_fault(bool has_access, uintptr_t access) {
+        return has_access && in_rdram(access) && (access - (uintptr_t)rdram_base) < 0x20000000ull;
+    }
+
     void report(FILE* out, const char* what, uintptr_t pc, uintptr_t module_base, bool has_access, uintptr_t access, bool write, const uintptr_t* stack, size_t stack_words) {
         fprintf(out, "BattleTanx: Global Assault Recompiled crashed.\n");
         fprintf(out, "Exception: %s\n", what);
@@ -157,6 +165,9 @@ namespace {
         HMODULE module = nullptr;
         GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)pc, &module);
         bool has_access = (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION || rec->ExceptionCode == EXCEPTION_IN_PAGE_ERROR) && rec->NumberParameters >= 2;
+        if (is_shutdown_fault(has_access, has_access ? (uintptr_t)rec->ExceptionInformation[1] : 0)) {
+            TerminateProcess(GetCurrentProcess(), 0);
+        }
         write_reports(exception_name(rec->ExceptionCode), pc, (uintptr_t)module, has_access,
             has_access ? (uintptr_t)rec->ExceptionInformation[1] : 0,
             has_access && rec->ExceptionInformation[0] == 1, (uintptr_t)info->ContextRecord->Rsp);
@@ -176,6 +187,9 @@ namespace {
         uintptr_t pc = 0, sp = (uintptr_t)&uctx;
 #endif
         const char* what = sig == SIGSEGV ? "segmentation fault" : sig == SIGBUS ? "bus error" : sig == SIGILL ? "illegal instruction" : "floating point exception";
+        if (is_shutdown_fault(sig == SIGSEGV || sig == SIGBUS, (uintptr_t)info->si_addr)) {
+            _exit(0);
+        }
         Dl_info dl{};
         uintptr_t module_base = dladdr((void*)pc, &dl) != 0 ? (uintptr_t)dl.dli_fbase : 0;
         write_reports(what, pc, module_base, sig == SIGSEGV || sig == SIGBUS, (uintptr_t)info->si_addr, false, sp);
