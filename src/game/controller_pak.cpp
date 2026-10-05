@@ -2,12 +2,7 @@
 // built-in `ignored_funcs` list expects some runtime to provide under a
 // `_recomp` suffix, but stock N64ModernRuntime doesn't implement -- see
 // stock_runtime_compat.cpp's file-level comment for the full context, and
-// PROGRESS.md item 7 / STATUS.md round 23 for how this was found.
-//
-// This is exactly the gap `bdragoncore/battle-tanx-recomp`'s own
-// `src/game/controller_pak.cpp` fills for the original BattleTanx (per that
-// project's CMakeLists.txt comment) -- confirmed here as a real need for
-// Global Assault too, not just a suspicion.
+// STATUS.md round 23 for how this was found.
 //
 // These are libultra's low-level pak internals. The game reaches them only
 // through the osPfs*/osMotor* entry points, which are replaced at a higher
@@ -26,7 +21,7 @@
 // not a checked reference) -- low risk either way since nothing here
 // reports a real pak connected, but revisit this specific function first
 // if real Controller Pak I/O is ever added.
-extern "C" void __osContAddressCrc_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osContAddressCrc_recomp(uint8_t*, recomp_context* ctx) {
     uint16_t address = (uint16_t)ctx->r4;
     uint16_t crc = 0;
     uint16_t shifted = (uint16_t)(address << 1);
@@ -56,26 +51,26 @@ extern "C" void __osContAddressCrc_recomp(uint8_t* rdram, recomp_context* ctx) {
 // constants, since those exact numeric values weren't independently
 // verified against a primary libultra source.
 
-extern "C" void __osPfsSelectBank_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osPfsSelectBank_recomp(uint8_t*, recomp_context* ctx) {
     ctx->r2 = (uint32_t)-1;
 }
 
-extern "C" void __osContRamWrite_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osContRamWrite_recomp(uint8_t*, recomp_context* ctx) {
     ctx->r2 = (uint32_t)-1;
 }
 
-extern "C" void __osContRamRead_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osContRamRead_recomp(uint8_t*, recomp_context* ctx) {
     ctx->r2 = (uint32_t)-1;
 }
 
-extern "C" void __osCheckPackId_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osCheckPackId_recomp(uint8_t*, recomp_context* ctx) {
     ctx->r2 = (uint32_t)-1;
 }
 
-extern "C" void __osPfsRWInode_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osPfsRWInode_recomp(uint8_t*, recomp_context* ctx) {
     ctx->r2 = (uint32_t)-1;
 }
 
-extern "C" void __osRepairPackId_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osRepairPackId_recomp(uint8_t*, recomp_context* ctx) {
     ctx->r2 = (uint32_t)-1;
 }

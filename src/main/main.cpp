@@ -1,16 +1,14 @@
 // Entry point that wires this project's recompiled game code up to
 // N64ModernRuntime (ultramodern + librecomp) and RecompFrontend
-// (recompui + recompinput). Structurally modeled on
-// bdragoncore/battle-tanx-recomp's src/main/main.cpp (same toolchain, same
-// runtime, same recompui/librecomp APIs) -- nothing here is BattleTanx's
-// own game logic or symbol addresses, just the generic plumbing every
-// N64Recomp-based project using this runtime needs.
+// (recompui + recompinput): graphics/window, audio, input and config
+// callbacks. Game-specific behaviour lives in src/game/.
 //
-// Not done yet:
-//   - UI assets (primary font, icons, promptfont) are BanjoRecomp's, not
-//     designed for this game -- see STATUS.md round 86.
-//   - No mod/texture-pack content types and no launcher menu customization
-//     (the library's own default_launcher_init_callback runs instead).
+// The launcher/UI assets (fonts, icons, promptfont) come from BanjoRecomp,
+// another GPL-3.0 port on the same RecompFrontend (see STATUS.md round 86);
+// the fonts carry their own licenses in assets/.
+//
+// Not done yet: no mod/texture-pack content types and no launcher menu
+// customization (the library's default_launcher_init_callback runs).
 
 #include <algorithm>
 #include <cstdio>
@@ -155,8 +153,7 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
 #elif defined(RT64_SDL_WINDOW_VULKAN)
     // Only defined on Linux (see CMakeLists.txt) -- Windows uses plume's
     // D3D12 backend instead, which doesn't need an SDL window flag (it
-    // talks to the GPU through the raw HWND returned below), same as
-    // bdragoncore/battle-tanx-recomp's own create_window.
+    // talks to the GPU through the raw HWND returned below).
     flags |= SDL_WINDOW_VULKAN;
 #endif
 
@@ -176,7 +173,7 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
 #elif defined(__linux__) || defined(__ANDROID__)
     return ultramodern::renderer::WindowHandle{ window };
 #else
-    static_assert(false && "Only Linux and Windows are set up in this file so far -- see PROGRESS.md.");
+    static_assert(false && "Only Linux and Windows are set up in this file so far.");
 #endif
 }
 
@@ -188,8 +185,7 @@ static void update_gfx(void*) {
     // is never serviced, and Windows marks it "Not Responding" even though
     // nothing has actually crashed or deadlocked. poll_inputs() is already
     // correctly wired as the ultramodern input_callbacks_t::poll_input
-    // callback and doesn't need to run again from here too (matches
-    // BanjoRecomp's own update_gfx, which calls only handle_events()).
+    // callback and doesn't need to run again from here too.
     recompinput::handle_events();
 
     // Mirrors RT64's Expand target (rt64_workload_queue.cpp): the window's
@@ -424,8 +420,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Continuing without sound.\n");
     }
 
-    // Inter Variable (SIL OFL 1.1, assets/INTER_LICENSE.txt), the same primary
-    // font BanjoRecomp registers with this same RecompFrontend. The family
+    // Inter Variable (SIL OFL 1.1, assets/INTER_LICENSE.txt). The family
     // name must match the one stored inside the font file: recompui's
     // generated base stylesheet sets `font-family` to it, and RmlUi draws no
     // text for a family it never loaded (STATUS.md round 86 -- the old
@@ -445,10 +440,8 @@ int main(int argc, char** argv) {
     // thread) hard-requires recompui::config::finalize() to have already
     // run -- without it, "loaded_configs" stays false and/or the config
     // system is left in a state RT64/recompui doesn't expect, which was
-    // crashing startup entirely (see STATUS.md). Every other N64Recomp
-    // project using this same RecompFrontend runtime (e.g. BanjoRecomp's
-    // banjo::init_config(), src/game/config.cpp) creates its config tabs
-    // and calls finalize() before recomp::start() for exactly this reason.
+    // crashing startup entirely (see STATUS.md). So the config tabs are
+    // created and finalized here, before recomp::start().
     recompui::config::GeneralTabOptions general_tab_options{};
     btga::config::add_general_options(recompui::config::create_general_tab(general_tab_options));
     recompui::config::create_graphics_tab();
@@ -513,6 +506,7 @@ int main(int argc, char** argv) {
         .argc = argc,
         .argv = argv,
         .project_version = project_version,
+        .window_handle = {}, // created by gfx_callbacks.create_window
         .rsp_callbacks = rsp_callbacks,
         .renderer_callbacks = renderer_callbacks,
         .audio_callbacks = audio_callbacks,
@@ -521,6 +515,7 @@ int main(int argc, char** argv) {
         .events_callbacks = events_callbacks,
         .error_handling_callbacks = error_handling_callbacks,
         .threads_callbacks = threads_callbacks,
+        .message_queue_control = {}, // the runtime's defaults
     });
 
     NFD_Quit();

@@ -27,7 +27,7 @@ static constexpr float kViUnits = 0.375f;
 
 // Hooked right before `swc1 $f0, 0x5948($at)` in func_800BF80C (0x800BFAC8,
 // gameplay) and func_800BFAEC (0x800BFC80, intro / attract demo / credits).
-extern "C" void btga_frame_dt(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void btga_frame_dt(uint8_t*, recomp_context* ctx) {
     float raw = ctx->f0.fl;
     float snapped = std::round(raw / kViUnits) * kViUnits;
     if (snapped >= kViUnits) { // keep tiny/zero first-frame values as measured
@@ -106,7 +106,7 @@ namespace {
 
 // Hooked right before `swc1 $f0, -0x6B78($at)` in func_80099FE8 (0x8009A398).
 // The step is left as measured.
-extern "C" void btga_frame_step(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void btga_frame_step(uint8_t*, recomp_context* ctx) {
     static const bool pacing_log = env_flag("BTGA_PACING_LOG");
     if (pacing_log) {
         log_pacing(ctx->f0.fl);

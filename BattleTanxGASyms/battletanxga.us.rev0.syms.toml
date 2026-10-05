@@ -19,8 +19,10 @@
 #   addresses, but verify before trusting the name/boundary at face value.
 # - Un-named entries (func_XXXXXXXX) have no n64sym match; real function, unknown
 #   purpose.
-# - Only covers the first MB. The remaining ~7MB of this 8MB ROM is completely
-#   unanalyzed -- see PROGRESS.md.
+# - Only covers the first MB, which holds all the game's code (STATUS.md round
+#   17: the remaining ~7MB of this 8MB ROM is assets).
+# - Corrected by hand since wherever a merged or mis-sized function was found
+#   (each fix is noted at its entry and in STATUS.md).
 
 [[section]]
 name=".resident_first_mb"
@@ -461,8 +463,8 @@ functions = [
     # functions back to back -- each with its own standard prologue
     # (addiu $sp, $sp, -N / sw $ra, ...) and its own jr $ra/nop epilogue --
     # not one function with internal branches. The original boundary-
-    # detection pass merged them (see PROGRESS.md item 3's "sizes are still
-    # mostly gap-derived" caveat). The merge was silently wrong until now:
+    # detection pass merged them (its sizes were gap-derived, see the
+    # header). The merge was silently wrong until now:
     # the game's own code does an indirect call straight to the middle
     # function's start (0x8009ee08), which N64Recomp can only resolve if
     # that address is itself a declared function entry -- hence "Failed to

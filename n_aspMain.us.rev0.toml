@@ -1,5 +1,5 @@
 # BattleTanx: Global Assault's RSP audio microcode (n_aspMain), recompiled by
-# N64Recomp's RSPRecomp -- same approach as BanjoRecomp's n_aspMain.us.rev0.toml.
+# N64Recomp's RSPRecomp.
 # See STATUS.md round 90.
 #
 # Located from the game's own audio-task setup: func_800FF698 passes ucode

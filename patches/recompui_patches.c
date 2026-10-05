@@ -27,7 +27,7 @@ extern void btga_fix_screen_edge_scissors(void);
 // the early-return paths below.
 //
 // Field layout at the offsets below isn't recovered as a real struct yet
-// (see PROGRESS.md) -- these are raw offsets into the same *state pointer
+// -- these are raw offsets into the same *state pointer
 // the original code indexed with, matching the disassembly exactly:
 //   0x1EC (u16): swap-due threshold, compared against 0x1F0.
 //   0x1F0 (u16): pending-swap counter; cleared once a swap happens.

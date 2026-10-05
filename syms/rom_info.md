@@ -40,8 +40,7 @@ reach those databases.
 Rough, dependency-free function-count sanity check
 (`tools/rough_function_scan.py`, see that file's caveats):
 ~1,900 `jr $ra` epilogue markers across the ROM, averaging ~353 bytes apart.
-That's the right order of magnitude for a game this size and roughly in
-line with GGA-Recomp's reported ~2,639 functions for a comparably-scoped
-title -- not a real function count, just a plausibility check that this
+That's the right order of magnitude for a game this size -- not a real
+function count, just a plausibility check that this
 ROM looks like ordinary N64 code and not something pre-compressed or
 unusually structured.

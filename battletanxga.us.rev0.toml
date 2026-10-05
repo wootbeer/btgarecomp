@@ -1,8 +1,8 @@
 # Config file for BattleTanx: Global Assault (USA) Recompilation.
-# Assembled 2026-09-27 (round 20) from the pieces generated in rounds 13-19 --
-# see STATUS.md for how each part was derived and PROGRESS.md for what's still
-# missing (this covers only the first automatically-loaded MB of code; see
-# round 17 for why the remaining ~7MB is believed to be assets, not more code).
+# Assembled 2026-09-27 (round 20) from the pieces generated in rounds 13-19,
+# and extended since with the hooks and patches below -- see STATUS.md for how
+# each was derived. It covers the first, automatically-loaded MB of the ROM,
+# which holds all the game's code (round 17: the remaining ~7MB is assets).
 
 [input]
 entrypoint = 0x80071000
@@ -1432,11 +1432,10 @@ text = """
 # boundary with proper register save/restore -- so nothing protects
 # func_8009D3A4's own register-resident locals (s0-s7, used throughout
 # its real logic) from being clobbered by whatever a fired callback does.
-# Reverted. Wiring this up correctly likely needs BanjoRecomp's actual
-# approach: a full RECOMP_PATCH (complete function replacement, which
-# gets proper compiler-managed register preservation at its own call
-# boundary) via the ELF-based patches/ toolchain this project has never
-# set up -- not a same-context mid-body injection.
+# Reverted. Round 62 wired it up as a full RECOMP_PATCH instead (complete
+# function replacement, which gets proper register preservation at its own
+# call boundary) via the ELF-based patches/ toolchain -- not a same-context
+# mid-body injection.
 
 # Round 65 (STATUS.md): after round 64's merged-function fix let the game
 # progress further, func_800A1290 (the VI-message dispatcher thread) was

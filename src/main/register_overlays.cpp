@@ -8,9 +8,7 @@
 // call (a function pointer or jump table entry) has to fall back to
 // get_function()'s runtime func_map lookup, which fails with "Failed to
 // find function at 0x..." (librecomp/src/overlays.cpp) for every such call
-// with this piece missing. Same pattern as BanjoRecomp's own
-// src/main/register_overlays.cpp (github.com/BanjoRecomp/BanjoRecomp),
-// another project on this identical N64Recomp/N64ModernRuntime stack.
+// with this piece missing.
 #ifdef BTGA_HAS_RECOMPILED_FUNCS
 
 #include "librecomp/overlays.hpp"

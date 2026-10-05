@@ -1,36 +1,25 @@
-# Known behavioral patches
+# patches/
 
-Instruction-level patches this port is expected to need, discovered from
-research rather than from running the recompiled game yet. N64Recomp's TOML
-config supports patching specific instructions at known addresses -- that's
-the intended home for these once we have real addresses in *our* ROM.
+C code compiled for the N64 (MIPS) and recompiled alongside the game, for
+changes that replace a whole game function. A `RECOMP_PATCH` function here
+takes the place of the original function of the same name.
 
-## USA boot-timing race (`osContInit` vs. VI timer list)
+- `recompui_patches.c`: replaces `func_800A1858`, the game's per-VI swap
+  routine, with the same logic plus the frontend's per-frame UI pump and the
+  screen-edge scissor fix (STATUS.md rounds 61 and 94).
 
-Both the original *BattleTanx* (N64/PS1) and *BattleTanx: Global Assault*
-USA ROMs have a documented boot-time race condition: the game calls
-`osContInit` before ~500ms have elapsed at boot, before libultra's
-VI-manager timer list has finished initializing. The resulting wait call
-follows a null pointer in the timer chain and faults at address `0x10`.
+The build is automatic: `make` here produces `patches.elf` (through WSL on
+Windows, since the Windows clang builds have no MIPS backend), then N64Recomp
+recompiles it using `patches.toml` in the repo root. `syms.ld` gives native
+runtime functions dummy addresses so the patches can call them.
 
-- Confirmed independently by two emulator projects that had to work around
-  it: [n64js PR #123](https://github.com/hulkholden/n64js/pull/123) patches
-  a single conditional branch, right after the IPL3 checksum check, to skip
-  the faulty timer-based wait. [mupen64plus-core issue #283](https://github.com/mupen64plus/mupen64plus-core/issues/283)
-  documents the user-visible symptom (game "restarts" if you try to skip the
-  intro) without root-causing it -- the n64js PR has the actual mechanism.
-- The EUR version of Global Assault initializes timers in a different order
-  and does **not** need this workaround, which is good corroborating
-  evidence this is a genuine bug in the USA build's boot code, not a general
-  emulation inaccuracy.
-- Why this matters for a *static recompile* specifically: this is a real
-  race in the original game code, not an emulation quirk, so it should be
-  expected to reproduce (or get worse -- native execution timing will be
-  very different from either real N64 hardware or an emulator's timing
-  model) once boot code actually runs on real hardware speed. Plan to find
-  the equivalent branch in our ELF/symbol map early and patch it the same
-  way the emulators did, rather than debugging a boot hang/crash from
-  scratch.
+Smaller fixes don't live here: instruction patches and hooks that run native
+code at a point in a game function are in `battletanxga.us.rev0.toml`, with
+the native code in `src/game/`.
 
-Status: not yet located in our own symbol map -- needs the real disassembly
-before this can be turned into an actual TOML patch entry.
+## The USA boot-timing race
+
+The USA ROM calls `osContInit` before libultra's VI timer list is set up;
+emulators had to patch around it (n64js PR #123, mupen64plus-core issue
+#283). No patch is needed here: `osContInit` and the VI manager are provided
+by the runtime instead of being recompiled from the ROM.

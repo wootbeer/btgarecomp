@@ -28,7 +28,7 @@ namespace {
 
 // Hooked in func_800D25E0 right before `mtc1 $v1, $f0` (0x800D2AFC), which
 // turns the far plane in $v1 into guPerspectiveF's far argument.
-extern "C" void btga_cutscene_far_plane(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void btga_cutscene_far_plane(uint8_t*, recomp_context* ctx) {
     if ((int32_t)ctx->r3 <= kNearPlane) {
         ctx->r3 = kCutsceneFarPlane;
     }

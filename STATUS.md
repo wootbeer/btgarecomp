@@ -1,7 +1,90 @@
 # Status
 
-Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
-from the one that wrote the entries below).
+The project's working log: every investigation and fix, newest first, as
+"rounds". PROGRESS.md has the short version of where things stand; this file
+is for finding out why something is the way it is.
+
+## Overview (as of round 132)
+
+**Where it stands.** The game runs from boot through the campaign
+(played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
+and higher framerates. A first beta (0.1.0) is public.
+
+**How the main areas got here** (the rounds to read for each):
+
+- **ROM layout and symbols** (rounds 1-22). The early "overlay system" was a
+  wrong ROM-to-RAM mapping (fixed in round 10; there are no overlays). All
+  code is in the first MB (round 17). The symbol file came from a
+  splat/spimdisasm scan seeded with n64sym matches (rounds 13-14), and the
+  N64Recomp config was assembled in rounds 18-22.
+- **Merged functions** (rounds 39-46, 54-56, 59, 64, 70-85, 129). The scan
+  merged some functions that the game calls through pointers, which fails
+  at runtime with "Failed to find function at 0x...". Each was split in the
+  symbol file; round 78 split every ROM-referenced boundary in one batch, and
+  `tools/scan_missing_functions.py` checks for the rest.
+- **Runtime compatibility** (rounds 23-24, 43, 47-53, 57-58, 60, 65-69).
+  Shims for libultra internals the stock runtime doesn't provide
+  (`src/game/stock_runtime_compat.cpp`), yields in the game's busy-wait
+  loops (`src/main/scheduler_workaround.cpp`), and the framebuffer-wait
+  freeze (round 69).
+- **Windows toolchain** (rounds 25-33): clang-cl, x86 vs x64 shells; the
+  results are in BUILDING.md's troubleshooting section.
+- **Frontend and UI** (rounds 34-38, 61-62, 86, 111, 123). Fonts and
+  assets, event pumping, the per-frame UI pump as a whole-function patch
+  (`patches/`), theme and icon.
+- **Audio** (rounds 90-93, 95, 124). The RSP audio microcode recompiled
+  from the ROM, the audio library un-stubbed, stereo order, underruns, and a
+  latency cap.
+- **Saves, rumble, multiplayer** (round 95). Controller Pak emulation over
+  `.mpk` files.
+- **Rendering** (rounds 94, 97-108, 122). The game's off-by-one screen-edge
+  scissor, widescreen culling, HUD anchoring and cutscene letterboxing, the
+  cutscene camera's zero far plane, and distant flicker in Expand fixed in
+  RT64 itself (`lib-patches/rt64/`). Rounds 109-121 are investigations that
+  were reverted (fog, draw pools, display-list buffer), kept for the record.
+- **Frame timing** (rounds 87-89, 106, 125, 127, 130-131). The game times
+  motion with the clock; its frame time is snapped to whole VIs. The
+  per-frame step is about 0.75 at 30 fps, where hardware ran about 20 fps
+  (step ~1.1), so code that truncates it to an integer got 0. Those sites
+  are fixed proportionally (`src/game/frame_dt_fix.cpp`,
+  `tools/scan_frame_time_truncation.py`). Round 125's step snap was wrong
+  and was reverted in round 131.
+- **Crash reporting and release** (rounds 126, 128). `crash_log.txt`, and
+  Windows packaging (`tools/package-windows.ps1`).
+
+**Principle.** The game stays original: fixes cover only what differs from
+the N64 (timing, rendering, the runtime), not the game's look or behaviour.
+Round 117's fog change was reverted for this reason.
+
+**Notes on reading the log.** Older entries describe the project as it was
+then, including theories later disproven (each is corrected in a later
+round) and references to other recomp projects that were used as examples.
+The sections at the very end ("Done", "Blocked", "Next steps") are the
+original 2026-09-18 plan and are long out of date.
+
+# Log
+
+## 2026-10-05, round 132: cleanup pass
+
+No behaviour changes; the build is verified in the sandbox.
+
+- **Comments.** Removed mentions of other recomp projects that described
+  how this one was started rather than what the code does, and stale notes
+  ("not yet run", "no source yet", PROGRESS.md item numbers). Kept the
+  line in `src/main/main.cpp` saying where the launcher assets come from
+  (BanjoRecomp, GPL-3.0), since that's provenance.
+- **Removed** `BattleTanxGASyms/battletanxga.us.rev0.{renamed_ignored,
+  div_hooks,instruction_patches}.toml`, merged into the main config in
+  round 20 and unused since. Rewrote `BattleTanxGASyms/README.md` and
+  `patches/README.md` (the USA boot race never needed a patch: the
+  runtime provides `osContInit` and the VI manager).
+- **Docs.** `BUILDING.md` rewritten for the current process (WSL for the
+  MIPS patches on Windows, release packaging, troubleshooting).
+  `PROGRESS.md` rewritten as current status, known issues and next steps.
+  This file now opens with an overview.
+- **Warnings.** Our sources are clean under `-Wall -Wextra`: unused hook
+  parameters unnamed, an unused constant in `widescreen.cpp` removed, and
+  `recomp::start`'s config lists every field.
 
 ## 2026-10-05, round 131: round 125's step snap reverted; proportional fixes instead
 
@@ -5434,7 +5517,7 @@ that confirmed 19KB block -- which is a Ghidra job (reading real code for
 `osPiStartDma`-shaped calls), not something splat's config can find by
 guessing more addresses.
 
-## Done
+## Done (2026-09-18 plan, out of date)
 
 - Confirmed the supplied ROM is v64 byte-swapped despite its `.n64`
   extension; normalized to big-endian `.z64`; header matches expected USA
@@ -5448,7 +5531,7 @@ guessing more addresses.
   resident dispatcher code, and confirmed (empirically, not by assumption)
   that this game uses an overlay system for code beyond that.
 
-## Blocked / needs to happen elsewhere
+## Blocked / needs to happen elsewhere (2026-09-18, out of date)
 
 The cloud sandbox this scaffold was built in has PyPI, npm, and crates.io
 blocked by egress policy (confirmed genuine 403s). splat's real dependency
@@ -5458,7 +5541,7 @@ interactively from this session.
 
 (2026-09-27 note: not true in every cloud sandbox -- see above.)
 
-## Next steps, in order
+## Next steps, in order (2026-09-18, out of date)
 
 1. Ghidra pass (N64 loader plugin) over the confirmed resident block
    (`0x9F99C`-`0xA449C`). Specifically look for DMA/file-read calls

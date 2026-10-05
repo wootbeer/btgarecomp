@@ -137,14 +137,10 @@ target_include_directories(PatchesLib PRIVATE
     ${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime/N64Recomp/include
 )
 
-# The patch pipeline (patches/*.c cross-compiled to a MIPS ELF, then run back
-# through N64Recomp to produce patches.c/patches_bin.c) needs real patch
-# source and a patches.toml, neither of which exist yet (see PROGRESS.md
-# item 8 -- this is game behavior needing source-level rewriting, e.g. how
-# the UI is driven each frame, that hasn't been reverse-engineered). Keep
-# PatchesLib valid with an empty placeholder until then, same approach as
-# RecompiledFuncs/BattleTanxGARecompiled below for their own not-yet-written
-# sources.
+# The patch pipeline: patches/*.c is cross-compiled to a MIPS ELF, then run
+# back through N64Recomp (patches.toml) to produce patches.c/patches_bin.c.
+# Without patch sources or patches.toml, PatchesLib builds as an empty
+# placeholder so the project still configures.
 file(GLOB PATCH_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/patches/*.c)
 if (NOT PATCH_SOURCES OR NOT EXISTS ${CMAKE_SOURCE_DIR}/patches.toml)
     message(STATUS "patches/ has no sources yet (or patches.toml is missing) - building PatchesLib as a placeholder only.")
@@ -198,14 +194,10 @@ endif()
 # Main executable
 add_executable(BattleTanxGARecompiled)
 
-# None of this game's own source exists yet -- see STATUS.md/PROGRESS.md.
-# `bdragoncore/battle-tanx-recomp`'s equivalent list (src/main/*.cpp,
-# src/game/*.cpp, rsp/*.cpp) is deeply specific to that game's own discovered
-# function addresses and RSP microcode, so it isn't something to port ahead
-# of doing the same reverse-engineering work against this ROM. List real
-# files here as they're written; until then, keep the target configurable
-# with an empty placeholder so the rest of this file (RT64/N64ModernRuntime/
-# RecompFrontend wiring) can still be exercised.
+# The frontend (src/main), the game-specific fixes (src/game) and the
+# recompiled RSP audio microcode (rsp/, generated from the ROM). If none of
+# these exist (e.g. a bare checkout), a placeholder target is built instead
+# so the rest of the configuration can still be checked.
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/src/main/*.cpp
     ${CMAKE_SOURCE_DIR}/src/game/*.cpp
@@ -225,7 +217,7 @@ endif()
 if (NOT SOURCES)
     message(STATUS "src/ and rsp/ are empty - building BattleTanxGARecompiled as a placeholder only.")
     file(WRITE ${CMAKE_BINARY_DIR}/battletanxga_placeholder.cpp
-        "int main() { return 0; } // No game source yet -- see STATUS.md/PROGRESS.md.\n")
+        "int main() { return 0; } // No game source found -- see BUILDING.md.\n")
     set(SOURCES ${CMAKE_BINARY_DIR}/battletanxga_placeholder.cpp)
     set(BTGA_FORKED_RUNTIME OFF)
 else()
@@ -244,10 +236,6 @@ else()
             ${CMAKE_SOURCE_DIR}/src/game/controller_pak.cpp)
     else()
         set(BTGA_FORKED_RUNTIME OFF)
-        # On the stock runtime the game will need whatever [[patches.hook]] entries this project's
-        # own TOML config ends up requiring (see bdragoncore/battle-tanx-recomp's
-        # cmake/check_stock_funcs.cmake and battletanx.us.rev0.toml for the shape of this on that
-        # project) -- not yet meaningful here since that config doesn't exist yet.
         if(EXISTS ${CMAKE_SOURCE_DIR}/rsp/battletanx_audio.cpp)
             # See the BTGA_RECOMP_HOOKS_FORCE_INCLUDE comment above: clang-cl needs "/FI<file>",
             # not GNU "-include;<file>", or it misparses the header path as a second source file.

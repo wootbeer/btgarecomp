@@ -85,7 +85,6 @@ namespace {
     constexpr uint16_t kOriginNone = 0x800;  // G_EX_ORIGIN_NONE
 
     constexpr uint32_t kOverlayDlHeadPtr = 0x803A5944; // func_800BC9F4's
-    constexpr uint32_t kBoxDlHeadPtr = 0x803A69E4;     // func_800D56FC's
     constexpr uint32_t kPlayerCount = 0x802194A5;
 
     constexpr uint32_t kKillCounterWidget = 0x800C9A3C;
@@ -93,8 +92,7 @@ namespace {
     constexpr int kHudMarginShift = 16 * 4; // 10.2 fixed point
     // RT64 adds the framebuffer width to right-anchored coordinates
     // (RDP::movedFromOrigin), so they must be given relative to the right
-    // edge: offset by -320 (Zelda64Recomp's HUD does the same with
-    // -SCREEN_WIDTH * 4).
+    // edge: offset by -320 (in 10.2 fixed point, -320 * 4).
     constexpr int kRightOriginShift = -320 * 4;
 
     struct Align {
@@ -249,7 +247,7 @@ extern "C" void btga_hud_element(uint8_t* rdram, recomp_context* ctx) {
 }
 
 // End of the script.
-extern "C" void btga_hud_script_end(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void btga_hud_script_end(uint8_t* rdram, recomp_context*) {
     element_align = kAlignNone;
     hud_script = false;
     reset(rdram);
@@ -261,7 +259,7 @@ extern "C" void btga_hud_map_begin(uint8_t* rdram, recomp_context* ctx) {
     map_home_ptr = ctx->r4;
 }
 
-extern "C" void btga_hud_map_end(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void btga_hud_map_end(uint8_t* rdram, recomp_context*) {
     in_map = false;
     reset(rdram);
 }
@@ -292,7 +290,7 @@ extern "C" void btga_hud_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     emit(rdram, kseg0(kOverlayDlHeadPtr), a);
 }
 
-extern "C" void btga_hud_fillrect_end(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void btga_hud_fillrect_end(uint8_t* rdram, recomp_context*) {
     reset(rdram);
 }
 
@@ -343,7 +341,7 @@ extern "C" void btga_box_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     letterbox_frame = frame_counter;
 }
 
-extern "C" void btga_box_fillrect_end(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void btga_box_fillrect_end(uint8_t*, recomp_context*) {
 }
 
 // func_8007A250, right after the frame clear's G_FILLRECT (fill colour set

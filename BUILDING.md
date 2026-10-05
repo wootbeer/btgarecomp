@@ -1,31 +1,42 @@
 # Building Guide
 
-This mirrors the process used by
-[bdragoncore/battle-tanx-recomp](https://github.com/bdragoncore/battle-tanx-recomp)
-for the original BattleTanx. All the steps below are now actually possible
-(as of round 24 — see STATUS.md/PROGRESS.md) — this was not true earlier in
-the project's history, when the symbol table and config for Global Assault
-hadn't been produced yet.
+Most players want the prebuilt Windows zip from the
+[releases page](https://github.com/wootbeer/btgarecomp/releases). This guide
+is for building from source.
 
-**This work lives on the `claude/optimistic-cray-t17tfo` branch, not yet
-merged to `main`.** Clone/checkout that branch specifically, or these steps
-won't find any of it.
+You need your own copy of the game: BattleTanx: Global Assault, USA, revision
+1.0 (`syms/rom_info.md`). The ROM is never committed to this repository; the
+recompiled code is generated from it locally.
 
 ## 1. Clone with submodules
 
 ```bash
-git clone --recurse-submodules -b claude/optimistic-cray-t17tfo <this repo's URL>
-# if you forgot --recurse-submodules or -b:
-cd /path/to/cloned/repo
-git checkout claude/optimistic-cray-t17tfo
+git clone --recurse-submodules https://github.com/wootbeer/btgarecomp.git
+# if you forgot --recurse-submodules:
 git submodule update --init --recursive
 ```
 
-This pulls in `lib/N64ModernRuntime`, `lib/RecompFrontend`, and `lib/rt64`
-(plus rt64's own ~16 nested submodules) — several hundred MB, expect this to
-take a while.
+`main` holds the latest release. Newer work may be on a development branch;
+check it out before the submodule update if you want it.
+
+This pulls in `lib/N64ModernRuntime`, `lib/RecompFrontend` and `lib/rt64`
+(plus rt64's own nested submodules), several hundred MB in all.
 
 ## 2. Install dependencies
+
+### Windows
+
+- Visual Studio 2022 with the "Desktop development with C++" workload,
+  including the "C++ Clang Compiler for Windows" and "C++ CMake tools for
+  Windows" components.
+- WSL with `clang`, `lld` and `make` installed in it (for Ubuntu:
+  `sudo apt install clang lld make`). The small MIPS patch library in
+  `patches/` has to be cross-compiled for the N64, and the Windows builds of
+  clang don't include the MIPS backend, so CMake runs that one step through
+  `wsl.exe`.
+
+Nothing else is needed: the renderer uses D3D12 on Windows, and CMake fetches
+SDL2 itself.
 
 ### Linux (Ubuntu/Debian)
 
@@ -33,199 +44,115 @@ take a while.
 sudo apt-get install cmake ninja-build libsdl2-dev libgtk-3-dev libvulkan-dev lld llvm clang
 ```
 
-`libvulkan-dev` and `libgtk-3-dev` are required even for a first build (RT64
-needs Vulkan headers, and the native file dialog library needs GTK on
-Linux). `lld`/`llvm`/`clang` are only needed once `patches/*.c` has real
-content to cross-compile for MIPS (PROGRESS.md item 8, not started yet) —
-skip them for now if you just want to build and run.
-
-### Arch Linux (paru)
+### Arch Linux
 
 ```bash
 paru -S cmake ninja llvm clang lld sdl2-compat freetype2 gtk3 vulkan-headers
-# MIPS cross toolchain, for ROM analysis / the MIPS patches (not needed yet)
-paru -S mips64-elf-gcc mips64-elf-binutils mips64-elf-newlib mips-linux-gnu-binutils
 ```
 
-### Windows
+Linux builds and runs in development, but no Linux release is packaged yet.
+macOS is not set up.
 
-Visual Studio 2022 with the "Desktop development with C++" workload,
-including its "C++ Clang Compiler for Windows" and "C++ CMake tools for
-Windows" optional components. Also install `make` (e.g. `choco install
-make`) — only needed once `patches/*.c` has real content to cross-compile
-for MIPS (PROGRESS.md item 8, not started yet), skip it for now if you just
-want to build and run.
+## 3. Put the ROM in place
 
-No separate Vulkan SDK install needed: on Windows this project's renderer
-(`plume`, RT64's GPU backend layer) builds against **D3D12**, not Vulkan
-(`CMakeLists.txt` only turns Vulkan on for Linux) — D3D12 ships with
-Windows/the Windows SDK already. SDL2 is fetched automatically by CMake on
-Windows (`FetchContent`), so there's nothing to install for it either.
+Place your dump at the repo root, named exactly
+`BattleTanx Global Assault (USA).z64`. The recompilers read it from there
+(`battletanxga.us.rev0.toml`, `n_aspMain.us.rev0.toml`).
 
-Run all commands below from an **x64 Native Tools Command Prompt for VS
-2022** (or equivalent Developer PowerShell), so `clang-cl`/`ninja` resolve
-correctly. **Before running anything else, verify the shell is actually
-x64**, not x86 — the name of the shortcut you clicked isn't enough proof
-(see STATUS.md round 30/31: a shell here resolved to x86 CRT library paths
-despite being opened as an "x64" prompt/shortcut, and the resulting
-failure — `lld-link: undefined symbol: mainCRTStartup` — didn't obviously
-point at architecture at all):
+It must be big-endian `.z64` (header bytes `80 37 12 40`). To convert a
+`.n64` or `.v64` dump:
 
-```powershell
-$env:LIB
-```
-```bat
-echo %LIB%
-```
-This must contain `...\lib\x64`, `...\ucrt\x64`, and `...\um\x64` segments.
-If you see `\x86` instead anywhere in there, you're in the wrong shell —
-close it and specifically open **"x64 Native Tools Command Prompt for VS
-2022"** from the Start menu (not "x86 Native Tools...", and not the plain,
-unqualified "Developer Command Prompt for VS 2022", which can default to
-x86). If you're using Developer PowerShell and it keeps landing on x86, use
-the x64 Native Tools **Command Prompt** for this project instead — its
-cmd.exe command variants above work identically.
-
-This project has only actually been built and run on Linux so far in this
-session (no Windows machine available) — the code has been read through
-carefully for Windows-specific issues (two real ones were found and fixed
-just from that review: a missing Windows window-handle path in
-`src/main/main.cpp`, and a `CMakeLists.txt` reference to an icon resource
-file that doesn't exist yet), but there has been no actual Windows build to
-confirm against. If something else breaks, report the exact error back and
-it can very likely be fixed the same way.
-
-### macOS
-
-Not yet set up/tested — `CMakeLists.txt` has some `APPLE` branches from the
-original reference project, but they haven't been exercised for this one.
-
-## 3. Obtain the target ROM
-
-- **Region/revision**: USA, `NBQE`, revision 1.0 — see `syms/rom_info.md`.
-- **Filename**: place your dump at the repo root, named exactly
-  `BattleTanx Global Assault (USA).z64` (matches `rom_file_path` in
-  `battletanxga.us.rev0.toml`).
-- **Byte order**: must be normalized big-endian `.z64` (header magic
-  `80 37 12 40`), not `.v64`/`.n64`. If your dump isn't already in that
-  format, normalize it first:
-  ```bash
-  python3 tools/normalize_rom.py "your dump.n64" "BattleTanx Global Assault (USA).z64"
-  ```
-- **Hash check**: `src/main/main.cpp` registers this exact ROM by its
-  `XXH3_64` hash (`0x9c7467e763553529`, computed over the whole normalized
-  file — not the N64 header CRC1/CRC2). If your dump doesn't match, the
-  game will refuse it as an unrecognized ROM at runtime rather than fail to
-  build; double check normalization if that happens.
-
-The ROM is never committed to this repository (see `.gitignore`) — this
-step always has to happen locally, on every machine.
-
-## 4. Generate the recompiled C code
-
-Build `N64Recomp` from `lib/N64ModernRuntime/N64Recomp`:
-
-**Linux/macOS:**
 ```bash
-cmake -S lib/N64ModernRuntime/N64Recomp -B lib/N64ModernRuntime/N64Recomp/build -G Ninja
-cmake --build lib/N64ModernRuntime/N64Recomp/build --target N64RecompCLI -j$(nproc)
+python3 tools/normalize_rom.py "your dump.n64" "BattleTanx Global Assault (USA).z64"
 ```
-(The CMake *target* is `N64RecompCLI` — `N64Recomp` alone names a static
-library the CLI links against, not the executable. `N64RecompCLI` builds to
-an output file literally named `N64Recomp`/`N64Recomp.exe` via CMake's
-`OUTPUT_NAME` property, which is what the commands below actually run.)
 
-**Windows** (from an x64 Native Tools Command Prompt, or Developer
-PowerShell, for VS 2022 — both work, just match the syntax below to
-whichever one you actually have open):
+The game itself also asks for the ROM on first launch (it accepts `.z64`,
+`.n64` and `.v64`) and checks it against this exact release's hash
+(`0x9c7467e763553529`, XXH3-64 of the normalized file).
 
-Visual Studio ships *two* `clang-cl.exe` copies — a 32-bit-hosted one under
-`VC\Tools\Llvm\bin\` and a 64-bit-hosted one under `VC\Tools\Llvm\x64\bin\`.
-Passing bare `-DCMAKE_C_COMPILER=clang-cl` lets Windows' PATH search pick
-whichever one comes first, and that has turned out to be inconsistent even
-from the correct x64 dev environment — the wrong one produces a build that
-fails in confusing ways deep into compiling or linking (see STATUS.md round
-27 for what that looked like). Set the full path explicitly instead, so
-there's no ambiguity (adjust `Community` to `Professional`/`Enterprise` and
-the drive/path if your Visual Studio install differs):
+## 4. Generate the recompiled code
 
-Developer PowerShell:
+Build N64Recomp and run it on the config. This writes `RecompiledFuncs/`
+(gitignored; regenerate it after any change to the `.toml` or the symbol
+file).
+
+**Windows** (in a Developer PowerShell for VS 2022, see "Windows shell"
+below):
+
 ```powershell
 $env:BTGA_CLANGCL = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe"
 cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER="$env:BTGA_CLANGCL" -DCMAKE_CXX_COMPILER="$env:BTGA_CLANGCL"
 cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64RecompCLI
-```
-
-x64 Native Tools Command Prompt (cmd.exe):
-```bat
-set "BTGA_CLANGCL=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe"
-cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER="%BTGA_CLANGCL%" -DCMAKE_CXX_COMPILER="%BTGA_CLANGCL%"
-cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64RecompCLI
-```
-(Ninja parallelizes automatically using all cores — no `-j` flag needed.
-`$env:BTGA_CLANGCL`/`%BTGA_CLANGCL%` don't carry over to a new shell window
-— re-set it, or just re-paste the full path, if you closed and reopened.
-The CMake target is `N64RecompCLI`, same note as the Linux/macOS block
-above — its output file is still named `N64Recomp.exe`.)
-
-Then, from the repo root, with the ROM in place from step 3:
-
-**Linux/macOS:**
-```bash
-./lib/N64ModernRuntime/N64Recomp/build/N64Recomp battletanxga.us.rev0.toml
-```
-
-**Windows** (PowerShell or cmd.exe — same command either way):
-```
 lib\N64ModernRuntime\N64Recomp\build\N64Recomp.exe battletanxga.us.rev0.toml
 ```
 
-This produces `RecompiledFuncs/` (1300 recompiled functions as of round 22 —
-gitignored, regenerate any time from the ROM + this repo's own symbol
-table/config).
+**Linux:**
 
-## 5. Build
-
-**Linux/macOS:**
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target BattleTanxGARecompiled -j$(nproc)
+cmake -S lib/N64ModernRuntime/N64Recomp -B lib/N64ModernRuntime/N64Recomp/build -G Ninja
+cmake --build lib/N64ModernRuntime/N64Recomp/build --target N64RecompCLI -j$(nproc)
+./lib/N64ModernRuntime/N64Recomp/build/N64Recomp battletanxga.us.rev0.toml
 ```
 
-**Windows** (same shell as step 4, reusing the `BTGA_CLANGCL` variable set
-there — re-set it first if this is a new window):
+The CMake target is `N64RecompCLI`; its output file is named `N64Recomp`.
 
-Developer PowerShell:
+The main build (next step) generates the rest itself: the RSP audio microcode
+(`rsp/`, via RSPRecomp) and the patch library (`RecompiledPatches/`).
+
+## 5. Build and run
+
+**Windows:**
+
 ```powershell
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$env:BTGA_CLANGCL" -DCMAKE_CXX_COMPILER="$env:BTGA_CLANGCL"
 cmake --build build --target BattleTanxGARecompiled
+.\build\BattleTanxGARecompiled.exe
 ```
 
-x64 Native Tools Command Prompt (cmd.exe):
-```bat
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="%BTGA_CLANGCL%" -DCMAKE_CXX_COMPILER="%BTGA_CLANGCL%"
-cmake --build build --target BattleTanxGARecompiled
+**Linux:**
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target BattleTanxGARecompiled -j$(nproc)
+./build/BattleTanxGARecompiled
 ```
 
-If you need to wipe a stale `build\` directory first (e.g. after switching
-which compiler binary gets used), in PowerShell that's `Remove-Item -Recurse
--Force build`, not `rmdir /s /q build` (that's cmd.exe-only syntax).
+Run it from the repo root: the game loads `assets/` relative to the working
+directory. Use `-DCMAKE_BUILD_TYPE=Debug` for a build a debugger can step
+through.
 
-This also builds `PatchesLib` as an empty placeholder for now (no
-`patches/*.c` content or `patches.toml` exist yet — PROGRESS.md item 8) and
-`src/main/main.cpp`/`src/game/*.cpp` (the entry point and stock-runtime
-compat shims written in round 23/24).
+## 6. Package a Windows release
 
-Run the resulting binary — `build/BattleTanxGARecompiled` on Linux/macOS,
-`build\BattleTanxGARecompiled.exe` on Windows — from the repo root (so it
-can find the ROM and, once one exists, an `assets/` folder next to it).
-This has only been run in a display-less cloud sandbox so far, where it
-correctly falls back through "no audio device" to a clean failure at
-window/renderer creation (no GPU there) — on a real machine with a display,
-this is the point where whether the launcher menu appears and the game
-actually boots becomes testable for the first time, on Windows for the
-first time ever in this project's history. If you hit a crash or hang past
-that point, check STATUS.md's round 24 entry first — the stock-runtime
-compat shims and RSP microcode gap (PROGRESS.md items 6-7) are the most
-likely places for a real bug to be hiding, and several of the choices there
-are explicitly flagged as unverified against a running game.
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\tools\package-windows.ps1 -Version 0.1.0
+```
+
+This runs from any PowerShell (it sets up Visual Studio's x64 environment
+itself), builds Release in `build-release\` so your normal `build\` is left
+alone, and writes `dist\BattleTanxGARecompiled-<version>-windows.zip` with
+the exe, its DLLs, `assets\`, README and license. Steps 1-4 must be done
+first.
+
+## Troubleshooting (Windows)
+
+**Windows shell.** The build must use the x64 toolchain. A Developer
+PowerShell or "Developer Command Prompt" can default to x86, which fails
+late with `lld-link: undefined symbol: mainCRTStartup`. Check with
+`$env:LIB` (PowerShell) or `echo %LIB%` (cmd): it must contain `\x64`
+paths, not `\x86`. If not, open "x64 Native Tools Command Prompt for VS
+2022" instead (in cmd, use `set "BTGA_CLANGCL=..."` and `%BTGA_CLANGCL%`).
+
+**Which clang-cl.** Visual Studio ships a 32-bit-hosted `clang-cl.exe` in
+`VC\Tools\Llvm\bin\` and a 64-bit one in `VC\Tools\Llvm\x64\bin\`. Pass the
+x64 one by full path as above; a bare `clang-cl` can pick the wrong one.
+Adjust `Community` to your edition and the drive if your install differs.
+`$env:BTGA_CLANGCL` doesn't carry over to a new window.
+
+**Starting over.** After changing compiler or architecture, delete the build
+folder (`Remove-Item -Recurse -Force build` in PowerShell) and configure
+again.
+
+**Missing generated files.** If `RecompiledFuncs\` is missing, CMake builds a
+placeholder that does nothing; rerun step 4. If the ROM isn't at the repo
+root, the build has no audio microcode.

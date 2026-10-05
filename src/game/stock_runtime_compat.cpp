@@ -2,20 +2,14 @@
 // `ignored_funcs` list (N64Recomp/src/symbol_lists.cpp) expects some
 // runtime to provide under a `_recomp` suffix, but that stock
 // N64ModernRuntime doesn't implement (confirmed by grepping its whole
-// source -- see PROGRESS.md item 7 and STATUS.md round 23 for how this was
-// found and diagnosed). Mirrors the role `bdragoncore/battle-tanx-recomp`'s
-// own `src/game/stock_runtime_compat.cpp` plays for that project -- see
-// CMakeLists.txt's BTGA_FORKED_RUNTIME check, which is why this file lives
-// at exactly this path.
+// source -- see STATUS.md round 23 for how this was found and diagnosed).
+// CMakeLists.txt's BTGA_FORKED_RUNTIME check leaves this file out when
+// building against a runtime fork that already has them.
 //
-// None of this has been exercised against a running game yet (no display/
-// GPU in this environment, and the ROM can't be shipped with the repo) --
-// every implementation below is a best-effort reading of real libultra
-// behavior (either well-known/documented, or read directly from this ROM's
-// own raw bytes at the relevant address, which are never recompiled since
-// N64Recomp ignores them, but are still sitting right there in the ROM
-// file to disassemble by hand). Flagged individually below where
-// confidence is lower.
+// Each implementation is a reading of real libultra behavior (documented,
+// or read directly from this ROM's own bytes at the relevant address).
+// They run in the shipping game; the ones with lower confidence are
+// flagged individually below.
 
 #include "ultramodern/ultra64.h"
 #include "ultramodern/ultramodern.hpp"
@@ -29,7 +23,7 @@
 // librecomp's own equivalent for the sibling function __osSetFpcCsr_recomp
 // (lib/N64ModernRuntime/librecomp/src/ultra_translation.cpp) does the same
 // thing for the same reason.
-extern "C" void __osGetSR_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osGetSR_recomp(uint8_t*, recomp_context* ctx) {
     ctx->r2 = 0;
 }
 
@@ -66,7 +60,7 @@ extern "C" void __osPopThread_recomp(uint8_t* rdram, recomp_context* ctx) {
 // and switches via semaphore signaling. run_next_thread_and_wait is
 // ultramodern's own equivalent entry point for "give up the CPU and let
 // the scheduler pick who runs next."
-extern "C" void __osDispatchThread_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osDispatchThread_recomp(uint8_t* rdram, recomp_context*) {
     ultramodern::run_next_thread_and_wait(rdram);
 }
 
@@ -82,7 +76,7 @@ extern "C" void __osDispatchThread_recomp(uint8_t* rdram, recomp_context* ctx) {
 // Replicated here against the same two addresses so anything in this ROM
 // that later blocks on that queue (expecting the mutex-primed message)
 // doesn't deadlock waiting for a message that would otherwise never come.
-extern "C" void __osSiCreateAccessQueue_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osSiCreateAccessQueue_recomp(uint8_t* rdram, recomp_context*) {
     constexpr int32_t si_access_queue = 0x803B04F8;
     constexpr int32_t si_access_queue_msgs = 0x803B04F0;
     osCreateMesgQueue(rdram, si_access_queue, si_access_queue_msgs, 1);
@@ -99,12 +93,11 @@ extern "C" void __osSiCreateAccessQueue_recomp(uint8_t* rdram, recomp_context* c
 // already, so these ROM-internal calls -- which just update the N64-side
 // bookkeeping structures those subsystems would otherwise touch on real
 // hardware -- are made no-ops here rather than risk them fighting with
-// ultramodern's own tracking of the same state. Unverified: whether any of
-// this ROM's own code reads that N64-side bookkeeping directly afterward
-// in a way a no-op would break -- flag this file first if VI timing or
-// timer-driven gameplay logic misbehaves once this can actually be tested.
-extern "C" void __osTimerInterrupt_recomp(uint8_t* rdram, recomp_context* ctx) {
+// ultramodern's own tracking of the same state. The game runs correctly
+// with them as no-ops; if VI timing or timer-driven gameplay logic ever
+// misbehaves, check whether the ROM reads that bookkeeping directly.
+extern "C" void __osTimerInterrupt_recomp(uint8_t*, recomp_context*) {
 }
 
-extern "C" void __osViSwapContext_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void __osViSwapContext_recomp(uint8_t*, recomp_context*) {
 }
