@@ -1,10 +1,9 @@
 # BattleTanx: Global Assault (1999 N64) Recompiled and Port  
-=====================
-
+  
 https://www.youtube.com/watch?v=M_FX5GtOARQ  
-
+  
 You will need the game file from a licensed copy in order to play it.  
-
+  
 A native PC port of BattleTanx: Global Assault, made by statically
 recompiling the N64 game with [N64Recomp](https://github.com/N64Recomp/N64Recomp)
 and running it on [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime)
