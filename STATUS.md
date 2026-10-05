@@ -3,6 +3,13 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-05: rounds 127 and 129 confirmed
+
+The user beat mission 13 (Eiffel Tower): no crash, and the score screen
+now counts Kills into the total. Alt-tabbing in and out works. The
+earlier alt-tab crash (in ntdll) was most likely the same mission-start
+crash. `crash_log.txt` will tell if it recurs.
+
 ## 2026-10-05, round 129: mission 13 crash = merged function called through a pointer
 
 **Round 128 result** (dev build, start of mission 13, Eiffel Tower): the
