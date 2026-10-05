@@ -3,6 +3,50 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-05, round 129: mission 13 crash = merged function called through a pointer
+
+**Round 128 result** (dev build, start of mission 13, Eiffel Tower): the
+runtime asserted `Failed to find function at 0x800F83C0`
+(`librecomp/src/overlays.cpp:368`). Release builds compile the assert
+out and crash with the access violation instead.
+
+**Cause.** The symbol table had `func_800F8264` (size 0x374) spanning a
+second function:
+- `func_800F8264` returns at `0x800F83B0`, followed by two data words.
+- A new function with its own frame (`addiu $sp, $sp, -0x68`) starts at
+  `0x800F83C0` and runs to `0x800F85D8`.
+- Code at `0x800A29D8` stores `0x800F83C0` (and `0x800F85D8`) into a
+  callback table at `0x80224CE0`; mission 13 calls it through that
+  pointer.
+- Direct calls are compiled to C calls, but pointer calls go through
+  librecomp's lookup table, which only has symbol starts.
+
+**Sweep.** I scanned every symbol for a stack-frame setup shortly after a
+`jr $ra` (326 candidates), then kept only those the game stores as a
+pointer (a ROM data word, or a `lui`/`addiu` pair in code). Unreferenced
+merges are only ever reached by falling through, which already works.
+Results:
+- `0x800F83C0`: the crash.
+- `0x800FF420` and `0x800FF480`: real functions merged into
+  `__OsSchedInstall`. They sit, with it, in the callback table at
+  `0x80126860`.
+- `0x8010FFF8`: false positive. It's mid-way through `alInit`'s setup,
+  and its single `lui`/`addiu` reference is a coincidence.
+
+A wider check of all 1560 pointer targets that miss a function start
+(jump tables included), filtered to function-like targets, finds the
+same set.
+
+**Fix** (`BattleTanxGASyms/battletanxga.us.rev0.syms.toml`):
+- `func_800F8264` becomes 0x15C; new `func_800F83C0` is 0x218.
+- `__OsSchedInstall` becomes 0x64; new `func_800FF420` is 0x60 and
+  `func_800FF480` is 0xE0.
+- The function count goes from 1577 to 1580, and the game builds.
+
+`tools/scan_missing_functions.py` reruns the check (only the known false
+positive remains). The user reports this crash also happens on
+emulators, which may be a separate emulator issue; this one was ours.
+
 ## 2026-10-05, round 128: crash reporting (for the mission 13 crash)
 
 **Bug report:** the game crashes at the start of mission 13 (Eiffel

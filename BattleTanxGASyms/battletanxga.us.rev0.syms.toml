@@ -1504,7 +1504,12 @@ functions = [
     { name = "func_800F80E8", vram = 0x800f80e8, size = 0x120 },
     { name = "func_800F8208", vram = 0x800f8208, size = 0x5c },
     # Round 82 (STATUS.md): batch-tool split, newly analysable with MIPS64 decoding (trailing string data).
-    { name = "func_800F8264", vram = 0x800f8264, size = 0x374 },
+    # Round 129: func_800F8264 returns at 0x800F83B0 (+2 data words); a separate
+    # function starts at 0x800F83C0. Mission 13 calls it through a pointer
+    # (stored at 0x80224CE4 by code at 0x800A29D8), which crashed with
+    # "Failed to find function at 0x800F83C0" while it was merged.
+    { name = "func_800F8264", vram = 0x800f8264, size = 0x15c },
+    { name = "func_800F83C0", vram = 0x800f83c0, size = 0x218 },
     { name = "func_800F85D8", vram = 0x800f85d8, size = 0x18 },
     { name = "func_800F85F0", vram = 0x800f85f0, size = 0x6c },
     # Batch split (round 78, STATUS.md): clean jr-$ra boundaries whose start is ROM-referenced.
@@ -1659,7 +1664,11 @@ functions = [
     { name = "func_800FF1B0", vram = 0x800ff1b0, size = 0x6c },
     { name = "func_800FF21C", vram = 0x800ff21c, size = 0x194 },
     { name = "func_800FF3B0", vram = 0x800ff3b0, size = 0xc },
-    { name = "__OsSchedInstall", vram = 0x800ff3bc, size = 0x1a4 },
+    # Round 129: three functions, all in the callback table at 0x80126860
+    # (0x800FF3BC, 0x800FF420, 0x800FF480) and so called through pointers.
+    { name = "__OsSchedInstall", vram = 0x800ff3bc, size = 0x64 },
+    { name = "func_800FF420", vram = 0x800ff420, size = 0x60 },
+    { name = "func_800FF480", vram = 0x800ff480, size = 0xe0 },
     # Round 42 (STATUS.md): same class of bug as rounds 39/41 -- one
     # declared function (func_800FF560, size 0x2c0) is actually two, with
     # 0xc bytes of zero-padding after them (already correctly excluded by
