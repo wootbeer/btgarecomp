@@ -3,6 +3,43 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-05, round 127: score screen Kills / Tanks Lost stuck at 0
+
+**Context:** 0.1.0 is public (29 downloads, no issues filed yet). The user
+reported 2-3 bugs; this is the first.
+
+**Bug:** the end-of-level score screen counts up Score, the times and Tank
+Bucks, but Kills always shows 0.
+
+**Trace:**
+- Labels at `0x8012013C`-`0x80120190`, used by overlay scripts at
+  `0x80120F2C` (single player) and `0x8012105C` (two players).
+- Each row is a label element (op 4) plus a value element (op 8) that
+  reads through per-player pointer slots at `0x80120528`/`548`/`568`/
+  `588`, set up by `func_800CEA50`:
+  - Score: u32 at `0x803A65E0`
+  - Kills: u16 at `0x803A65F0`
+  - Tanks Lost: u16 at `0x803A65B8`
+  - Tank Bucks: `0x803A65A0`
+- The per-frame count-ups:
+  - `func_800CF41C` / `func_800CF4E4`: Kills, players 1/2
+  - `func_800CF5C8` / `func_800CF690`: Tanks Lost
+  - Each adds `(int)dt` per frame (dt = `0x803A5948`) until it reaches the
+    total (`0x803A6598` / `0x803A6648`), then sets a done flag.
+
+**Cause:** dt is about 0.375 per VI. At 30 fps (2 VIs) `(int)0.75 = 0`,
+so these counts never move. On hardware the slower RDP must run this
+screen at 3+ VIs per frame, where `(int)dt >= 1`. The other count-ups
+don't stall: Tank Bucks adds `(int)(rate*dt)` and `0x65D8` adds
+`(int)(dt*3)`.
+
+**Fix** (`src/game/frame_dt_fix.cpp`): `btga_score_count_step`, hooked at
+each routine's join label before the add (`0x800CF478`, `0x800CF534`,
+`0x800CF624`, `0x800CF6E0`), makes a zero step 1 while dt > 0. The
+existing clamp still lands each count exactly on its total, including 0.
+At 30 fps the counts tick about 30/s, vs. roughly 20/s on hardware; only
+the animation speed differs.
+
 ## 2026-10-03, round 126: going public for beta testing
 
 **Round 125 result:** the build works with the precompiled icon resource.

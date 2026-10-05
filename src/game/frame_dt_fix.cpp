@@ -51,3 +51,22 @@ extern "C" void btga_frame_step(uint8_t* rdram, recomp_context* ctx) {
         ctx->f0.fl = vis * kStepPerVi;
     }
 }
+
+// Round 127: the end-of-level score screen's Kills and Tanks Lost count-ups.
+//
+// func_800CF41C / func_800CF4E4 (Kills, players 1/2) and func_800CF5C8 /
+// func_800CF690 (Tanks Lost) each add (int)dt per frame until they reach the
+// real total. dt is ~0.375 per VI, so at 30 fps (2 VIs) (int)0.75 = 0: the
+// counts never move and the screen shows 0. On hardware the RDP is slower
+// and the screen runs at 3+ VIs per frame, where (int)dt >= 1. Count at
+// least 1 per frame while dt is positive.
+//
+// Hooked at each routine's join label before `addu $v0, $v0, $v1`
+// (0x800CF478, 0x800CF534, 0x800CF624, 0x800CF6E0), with the truncated
+// step in $v1.
+extern "C" void btga_score_count_step(uint8_t* rdram, recomp_context* ctx) {
+    float dt = *(float*)(rdram + (0x803A5948u - 0x80000000u));
+    if ((int32_t)ctx->r3 == 0 && dt > 0.0f) {
+        ctx->r3 = 1;
+    }
+}
