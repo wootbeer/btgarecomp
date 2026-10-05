@@ -35,7 +35,10 @@ and leave the game's own behaviour, look and balance alone.
 
 ## Known issues
 
-- Level 1's ground texture can pop in late (minor, not investigated).
+- Tank shadows can show through hills. Shadows are decals (drawn only where
+  they match the depth already on screen); RT64 approximates the N64's
+  decal depth test, so this may or may not happen on hardware. Needs a
+  comparison with an accurate emulator.
 - The Edge's stun on enemy tanks may last too long; not reproduced yet.
 - Quitting can fault in a game thread after the runtime frees memory. This
   is caught and exits silently, but a cleaner shutdown would be better.
