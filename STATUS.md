@@ -3,6 +3,36 @@
 Last updated: 2026-10-01, in a Claude Code cloud session (a different sandbox
 from the one that wrote the entries below).
 
+## 2026-10-05, round 130: frame pacing log and A/B switches
+
+**Reports this session:**
+- **The Edge stun lasting forever.** Possibly not a real bug; the user
+  will retest, ideally against an emulator. I traced the power:
+  - `func_8008C5D8` handles the "EDGE POWER USED" case. It calls
+    `func_800A5BD8` with descriptor `0x801151A4` (type 5), which spawns
+    an object of type `0x17`.
+  - Object handlers are registered by code into a 16-byte-per-type
+    table at `0x80224A74`. Type `0x17` uses `0x800DC214`, `0x800DD82C`,
+    `0x800DE7E8` and `0x800DDF04`; type `0x27` uses `0x800F83C0`, the
+    mission 13 function.
+  - `0x800DD82C`'s progress byte advances `trunc(p + step*255/30)`, about
+    8 per frame, so each stage takes about 32 frames, as on hardware.
+  - Not traced yet: where the stun is applied to and released from enemy
+    tanks.
+- **Motion slightly less smooth since about rounds 122-125.** Only while
+  driving, mostly when rotating the camera. The suspects:
+  - the frame-step snap (round 125), used by about 30 game sites
+    including movement
+  - the RT64 Expand/interpolation change (round 122)
+  - the audio cap (round 124), least likely
+
+**Added** (environment variables, read once at first use):
+- `BTGA_PACING_LOG=1`: every 150 gameplay frames, from the governor
+  hook, prints a `[BTGA PACING]` line with fps, VIs per frame
+  (1/2/3/4+), the host frame-interval spread and the raw step range.
+- `BTGA_NO_FRAME_STEP_SNAP=1`: skips the round 125 snap.
+- `BTGA_NO_AUDIO_CAP=1`: skips the round 124 cap.
+
 ## 2026-10-05: rounds 127 and 129 confirmed
 
 The user beat mission 13 (Eiffel Tower): no crash, and the score screen

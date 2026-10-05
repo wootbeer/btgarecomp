@@ -14,8 +14,11 @@
 // hardware too: it divides CPU-count ticks (46.875 MHz) by the CPU clock
 // rate (62.5 MHz). One VI is therefore 0.375 units. The measured value was
 // already steady (0.72-0.77); snap it to whole VIs instead of replacing it.
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 #include "recomp.h"
 
@@ -45,8 +48,67 @@ extern "C" void btga_frame_dt(uint8_t* rdram, recomp_context* ctx) {
 static constexpr float kStepPerVi = 30.0f / 59.826f;
 
 // Hooked right before `swc1 $f0, -0x6B78($at)` in func_80099FE8 (0x8009A398).
+//
+// Testing switches (environment variables, read once):
+//   BTGA_NO_FRAME_STEP_SNAP=1  leave the step as measured
+//   BTGA_PACING_LOG=1          every 150 gameplay frames, print how many VIs
+//                              frames took and the host frame interval spread
+namespace {
+    bool env_flag(const char* name) {
+        const char* v = std::getenv(name);
+        return v != nullptr && v[0] != '\0' && v[0] != '0';
+    }
+
+    struct PacingStats {
+        int frames = 0;
+        int vis[5] = {}; // 0, 1, 2, 3, 4+ VIs
+        float raw_min = 1e9f, raw_max = 0.0f;
+        double ms_min = 1e9, ms_max = 0.0, ms_sum = 0.0;
+        std::chrono::steady_clock::time_point last{};
+        std::chrono::steady_clock::time_point window_start{};
+    };
+
+    void log_pacing(float raw, float vis) {
+        static PacingStats st;
+        auto now = std::chrono::steady_clock::now();
+        if (st.last.time_since_epoch().count() != 0) {
+            double ms = std::chrono::duration<double, std::milli>(now - st.last).count();
+            if (ms < st.ms_min) st.ms_min = ms;
+            if (ms > st.ms_max) st.ms_max = ms;
+            st.ms_sum += ms;
+        }
+        else {
+            st.window_start = now;
+        }
+        st.last = now;
+        st.vis[vis >= 4.0f ? 4 : (int)vis]++;
+        if (raw < st.raw_min) st.raw_min = raw;
+        if (raw > st.raw_max) st.raw_max = raw;
+        if (++st.frames >= 150) {
+            double secs = std::chrono::duration<double>(now - st.window_start).count();
+            printf("[BTGA PACING] %d frames in %.2f s (%.1f fps): VIs/frame 1:%d 2:%d 3:%d 4+:%d; "
+                   "frame interval %.1f-%.1f ms (avg %.1f); raw step %.3f-%.3f\n",
+                st.frames, secs, st.frames / secs, st.vis[1], st.vis[2], st.vis[3], st.vis[4],
+                st.ms_min, st.ms_max, st.ms_sum / (st.frames - 1), st.raw_min, st.raw_max);
+            fflush(stdout);
+            st = PacingStats{};
+            st.last = now;
+            st.window_start = now;
+        }
+    }
+}
+
 extern "C" void btga_frame_step(uint8_t* rdram, recomp_context* ctx) {
-    float vis = std::round(ctx->f0.fl / (30.0f / 60.0f));
+    static const bool no_snap = env_flag("BTGA_NO_FRAME_STEP_SNAP");
+    static const bool pacing_log = env_flag("BTGA_PACING_LOG");
+    float raw = ctx->f0.fl;
+    float vis = std::round(raw / (30.0f / 60.0f));
+    if (pacing_log) {
+        log_pacing(raw, vis);
+    }
+    if (no_snap) {
+        return;
+    }
     if (vis >= 1.0f) { // keep tiny/zero first-frame values as measured
         ctx->f0.fl = vis * kStepPerVi;
     }
