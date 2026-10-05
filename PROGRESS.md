@@ -35,10 +35,11 @@ and leave the game's own behaviour, look and balance alone.
 
 ## Known issues
 
-- Tank shadows can show through hills. Shadows are decals (drawn only where
-  they match the depth already on screen); RT64 approximates the N64's
-  decal depth test, so this may or may not happen on hardware. Needs a
-  comparison with an accurate emulator.
+- Tank shadows can show on the near side of sand mounds when the tank is
+  behind them. Probably the original game: the shadow is drawn well below
+  the hidden tank, on the near slope (so the game places it there), and an
+  emulator with a different decal method shows the same. Left as is; only
+  real hardware or an accurate emulator (ares, ParaLLEl-RDP) would confirm.
 - The Edge's stun on enemy tanks may last too long; not reproduced yet.
 - Quitting can fault in a game thread after the runtime frees memory. This
   is caught and exits silently, but a cleaner shutdown would be better.
