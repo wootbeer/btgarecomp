@@ -83,7 +83,7 @@ below):
 $env:BTGA_CLANGCL = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe"
 cmake -S lib\N64ModernRuntime\N64Recomp -B lib\N64ModernRuntime\N64Recomp\build -G Ninja -DCMAKE_C_COMPILER="$env:BTGA_CLANGCL" -DCMAKE_CXX_COMPILER="$env:BTGA_CLANGCL"
 cmake --build lib\N64ModernRuntime\N64Recomp\build --target N64RecompCLI
-lib\N64ModernRuntime\N64Recomp\build\N64Recomp.exe battletanxga.us.rev0.toml
+.\lib\N64ModernRuntime\N64Recomp\build\N64Recomp.exe battletanxga.us.rev0.toml
 ```
 
 **Linux:**
@@ -156,8 +156,15 @@ newer if built on Ubuntu 24.04. Settings and saves go to
 PowerShell or "Developer Command Prompt" can default to x86, which fails
 late with `lld-link: undefined symbol: mainCRTStartup`. Check with
 `$env:LIB` (PowerShell) or `echo %LIB%` (cmd): it must contain `\x64`
-paths, not `\x86`. If not, open "x64 Native Tools Command Prompt for VS
-2022" instead (in cmd, use `set "BTGA_CLANGCL=..."` and `%BTGA_CLANGCL%`).
+paths, not `\x86`. To switch any PowerShell window to the x64 environment:
+
+```powershell
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+```
+
+Without it, CMake can fail with "execution of make failed" (Ninja not
+found). Or open "x64 Native Tools Command Prompt for VS 2022" instead (in
+cmd, use `set "BTGA_CLANGCL=..."` and `%BTGA_CLANGCL%`).
 
 **Which clang-cl.** Visual Studio ships a 32-bit-hosted `clang-cl.exe` in
 `VC\Tools\Llvm\bin\` and a 64-bit one in `VC\Tools\Llvm\x64\bin\`. Pass the
