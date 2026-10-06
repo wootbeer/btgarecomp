@@ -121,7 +121,9 @@ Run it from the repo root: the game loads `assets/` relative to the working
 directory. Use `-DCMAKE_BUILD_TYPE=Debug` for a build a debugger can step
 through.
 
-## 6. Package a Windows release
+## 6. Package a release
+
+### Windows
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
@@ -133,6 +135,20 @@ itself), builds Release in `build-release\` so your normal `build\` is left
 alone, and writes `dist\BattleTanxGARecompiled-<version>-windows.zip` with
 the exe, its DLLs, `assets\`, README and license. Steps 1-4 must be done
 first.
+
+### Linux (experimental)
+
+```bash
+tools/package-linux.sh 0.1.1
+```
+
+Builds Release in `build-release-linux/` (or `$BUILD_DIR`) and writes
+`dist/BattleTanxGARecompiled-<version>-linux-x86_64.tar.gz`: the binary, a
+`BattleTanxGARecompiled.sh` launcher that runs it from its own folder, the
+assets, README, license and third-party license notices. SDL2, GTK 3,
+FreeType and Vulkan come from the system; the binary needs glibc 2.38 or
+newer if built on Ubuntu 24.04. Settings and saves go to
+`~/.config/btgarecomp` (or the game folder with `portable.txt`).
 
 ## Troubleshooting (Windows)
 

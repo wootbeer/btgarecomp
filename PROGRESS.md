@@ -28,7 +28,8 @@ and leave the game's own behaviour, look and balance alone.
   snapped to whole VIs, and the few places that truncated the per-frame
   step to an integer (which hardware's slower ~20 fps hid) are fixed
   proportionally (`src/game/frame_dt_fix.cpp`).
-- **Crash reports**: `crash_log.txt` names the game function that faulted
+- **Crash reports**: `crash_log.txt` gives the exception, the module, any
+  C++ error message and the game function that faulted
   (`src/main/crash_handler.cpp`).
 - **Windows release** packaging (`tools/package-windows.ps1`), with the
   third-party license notices and no build-machine paths in the exe.
@@ -47,7 +48,10 @@ and leave the game's own behaviour, look and balance alone.
 ## Next
 
 - Bug reports from beta testers.
-- A Linux release (it builds and runs in development).
+- A Linux release: `tools/package-linux.sh` builds one; waiting on a
+  tester's results (SteamOS).
+- A SteamOS tester's crash under Proton; the next build's crash log
+  should say what failed.
 - macOS is not set up.
 
 ## Where things are

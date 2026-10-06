@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <vector>
 
 #if defined(_WIN32)
@@ -76,10 +77,29 @@ namespace {
         return has_access && in_rdram(access) && (access - (uintptr_t)rdram_base) < 0x20000000ull;
     }
 
-    void report(FILE* out, const char* what, uintptr_t pc, uintptr_t module_base, bool has_access, uintptr_t access, bool write, const uintptr_t* stack, size_t stack_words) {
+    struct Fault {
+        const char* what;    // exception name
+        uint32_t code;       // exception code (Windows) or signal number
+        const char* module;  // file name of the module the fault is in
+        const char* detail;  // extra description (C++ exception type and message), or empty
+        uintptr_t pc;
+        uintptr_t module_base;
+        bool has_access;
+        uintptr_t access;
+        bool write;
+    };
+
+    void report(FILE* out, const Fault& fault, const uintptr_t* stack, size_t stack_words) {
+        const uintptr_t pc = fault.pc;
+        const bool has_access = fault.has_access;
+        const uintptr_t access = fault.access;
+        const bool write = fault.write;
         fprintf(out, "BattleTanx: Global Assault Recompiled crashed.\n");
-        fprintf(out, "Exception: %s\n", what);
-        fprintf(out, "Fault offset: 0x%" PRIxPTR "\n", pc - module_base);
+        fprintf(out, "Exception: %s (code 0x%08X)\n", fault.what, fault.code);
+        if (fault.detail[0] != '\0') {
+            fprintf(out, "Details: %s\n", fault.detail);
+        }
+        fprintf(out, "Fault offset: 0x%" PRIxPTR " in %s\n", pc - fault.module_base, fault.module[0] != '\0' ? fault.module : "unknown module");
         if (const GameFunc* f = find_game_func(pc)) {
             fprintf(out, "In game function: func_%08X (+0x%" PRIxPTR " host bytes)\n", f->vram, pc - f->host);
         }
@@ -127,7 +147,7 @@ namespace {
 #endif
     }
 
-    void write_reports(const char* what, uintptr_t pc, uintptr_t module_base, bool has_access, uintptr_t access, bool write, uintptr_t sp) {
+    void write_reports(const Fault& fault, uintptr_t sp) {
         // Scan up to 64 KB of the faulting thread's stack (the handler runs on
         // that thread) for return addresses, never past its top.
         const uintptr_t* stack = reinterpret_cast<const uintptr_t*>(sp);
@@ -136,14 +156,38 @@ namespace {
         if (top > sp) {
             words = std::min<uintptr_t>(top - sp, 0x10000) / sizeof(uintptr_t);
         }
-        report(stderr, what, pc, module_base, has_access, access, write, stack, words);
+        report(stderr, fault, stack, words);
         if (FILE* f = fopen("crash_log.txt", "w")) {
-            report(f, what, pc, module_base, has_access, access, write, stack, words);
+            report(f, fault, stack, words);
             fclose(f);
         }
     }
 
+    // The file name of a module path, without its folder (which can contain
+    // the user's name).
+    const char* file_name(const char* path) {
+        const char* name = path;
+        for (const char* p = path; *p != '\0'; p++) {
+            if (*p == '/' || *p == '\\') {
+                name = p + 1;
+            }
+        }
+        return name;
+    }
+
+    void show_crash_message() {
 #if defined(_WIN32)
+        MessageBoxA(nullptr,
+            "The game crashed. Details were saved to crash_log.txt in the game's folder -- "
+            "please include that file when reporting the problem.",
+            "BattleTanx: Global Assault Recompiled", MB_OK | MB_ICONERROR);
+#endif
+    }
+
+#if defined(_WIN32)
+    // MSVC-ABI C++ exceptions are raised as this SEH code ("msc").
+    constexpr DWORD kCppExceptionCode = 0xE06D7363;
+
     const char* exception_name(DWORD code) {
         switch (code) {
         case EXCEPTION_ACCESS_VIOLATION: return "access violation";
@@ -151,7 +195,80 @@ namespace {
         case EXCEPTION_INT_DIVIDE_BY_ZERO: return "integer divide by zero";
         case EXCEPTION_STACK_OVERFLOW: return "stack overflow";
         case EXCEPTION_IN_PAGE_ERROR: return "in-page error";
+        case EXCEPTION_PRIV_INSTRUCTION: return "privileged instruction";
+        case EXCEPTION_BREAKPOINT: return "breakpoint";
+        case 0xC0000409: return "stack buffer overrun / fast fail"; // STATUS_STACK_BUFFER_OVERRUN
+        case kCppExceptionCode: return "uncaught C++ exception";
         default: return "unhandled exception";
+        }
+    }
+
+    // ".?AVruntime_error@std@@" -> "std::runtime_error".
+    void type_name(const char* decorated, char* out, size_t size) {
+        if (strncmp(decorated, ".?A", 3) != 0 || decorated[3] == '\0') {
+            snprintf(out, size, "%s", decorated);
+            return;
+        }
+        const char* parts[8];
+        size_t lengths[8];
+        int count = 0;
+        const char* p = decorated + 4;
+        while (*p != '\0' && *p != '@' && count < 8) {
+            const char* end = strchr(p, '@');
+            if (end == nullptr) {
+                end = p + strlen(p);
+            }
+            parts[count] = p;
+            lengths[count] = (size_t)(end - p);
+            count++;
+            p = *end == '@' ? end + 1 : end;
+        }
+        size_t used = 0;
+        out[0] = '\0';
+        for (int i = count - 1; i >= 0 && used + 1 < size; i--) {
+            int n = snprintf(out + used, size - used, "%s%.*s", used > 0 ? "::" : "", (int)lengths[i], parts[i]);
+            if (n < 0) {
+                break;
+            }
+            used += (size_t)n;
+        }
+    }
+
+    // For a C++ exception: the thrown type and, for a std::exception, its
+    // message, read from the exception's MSVC throw information.
+    void cpp_exception_detail(const EXCEPTION_RECORD* rec, char* out, size_t size) {
+        out[0] = '\0';
+        if (rec->ExceptionCode != kCppExceptionCode || rec->NumberParameters < 4) {
+            return;
+        }
+        __try {
+            const uint8_t* object = (const uint8_t*)rec->ExceptionInformation[1];
+            const uint8_t* throw_info = (const uint8_t*)rec->ExceptionInformation[2];
+            const uint8_t* image = (const uint8_t*)rec->ExceptionInformation[3];
+            if (object == nullptr || throw_info == nullptr || image == nullptr) {
+                return;
+            }
+            // ThrowInfo.pCatchableTypeArray -> { count, CatchableType RVAs }
+            const uint8_t* types = image + *(const int32_t*)(throw_info + 12);
+            int32_t count = *(const int32_t*)types;
+            char thrown[128] = "unknown type";
+            const char* message = nullptr;
+            for (int32_t i = 0; i < count && i < 32; i++) {
+                // CatchableType: properties, pType (TypeDescriptor RVA), thisDisplacement.mdisp, ...
+                const uint8_t* type = image + *(const int32_t*)(types + 4 + 4 * i);
+                const char* name = (const char*)(image + *(const int32_t*)(type + 4) + 16);
+                if (i == 0) {
+                    type_name(name, thrown, sizeof(thrown));
+                }
+                if (strcmp(name, ".?AVexception@std@@") == 0) {
+                    const std::exception* e = (const std::exception*)(object + *(const int32_t*)(type + 8));
+                    message = e->what();
+                }
+            }
+            snprintf(out, size, "C++ exception %s%s%s", thrown, message != nullptr ? ": " : "", message != nullptr ? message : "");
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {
+            snprintf(out, size, "C++ exception (details unreadable)");
         }
     }
 
@@ -164,17 +281,29 @@ namespace {
         uintptr_t pc = (uintptr_t)rec->ExceptionAddress;
         HMODULE module = nullptr;
         GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)pc, &module);
+        char module_path[MAX_PATH] = "";
+        if (module != nullptr) {
+            GetModuleFileNameA(module, module_path, sizeof(module_path));
+        }
         bool has_access = (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION || rec->ExceptionCode == EXCEPTION_IN_PAGE_ERROR) && rec->NumberParameters >= 2;
         if (is_shutdown_fault(has_access, has_access ? (uintptr_t)rec->ExceptionInformation[1] : 0)) {
             TerminateProcess(GetCurrentProcess(), 0);
         }
-        write_reports(exception_name(rec->ExceptionCode), pc, (uintptr_t)module, has_access,
-            has_access ? (uintptr_t)rec->ExceptionInformation[1] : 0,
-            has_access && rec->ExceptionInformation[0] == 1, (uintptr_t)info->ContextRecord->Rsp);
-        MessageBoxA(nullptr,
-            "The game crashed. Details were saved to crash_log.txt in the game's folder -- "
-            "please include that file when reporting the problem.",
-            "BattleTanx: Global Assault Recompiled", MB_OK | MB_ICONERROR);
+        char detail[512];
+        cpp_exception_detail(rec, detail, sizeof(detail));
+        Fault fault{
+            .what = exception_name(rec->ExceptionCode),
+            .code = (uint32_t)rec->ExceptionCode,
+            .module = file_name(module_path),
+            .detail = detail,
+            .pc = pc,
+            .module_base = (uintptr_t)module,
+            .has_access = has_access,
+            .access = has_access ? (uintptr_t)rec->ExceptionInformation[1] : 0,
+            .write = has_access && rec->ExceptionInformation[0] == 1,
+        };
+        write_reports(fault, (uintptr_t)info->ContextRecord->Rsp);
+        show_crash_message();
         return EXCEPTION_CONTINUE_SEARCH;
     }
 #elif defined(__linux__)
@@ -191,12 +320,41 @@ namespace {
             _exit(0);
         }
         Dl_info dl{};
-        uintptr_t module_base = dladdr((void*)pc, &dl) != 0 ? (uintptr_t)dl.dli_fbase : 0;
-        write_reports(what, pc, module_base, sig == SIGSEGV || sig == SIGBUS, (uintptr_t)info->si_addr, false, sp);
+        bool found = dladdr((void*)pc, &dl) != 0;
+        Fault fault{
+            .what = what,
+            .code = (uint32_t)sig,
+            .module = found && dl.dli_fname != nullptr ? file_name(dl.dli_fname) : "",
+            .detail = "",
+            .pc = pc,
+            .module_base = found ? (uintptr_t)dl.dli_fbase : 0,
+            .has_access = sig == SIGSEGV || sig == SIGBUS,
+            .access = (uintptr_t)info->si_addr,
+            .write = false,
+        };
+        write_reports(fault, sp);
         signal(sig, SIG_DFL);
         raise(sig);
     }
 #endif
+}
+
+// Reports a fatal error that isn't a CPU exception, such as an uncaught C++
+// exception reaching std::terminate: writes crash_log.txt and, on Windows,
+// shows the crash message (release builds have no console for stderr).
+void btga_report_fatal_error(const char* message) {
+    for (FILE* out : { stderr, fopen("crash_log.txt", "w") }) {
+        if (out == nullptr) {
+            continue;
+        }
+        fprintf(out, "BattleTanx: Global Assault Recompiled crashed.\n");
+        fprintf(out, "Error: %s\n", message);
+        fflush(out);
+        if (out != stderr) {
+            fclose(out);
+        }
+    }
+    show_crash_message();
 }
 
 // Records where N64 memory starts, to translate faulting addresses (called

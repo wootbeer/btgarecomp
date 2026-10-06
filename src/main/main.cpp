@@ -18,6 +18,7 @@
 #include <vector>
 #include <filesystem>
 #include <exception>
+#include <string>
 
 #include "nfd.h"
 
@@ -381,20 +382,23 @@ std::vector<recomp::GameEntry> supported_games = {
 // been showing up empty even when something threw and printed nothing --
 // this handler force-flushes and prints the exception's own message first
 // so it actually survives redirection.
+// The message also goes to crash_log.txt (src/main/crash_handler.cpp), since
+// release builds have no console.
+void btga_report_fatal_error(const char* message);
+
 [[noreturn]] static void report_unhandled_exception_and_abort() {
+    std::string message = "std::terminate() called with no active exception";
     if (std::exception_ptr eptr = std::current_exception()) {
         try {
             std::rethrow_exception(eptr);
         } catch (const std::exception& e) {
-            fprintf(stderr, "UNHANDLED EXCEPTION: %s\n", e.what());
+            message = std::string("uncaught C++ exception: ") + e.what();
         } catch (...) {
-            fprintf(stderr, "UNHANDLED EXCEPTION: (unrecognized exception type)\n");
+            message = "uncaught C++ exception of an unrecognized type";
         }
-    } else {
-        fprintf(stderr, "std::terminate() called with no active exception.\n");
     }
     fflush(stdout);
-    fflush(stderr);
+    btga_report_fatal_error(message.c_str());
     std::abort();
 }
 

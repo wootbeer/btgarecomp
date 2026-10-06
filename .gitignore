@@ -77,3 +77,4 @@ assets/unk_*.bin
 # Release packaging (tools/package-windows.ps1)
 build-release/
 dist/
+build-release-linux/

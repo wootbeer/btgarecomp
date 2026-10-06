@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 133)
+## Overview (as of round 134)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -65,6 +65,42 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-06, round 134: Proton crash report; better crash logs; Linux package
+
+**Report.** A tester on SteamOS gets a crash at startup under every Proton
+version:
+```
+Exception: unhandled exception
+Fault offset: 0xce87
+Not in a recompiled game function.
+Game functions on the stack: func_8010C63C, func_800F6650, func_8010C63C, func_8010F5F0
+```
+The exception wasn't one the handler names, and the log had no code or
+module, so the cause can't be told. A small offset outside the game code
+suggests a system DLL raising it -- typically a C++ exception thrown by
+something the game called. (The stack scan is best effort:
+`func_8010C63C`/`func_8010F5F0` show up in every report so far.)
+
+**Crash logs now say what failed** (`src/main/crash_handler.cpp`):
+- the exception code always, and names for breakpoint, privileged
+  instruction, fast-fail and uncaught C++ exceptions
+- the module the fault is in (file name only, no folder)
+- for an MSVC C++ exception (`0xE06D7363`): the thrown type and, for a
+  `std::exception`, its message, read from the throw information
+  (guarded by `__try`)
+- the `std::terminate` handler (`main.cpp`) now also writes
+  `crash_log.txt` and shows the crash message; before, release builds lost
+  it with no console
+
+The Windows code was compile-checked here against MinGW's Windows headers
+(warnings on); the Linux build compiles and runs.
+
+**Linux package** (`tools/package-linux.sh`): binary (stripped), a
+launcher script that runs it from its own folder, assets, licenses. The
+binary needs glibc 2.38+, SDL2, GTK 3, FreeType and Vulkan from the system
+(all on SteamOS). Built and smoke-tested here up to window creation (no
+GPU); not yet run on real hardware.
 
 ## 2026-10-05, round 133: own UI font and icons; licensing; build paths
 
