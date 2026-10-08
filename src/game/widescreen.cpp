@@ -23,16 +23,16 @@
 #include "btga_config.h"
 
 // TEMPORARY diagnostic (Android port, nuke flash in the intro covering the whole
-// window in Expand): logs full-width fills and the frame clear colour, only when a
-// line differs from the previous one, at most 300 lines. Remove once found.
+// window in Expand): logs full-width fills and the frame clear colour, each source
+// only when its line changes, at most 300 lines. Remove once found.
 namespace {
-    void flash_log(const char* line) {
-        static char last[160];
+    void flash_log(int source, const char* line) {
+        static char last[3][160];
         static int count = 0;
-        if (count >= 300 || std::strcmp(line, last) == 0) {
+        if (count >= 300 || std::strcmp(line, last[source]) == 0) {
             return;
         }
-        std::snprintf(last, sizeof(last), "%s", line);
+        std::snprintf(last[source], sizeof(last[source]), "%s", line);
         count++;
         std::fprintf(stderr, "[BTGA FLASH] %s\n", line);
     }
@@ -303,7 +303,7 @@ extern "C" void btga_hud_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
         char line[160];
         std::snprintf(line, sizeof(line), "interp fill x %d..%d el %02X %02X%02X%02X%02X y %d hud %d",
             ulx, lrx, MEM_BU(0, el), MEM_BU(1, el), MEM_BU(2, el), MEM_BU(3, el), MEM_BU(4, el), (int)MEM_H(4, el), hud_script ? 1 : 0);
-        flash_log(line);
+        flash_log(0, line);
     }
     if (!anchoring_active(rdram)) {
         return;
@@ -355,7 +355,7 @@ extern "C" void btga_box_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
         char line[160];
         std::snprintf(line, sizeof(line), "box fill %d,%d..%d,%d data %08X %08X %08X %08X",
             ulx, uly, lrx, lry, (uint32_t)MEM_W(0, ctx->r17), (uint32_t)MEM_W(4, ctx->r17), (uint32_t)MEM_W(8, ctx->r17), (uint32_t)MEM_W(0xC, ctx->r17));
-        flash_log(line);
+        flash_log(1, line);
     }
     Letterbox& lb = letterbox_building;
     if (ulx <= 0 && lrx > 0 && lrx < 160 && uly <= 0) {
@@ -392,7 +392,7 @@ extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
             std::snprintf(line, sizeof(line), "clear colour %08X rect %08X %08X letterbox %d",
                 (uint32_t)MEM_W(4, clear_cmd), (uint32_t)MEM_W(8, clear_cmd), (uint32_t)MEM_W(12, clear_cmd),
                 (frame_counter - letterbox_frame <= 3 && letterbox_last.bars >= 2) ? 1 : 0);
-            flash_log(line);
+            flash_log(2, line);
         }
     }
 
