@@ -274,6 +274,32 @@ correct per spec), so it may be Adreno-specific; plume is a nested submodule
 of rt64 (`lib/rt64/src/contrib/plume`), so a fix there needs its own patch
 plumbing. Recheck once the swap chain exists.
 
-Next: the ROM. librecomp loads `<game id>.z64` from the app folder if its hash
-matches, so the launcher (system document picker) copies the chosen ROM there.
+Fifth run: the launcher menu draws and is navigable with the controller.
+"Load ROM" does nothing (nfd stand-in).
+
+ROM import (instead of DesCore's launcher, which the plan had for this): the
+game already validates and stores ROMs (`recomp::select_rom`: byte order, hash,
+writes `<app folder>/btga.n64.us.1.0.z64`), so the Java side only delivers the
+file.
+
+- `RomPickerActivity` is the launcher activity. With a stored ROM it starts the
+  game at once; otherwise a dialog, then `ACTION_OPEN_DOCUMENT`, then the file
+  is copied to `files/rom-import.bin` and the game starts.
+- `btga::android::import_picked_rom()` (called in `main()` after the games
+  are registered, before `recomp::start()`) runs `select_rom` on it, deletes
+  it, and shows an SDL message box saying what's wrong if it isn't the ROM.
+- Picking happens before the game runs because a picker covering the game
+  destroys its surface, and the renderer can't recover from that yet (see
+  pause/resume below). The in-game "Load ROM" button still does nothing.
+- `allowBackup="false"` plus `dataExtractionRules` excluding everything, so the
+  stored ROM never leaves the device through backup or device transfer.
+
+Next:
+
+- Pause/resume: on `surfaceDestroyed` the `ANativeWindow*` plume holds goes
+  stale (home button, notifications, any covering activity). Needs the game to
+  stop presenting and the swap chain (and its `VkSurfaceKHR`) recreated on the
+  new window.
+- Re-picking a ROM: today only by clearing the app's storage.
+- Touch controls.
 

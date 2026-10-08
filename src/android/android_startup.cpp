@@ -7,7 +7,13 @@
 #include <android/log.h>
 #include <unistd.h>
 
+#include <filesystem>
+#include <system_error>
+
+#include "SDL2/SDL_messagebox.h"
 #include "SDL2/SDL_system.h"
+
+#include "librecomp/game.hpp"
 
 namespace {
     // Android discards a native process's stdout and stderr; the game reports its problems
@@ -60,4 +66,41 @@ void btga::android::startup() {
     if (internal_path == nullptr || chdir(internal_path) != 0) {
         fprintf(stderr, "Couldn't change to the app storage folder: %s\n", SDL_GetError());
     }
+}
+
+void btga::android::import_picked_rom(const std::u8string& game_id) {
+    // Written by RomPickerActivity into the app's storage, the working directory.
+    const std::filesystem::path picked = "rom-import.bin";
+    std::error_code ec;
+    if (!std::filesystem::exists(picked, ec)) {
+        return;
+    }
+
+    recomp::RomValidationError result = recomp::select_rom(picked, game_id);
+    std::filesystem::remove(picked, ec);
+
+    const char* problem = nullptr;
+    switch (result) {
+        case recomp::RomValidationError::Good:
+            return;
+        case recomp::RomValidationError::FailedToOpen:
+            problem = "The chosen file couldn't be read.";
+            break;
+        case recomp::RomValidationError::NotARom:
+            problem = "The chosen file isn't an N64 ROM.";
+            break;
+        case recomp::RomValidationError::IncorrectRom:
+            problem = "The chosen ROM isn't BattleTanx: Global Assault.";
+            break;
+        case recomp::RomValidationError::IncorrectVersion:
+        case recomp::RomValidationError::NotYet:
+            problem = "This is a different version of BattleTanx: Global Assault. Only the USA version is supported.";
+            break;
+        case recomp::RomValidationError::OtherError:
+            problem = "The ROM couldn't be imported.";
+            break;
+    }
+    fprintf(stderr, "ROM import failed: %s\n", problem);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ROM not imported",
+        (std::string(problem) + " Restart the app to choose another file.").c_str(), nullptr);
 }

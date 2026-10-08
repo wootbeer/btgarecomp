@@ -37,6 +37,10 @@ From a terminal instead: `gradlew assembleDebug` in `android/` (the APK lands in
 
 Requirements: Android 9 or newer (API 28), 64-bit ARM, Vulkan.
 
+On first launch the app asks for the ROM (system file picker; .z64, .v64 or .n64). It's
+validated like on desktop and copied into the app's private storage, which is excluded
+from backups and device transfers.
+
 ## Layout
 
 - `app/src/main/java/org/libsdl/app/`: SDL's Java sources, unmodified, from SDL 2.32.10

@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BattleTanx GA</string>
+    <string name="rom_prompt">Choose your BattleTanx: Global Assault (USA) ROM (.z64, .v64 or .n64). It\'s copied into the app, so this is needed only once.</string>
+    <string name="rom_choose">Choose ROM</string>
+    <string name="rom_copy_failed">The chosen file couldn\'t be read. Open the app again to choose another one.</string>
 </resources>

@@ -444,6 +444,10 @@ int main(int argc, char** argv) {
         recomp::register_game(game);
     }
 
+#if defined(__ANDROID__)
+    btga::android::import_picked_rom(supported_games[0].game_id);
+#endif
+
     recompinput::players::set_single_player_mode(true);
 
     // recompui::config::init_modal() (called from UIState::create_menus(),
