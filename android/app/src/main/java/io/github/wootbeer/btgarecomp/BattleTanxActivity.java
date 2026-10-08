@@ -3,9 +3,6 @@ package io.github.wootbeer.btgarecomp;
 import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.InputDevice;
-import android.view.KeyEvent;
-import android.view.MotionEvent;
 
 import org.libsdl.app.SDLActivity;
 
@@ -23,50 +20,10 @@ import java.nio.file.Files;
 public class BattleTanxActivity extends SDLActivity {
     private static final String TAG = "BTGA";
 
-    // Input diagnostics (the built-in controls don't reach SDL on the Retroid Pocket 6): the
-    // devices Android lists and the first input events the activity receives, before SDL.
-    private static final int MAX_LOGGED_EVENTS = 40;
-    private int loggedEvents = 0;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         installAssets();
-        logInputDevices();
         super.onCreate(savedInstanceState);
-    }
-
-    private static void logInputDevices() {
-        for (int id : InputDevice.getDeviceIds()) {
-            InputDevice device = InputDevice.getDevice(id);
-            if (device != null) {
-                Log.i(TAG, "Input device " + id + ": " + device.getName()
-                        + " sources=0x" + Integer.toHexString(device.getSources())
-                        + (device.isVirtual() ? " virtual" : "")
-                        + (device.isExternal() ? " external" : ""));
-            }
-        }
-    }
-
-    @Override
-    public boolean dispatchKeyEvent(KeyEvent event) {
-        if (loggedEvents < MAX_LOGGED_EVENTS && event.getAction() == KeyEvent.ACTION_DOWN) {
-            loggedEvents++;
-            Log.i(TAG, "Key event: " + KeyEvent.keyCodeToString(event.getKeyCode())
-                    + " device=" + event.getDeviceId()
-                    + " source=0x" + Integer.toHexString(event.getSource()));
-        }
-        return super.dispatchKeyEvent(event);
-    }
-
-    @Override
-    public boolean dispatchGenericMotionEvent(MotionEvent event) {
-        if (loggedEvents < MAX_LOGGED_EVENTS) {
-            loggedEvents++;
-            Log.i(TAG, "Motion event: action=" + event.getActionMasked()
-                    + " device=" + event.getDeviceId()
-                    + " source=0x" + Integer.toHexString(event.getSource()));
-        }
-        return super.dispatchGenericMotionEvent(event);
     }
 
     @Override

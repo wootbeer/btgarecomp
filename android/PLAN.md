@@ -308,13 +308,6 @@ The owner also reports the built-in controls don't drive the menus.
 controller / joystick with or without mapping) and the first 30 presses
 (`Input: ...` lines, tag BTGA).
 
-Seventh run: the game runs (no descriptor errors since the plume patch).
-Input: SDL only ever adds "Android Accelerometer" as a joystick; the built-in
-pad is never added and no press reaches SDL, not even as a key. SDL's Java
-filter (`isDeviceSDLJoystick`) is standard, so the next build logs, in Java,
-every Android input device (name, id, sources) and the first 40 key/motion
-events the activity receives (tag BTGA).
-
 Next:
 
 - Pause/resume: on `surfaceDestroyed` the `ANativeWindow*` plume holds goes
