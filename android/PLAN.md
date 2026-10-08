@@ -313,12 +313,27 @@ and controller (no descriptor errors since the plume patch). The controls
 seemed dead at first only because the owner's controller was off; the
 `Input: ...` device-added lines (tag BTGA) stay for controller questions.
 
+Lock/unlock on the launcher gave a black screen: `surfaceDestroyed`, then
+`dequeueBuffer failed: No such device`; SDL fetches a new `ANativeWindow` on
+`surfaceCreated` (and holds NULL in between), but plume kept the old surface.
+RT64 already retries `swapChain->resize()` every frame after a failed acquire
+(after waiting for its present worker), so:
+
+- `lib-patches/plume/0002-android-surface-after-background.patch`:
+  `plume::setAndroidWindowProvider()`; on Android `VulkanSwapChain::resize()`
+  asks the provider for the current window and, if it differs (or there's no
+  surface), destroys the swap chain and `VkSurfaceKHR` and creates them on the
+  new window. No window -> resize fails until there is one.
+- `src/android/android_startup.cpp` installs the provider: the window from
+  `SDLActivity.getNativeSurface()` via `ANativeWindow_fromSurface` (its own
+  reference, so the UI thread releasing SDL's pointer can't race it); class and
+  method looked up once on SDL's main thread.
+- The game keeps running in the background (SDL pauses audio only). Pausing
+  emulation while backgrounded is still to do.
+
 Next:
 
-- Pause/resume: on `surfaceDestroyed` the `ANativeWindow*` plume holds goes
-  stale (home button, notifications, any covering activity). Needs the game to
-  stop presenting and the swap chain (and its `VkSurfaceKHR`) recreated on the
-  new window.
+- Pause emulation in the background (and check the controller pak saves).
 - Re-picking a ROM: today only by clearing the app's storage.
 - Touch controls.
 

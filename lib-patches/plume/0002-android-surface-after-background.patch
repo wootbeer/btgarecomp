@@ -1,0 +1,93 @@
+diff --git a/plume_render_interface_types.h b/plume_render_interface_types.h
+--- a/plume_render_interface_types.h
++++ b/plume_render_interface_types.h
+@@ -39,6 +39,13 @@
+     typedef HWND RenderWindow;
+ #elif defined(__ANDROID__)
+     typedef ANativeWindow* RenderWindow;
++
++    // Android destroys a window's surface when the app leaves the foreground and gives it a new
++    // ANativeWindow when it comes back. When set, swap chains call this in resize() and move to
++    // the window it returns if that changed. It returns the window with a reference of its own
++    // (released by the swap chain), or nullptr while there is none.
++    typedef ANativeWindow *(*AndroidWindowProvider)();
++    void setAndroidWindowProvider(AndroidWindowProvider provider);
+ #elif defined(PLUME_SDL_VULKAN_ENABLED)
+     typedef SDL_Window *RenderWindow;
+ #elif defined(__linux__)
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -11,6 +11,7 @@
+ #include "plume_vulkan.h"
+ 
+ #include <algorithm>
++#include <atomic>
+ #include <cmath>
+ #include <climits>
+ #include <unordered_map>
+@@ -2316,7 +2317,64 @@
+         }
+     }
+ 
++#if defined(__ANDROID__)
++    static std::atomic<AndroidWindowProvider> androidWindowProvider{ nullptr };
++
++    void setAndroidWindowProvider(AndroidWindowProvider provider) {
++        androidWindowProvider.store(provider);
++    }
++
++    // Moves the swap chain to the window the provider returns if it isn't the one in use (the
++    // surface was destroyed in the background and recreated). False while there is no window.
++    static bool updateAndroidSurface(VulkanSwapChain *swapChain) {
++        AndroidWindowProvider provider = androidWindowProvider.load();
++        if (provider == nullptr) {
++            return true;
++        }
++
++        ANativeWindow *window = provider();
++        if (window == nullptr) {
++            return false;
++        }
++
++        bool updated = true;
++        if ((window != swapChain->desc.renderWindow) || (swapChain->surface == VK_NULL_HANDLE)) {
++            swapChain->releaseImageViews();
++            swapChain->releaseSwapChain();
++
++            VulkanInterface *renderInterface = swapChain->commandQueue->device->renderInterface;
++            if (swapChain->surface != VK_NULL_HANDLE) {
++                vkDestroySurfaceKHR(renderInterface->instance, swapChain->surface, nullptr);
++                swapChain->surface = VK_NULL_HANDLE;
++            }
++
++            // The surface keeps its own reference to the window.
++            VkAndroidSurfaceCreateInfoKHR surfaceCreateInfo = {};
++            surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
++            surfaceCreateInfo.window = window;
++            VkResult res = vkCreateAndroidSurfaceKHR(renderInterface->instance, &surfaceCreateInfo, nullptr, &swapChain->surface);
++            if (res == VK_SUCCESS) {
++                swapChain->desc.renderWindow = window;
++            }
++            else {
++                fprintf(stderr, "vkCreateAndroidSurfaceKHR failed with error code 0x%X.\n", res);
++                swapChain->surface = VK_NULL_HANDLE;
++                updated = false;
++            }
++        }
++
++        ANativeWindow_release(window);
++        return updated;
++    }
++#endif
++
+     bool VulkanSwapChain::resize() {
++#   if defined(__ANDROID__)
++        if (!updateAndroidSurface(this)) {
++            return false;
++        }
++#   endif
++
+         getWindowSize(width, height);
+ 
+         // Don't recreate the swap chain at all if the window doesn't have a valid size.

@@ -5,6 +5,8 @@
 #include <thread>
 
 #include <android/log.h>
+#include <android/native_window_jni.h>
+#include <jni.h>
 #include <unistd.h>
 
 #include <filesystem>
@@ -16,6 +18,7 @@
 #include "SDL2/SDL_system.h"
 
 #include "librecomp/game.hpp"
+#include "plume/plume_render_interface_types.h"
 
 namespace {
     // Android discards a native process's stdout and stderr; the game reports its problems
@@ -79,9 +82,57 @@ namespace {
     }
 }
 
+namespace {
+    // SDL's activity class and its getNativeSurface(), looked up on SDL's main thread: a thread
+    // that native code attached to Java (like RT64's present thread) can't find app classes.
+    jclass sdl_activity_class = nullptr;
+    jmethodID get_native_surface = nullptr;
+
+    // plume's window provider: the window behind SDL's current surface, with a reference of its
+    // own, or nullptr while the app is in the background and has no surface. Taken through Java
+    // instead of SDL's own pointer, which the UI thread releases when the surface goes away.
+    ANativeWindow* current_native_window() {
+        JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+        if (env == nullptr || sdl_activity_class == nullptr) {
+            return nullptr;
+        }
+        jobject surface = env->CallStaticObjectMethod(sdl_activity_class, get_native_surface);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            return nullptr;
+        }
+        if (surface == nullptr) {
+            return nullptr;
+        }
+        ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
+        env->DeleteLocalRef(surface);
+        return window;
+    }
+
+    void install_window_provider() {
+        JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
+        jclass local_class = env->FindClass("org/libsdl/app/SDLActivity");
+        if (local_class == nullptr) {
+            env->ExceptionClear();
+            fprintf(stderr, "Couldn't find SDLActivity; the picture won't come back after the app is in the background.\n");
+            return;
+        }
+        sdl_activity_class = static_cast<jclass>(env->NewGlobalRef(local_class));
+        env->DeleteLocalRef(local_class);
+        get_native_surface = env->GetStaticMethodID(sdl_activity_class, "getNativeSurface", "()Landroid/view/Surface;");
+        if (get_native_surface == nullptr) {
+            env->ExceptionClear();
+            sdl_activity_class = nullptr;
+            return;
+        }
+        plume::setAndroidWindowProvider(current_native_window);
+    }
+}
+
 void btga::android::startup() {
     forward_output_to_logcat();
     SDL_AddEventWatch(log_input_devices, nullptr);
+    install_window_provider();
 
     const char* internal_path = SDL_AndroidGetInternalStoragePath();
     if (internal_path == nullptr || chdir(internal_path) != 0) {
