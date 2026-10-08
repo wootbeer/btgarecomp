@@ -1,0 +1,30 @@
+diff --git a/recompui/src/renderer/rt64_render_context.cpp b/recompui/src/renderer/rt64_render_context.cpp
+index a7954c7..0e185ea 100644
+--- a/recompui/src/renderer/rt64_render_context.cpp
++++ b/recompui/src/renderer/rt64_render_context.cpp
+@@ -15,6 +15,10 @@
+ #include "recompui/config.h"
+ #include "concurrentqueue.h"
+ 
++#if defined(__ANDROID__)
++#include <SDL_syswm.h>
++#endif
++
+ using namespace recompui;
+ 
+ static RT64::UserConfiguration::Antialiasing device_max_msaa = RT64::UserConfiguration::Antialiasing::None;
+@@ -225,7 +229,13 @@ renderer::RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::Window
+     RT64::Application::Core appCore{};
+ #if defined(_WIN32)
+     appCore.window = window_handle.window;
+-#elif defined(__linux__) || defined(__ANDROID__)
++#elif defined(__ANDROID__)
++    // plume renders to the ANativeWindow behind the SDL window.
++    SDL_SysWMinfo wm_info;
++    SDL_VERSION(&wm_info.version);
++    SDL_GetWindowWMInfo(window_handle, &wm_info);
++    appCore.window = wm_info.info.android.window;
++#elif defined(__linux__)
+     appCore.window = window_handle;
+ #elif defined(__APPLE__)
+     appCore.window.window = window_handle.window;

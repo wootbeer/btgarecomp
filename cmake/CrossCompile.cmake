@@ -28,7 +28,8 @@ set(btga_host_file_to_c "${BTGA_HOST_TOOLS_DIR}/file_to_c${btga_host_exe_suffix}
 if (NOT BTGA_HOST_TOOLS_DIR OR NOT EXISTS "${btga_host_file_to_c}")
     message(FATAL_ERROR
         "Cross-compiling needs a file_to_c built for this machine. Build the desktop version "
-        "first (see BUILDING.md), then pass its build folder as -DBTGA_HOST_TOOLS_DIR=<folder>. "
+        "first (see BUILDING.md), then pass its build folder as -DBTGA_HOST_TOOLS_DIR=<folder> "
+        "(Android Studio: btga.hostToolsDir=<folder> in android/local.properties). "
         "Looked for: ${btga_host_file_to_c}")
 endif()
 add_executable(file_to_c IMPORTED GLOBAL)

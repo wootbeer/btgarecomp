@@ -1,7 +1,8 @@
 # Android port: plan
 
-Status: step 1 done (root CMake configures and nearly builds with the NDK;
-see Progress). Next: step 2.
+Status: steps 1 and 2 done; step 3 started (see Progress). Next: the owner
+builds `libmain.so` with the real generated sources (it can't be linked in the
+sandbox, which has no ROM), then the ROM launcher.
 Written 2026-10-08 so a new session can start without re-deciding anything.
 
 ## Decisions (agreed with the project owner)
@@ -177,3 +178,51 @@ Left for step 3 (the only compile errors):
 - `lib/RecompFrontend/recompui/src/renderer/rt64_render_context.cpp:229`
   assigns ultramodern's `WindowHandle` (`SDL_Window*`) to plume's
   `RenderWindow` (`ANativeWindow*` on Android); convert there (lib-patch).
+
+### Step 2 (2026-10-08) -- done
+
+- `android/`: Gradle project (Kotlin DSL), AGP 9.3.2, Gradle wrapper 9.5.0
+  (distribution SHA256-pinned), `compileSdk`/`targetSdk` 35, `minSdk` 28,
+  `arm64-v8a`, `ndkVersion` 28.2.13676358, CMake 3.31.6, `ANDROID_STL=c++_shared`.
+  `externalNativeBuild` points at the repo-root `CMakeLists.txt` and only builds
+  the `BattleTanxGARecompiled` (`libmain.so`) and `SDL2` targets. The debug
+  variant passes `CMAKE_BUILD_TYPE=RelWithDebInfo` (AGP honours it: `-O2 -g`),
+  since `-O0` recompiled code is unplayable.
+- `btga.hostToolsDir` from `android/local.properties` (or `-P`) becomes
+  `-DBTGA_HOST_TOOLS_DIR`; without it the CMake configure says what to set.
+- App id / namespace `io.github.wootbeer.btgarecomp`; activity
+  `BattleTanxActivity extends SDLActivity`, loads `SDL2` + `main`, and returns
+  `"main"` from `getMainFunction()` because `src/main/main.cpp` uses
+  `SDL_MAIN_HANDLED` (SDL dlsyms the name and has already called
+  `SDL_SetMainReady()`). Fullscreen, `sensorLandscape`. Icon from `icons/app.png`.
+- SDL 2.32.10 Java sources unmodified in `app/src/main/java/org/libsdl/app/`,
+  license in `licenses/SDL2.txt`.
+- ROM guard: `check<Variant>ApkHasNoRom` runs before every `assemble<Variant>`
+  and fails on any APK entry named `.z64/.n64/.v64` or starting with an N64 ROM
+  header in any byte order (tested: a `.Z64` asset and a renamed headed file
+  both fail the build).
+- `android/README.md`: setup and Android Studio steps for the owner.
+- Verified in the sandbox: `gradlew assembleDebug` configures and compiles all
+  libraries; with `targets` cut to `SDL2` the APK packages (`libSDL2.so`,
+  `libc++_shared.so`, dex). `libmain.so` needs the real `RecompiledFuncs/` etc.
+
+### Step 3 (started)
+
+- `lib-patches/rt64/0003-android-application-window.patch`: no X11 on Android
+  (Android also defines `__linux__`); RT64's own SDL window path works there
+  (handle from `wmInfo.info.android.window`); refresh rate from SDL's display
+  mode; window never "moves".
+- `lib-patches/RecompFrontend/0001-android-native-window.patch` (applied from
+  the root `CMakeLists.txt` like the rt64 ones): `RT64Context` hands plume the
+  `ANativeWindow*` behind the SDL window instead of the `SDL_Window*`.
+- Desktop Linux still compiles both patched files.
+
+Next in step 3:
+
+- Owner: build on the PC with the real generated sources; send the first
+  link errors, if any.
+- App folder (`get_app_folder_path()` -> app-private storage), ROM selection
+  (DesCore launcher passes the ROM in; nfd stand-in returns errors today),
+  startup message boxes, pause/resume (surface destroyed/recreated: the
+  `ANativeWindow*` handed to plume goes stale).
+
