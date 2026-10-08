@@ -354,6 +354,9 @@ was 1920x914 (system bars visible; RT64's window mode setting has no Android
 path), about 2.1:1 instead of the 16:9 the widescreen/HUD fixes were made on.
 `src/main/main.cpp` now creates the window `SDL_WINDOW_FULLSCREEN_DESKTOP` on
 Android (immersive, 1920x1080). Recheck the HUD after this.
+`lib-patches/RecompFrontend/0004-android-hide-window-mode.patch`: on Android
+the Window Mode option defaults to Fullscreen and is hidden (still registered,
+since the renderer config reads it).
 
 Next:
 

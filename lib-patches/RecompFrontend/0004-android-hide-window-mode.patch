@@ -1,0 +1,29 @@
+diff --git a/recompui/src/config/ui_config_tab_graphics.cpp b/recompui/src/config/ui_config_tab_graphics.cpp
+--- a/recompui/src/config/ui_config_tab_graphics.cpp
++++ b/recompui/src/config/ui_config_tab_graphics.cpp
+@@ -15,6 +15,9 @@
+         }
+ 
+         static ultramodern::renderer::WindowMode wm_default() {
++#if defined(__ANDROID__)
++            return ultramodern::renderer::WindowMode::Fullscreen;
++#endif
+             return is_steam_deck() ? ultramodern::renderer::WindowMode::Fullscreen : ultramodern::renderer::WindowMode::Windowed;
+         }
+ 
+@@ -296,7 +299,14 @@
+                 "Window Mode",
+                 "Sets whether the game should display <recomp-color primary>Windowed</recomp-color> or <recomp-color primary>Fullscreen</recomp-color>. You can also use <recomp-color primary>F11</recomp-color> or <recomp-color primary>Alt + Enter</recomp-color> to toggle this option.",
+                 window_mode_options,
+-                wm_default()
++                wm_default(),
++#if defined(__ANDROID__)
++                // Always fullscreen on Android (the game creates its window that way), so the
++                // option is kept for the code that reads it but not shown.
++                true
++#else
++                false
++#endif
+             );
+ 
+             config.add_enum_option(
