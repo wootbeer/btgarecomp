@@ -15,10 +15,28 @@
 // so dividing k by RT64's widening factor widens all of them at once.
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 #include "recomp.h"
 
 #include "btga_config.h"
+
+// TEMPORARY diagnostic (Android port, nuke flash in the intro covering the whole
+// window in Expand): logs full-width fills and the frame clear colour, only when a
+// line differs from the previous one, at most 300 lines. Remove once found.
+namespace {
+    void flash_log(const char* line) {
+        static char last[160];
+        static int count = 0;
+        if (count >= 300 || std::strcmp(line, last) == 0) {
+            return;
+        }
+        std::snprintf(last, sizeof(last), "%s", line);
+        count++;
+        std::fprintf(stderr, "[BTGA FLASH] %s\n", line);
+    }
+}
 
 namespace {
     std::atomic<float> widescreen_scale{ 1.0f };
@@ -280,6 +298,13 @@ extern "C" void btga_hud_texrect(uint8_t* rdram, recomp_context* ctx) {
 extern "C" void btga_hud_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     int ulx = (int16_t)ctx->r17;
     int lrx = ulx + (uint16_t)MEM_HU(0, ctx->r16);
+    if (ulx <= 0 && lrx >= 320) {
+        gpr el = ctx->r30;
+        char line[160];
+        std::snprintf(line, sizeof(line), "interp fill x %d..%d el %02X %02X%02X%02X%02X y %d hud %d",
+            ulx, lrx, MEM_BU(0, el), MEM_BU(1, el), MEM_BU(2, el), MEM_BU(3, el), MEM_BU(4, el), (int)MEM_H(4, el), hud_script ? 1 : 0);
+        flash_log(line);
+    }
     if (!anchoring_active(rdram)) {
         return;
     }
@@ -326,6 +351,12 @@ extern "C" void btga_box_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     int uly = (int16_t)MEM_H(6, ctx->r17);
     int lrx = ulx + (uint16_t)MEM_HU(8, ctx->r17);
     int lry = uly + (uint16_t)MEM_HU(0xA, ctx->r17);
+    if (ulx <= 0 && lrx >= 320) {
+        char line[160];
+        std::snprintf(line, sizeof(line), "box fill %d,%d..%d,%d data %08X %08X %08X %08X",
+            ulx, uly, lrx, lry, (uint32_t)MEM_W(0, ctx->r17), (uint32_t)MEM_W(4, ctx->r17), (uint32_t)MEM_W(8, ctx->r17), (uint32_t)MEM_W(0xC, ctx->r17));
+        flash_log(line);
+    }
     Letterbox& lb = letterbox_building;
     if (ulx <= 0 && lrx > 0 && lrx < 160 && uly <= 0) {
         lb.ulx = lrx; lb.bars++;           // left bar
@@ -352,6 +383,18 @@ extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
         letterbox_last = letterbox_building;
     }
     letterbox_building = Letterbox{};
+
+    {
+        uint32_t clear_head = (uint32_t)MEM_W(0x24, ctx->r30);
+        gpr clear_cmd = kseg0(clear_head - 16);
+        if ((uint32_t)MEM_W(0, clear_cmd) == 0xF7000000u) {
+            char line[160];
+            std::snprintf(line, sizeof(line), "clear colour %08X rect %08X %08X letterbox %d",
+                (uint32_t)MEM_W(4, clear_cmd), (uint32_t)MEM_W(8, clear_cmd), (uint32_t)MEM_W(12, clear_cmd),
+                (frame_counter - letterbox_frame <= 3 && letterbox_last.bars >= 2) ? 1 : 0);
+            flash_log(line);
+        }
+    }
 
     // Letterboxed within the last couple of frames, and in Expand.
     if (btga::get_widescreen_scale() <= 1.0f || frame_counter - letterbox_frame > 3 || letterbox_last.bars < 2) {

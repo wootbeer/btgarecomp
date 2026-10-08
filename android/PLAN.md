@@ -358,6 +358,15 @@ Android (immersive, 1920x1080). Recheck the HUD after this.
 the Window Mode option defaults to Fullscreen and is hidden (still registered,
 since the renderer config reads it).
 
+Open graphics bugs (owner, Retroid): Auto resolution + Expand HUD still loses
+the HUD after the fullscreen change; 2x MSAA makes the player's shots vanish
+and breaks other things; the intro's nuke flash covers the whole window in
+Expand instead of the 4:3 picture (shared widescreen code, so likely on PC
+too). Waiting on PC comparisons (Graphics API = Vulkan). TEMPORARY
+`[BTGA FLASH]` logging in `src/game/widescreen.cpp` (full-width fills from the
+overlay interpreter and the box drawer, and the frame clear colour) to find
+how the flash is drawn; remove after.
+
 Next:
 
 - Pause emulation in the background (and check the controller pak saves).
