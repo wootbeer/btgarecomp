@@ -364,7 +364,8 @@ fine. Anchored elements draw with a pushed whole-window scissor and can start
 left of 0 (16 px outward shift); plume's Vulkan `setScissors` passed negative
 offsets (invalid in Vulkan) and `uint32_t(right - left)` extents straight
 through, where D3D12 just clips. `lib-patches/plume/0003-vulkan-clip-negative-scissors.patch`
-clamps them (all Vulkan platforms, Linux included).
+clamps them (all Vulkan platforms, Linux included). Confirmed on the device: the
+HUD shows in Expand.
 
 Smoke/particle grain: Android only, and only in cutscenes (PC with matching
 settings is smooth). Not yet explained: the grain comes from RT64's
