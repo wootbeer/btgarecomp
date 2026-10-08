@@ -251,6 +251,15 @@ Second run: got past that; `RT64Context` then threw creating `/data/.rt64`
 is `<private storage>/rt64`. No other `$HOME`, `/tmp` or temp-dir lookups remain
 in the libraries or the game.
 
+Third run (after making lib patches re-trigger the configure, see
+`cmake/ApplyLibPatches.cmake`): Vulkan device created on the Adreno 740, all
+fonts loaded from `files/assets/`, then `vkCreateAndroidSurfaceKHR` failed
+(`native_window_api_connect: already connected`). SDL2 on Android defaults a
+window with no graphics flag to OpenGL and connects an EGL surface to it.
+`src/main/main.cpp` now creates the window with `SDL_WINDOW_VULKAN` on Android.
+The later `vkAllocateDescriptorSets` errors and the segfault on "RT64 Present"
+followed from having no swap chain; recheck after this fix.
+
 Next: the ROM. librecomp loads `<game id>.z64` from the app folder if its hash
 matches, so the launcher (system document picker) copies the chosen ROM there.
 

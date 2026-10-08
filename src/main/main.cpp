@@ -152,10 +152,13 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     uint32_t flags = SDL_WINDOW_RESIZABLE;
 #if defined(__APPLE__)
     flags |= SDL_WINDOW_METAL;
-#elif defined(RT64_SDL_WINDOW_VULKAN)
-    // Only defined on Linux (see CMakeLists.txt) -- Windows uses plume's
-    // D3D12 backend instead, which doesn't need an SDL window flag (it
-    // talks to the GPU through the raw HWND returned below).
+#elif defined(RT64_SDL_WINDOW_VULKAN) || defined(__ANDROID__)
+    // RT64_SDL_WINDOW_VULKAN is only defined on Linux (see CMakeLists.txt) --
+    // Windows uses plume's D3D12 backend instead, which doesn't need an SDL
+    // window flag (it talks to the GPU through the raw HWND returned below).
+    // On Android the flag matters too: without a graphics flag SDL defaults
+    // to OpenGL there and connects an EGL surface to the window, after which
+    // Vulkan can't create its own surface on it.
     flags |= SDL_WINDOW_VULKAN;
 #endif
 
