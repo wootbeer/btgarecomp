@@ -1,0 +1,28 @@
+diff --git a/src/common/rt64_user_paths.cpp b/src/common/rt64_user_paths.cpp
+index f38d8eb..b8f4843 100644
+--- a/src/common/rt64_user_paths.cpp
++++ b/src/common/rt64_user_paths.cpp
+@@ -4,7 +4,9 @@
+ 
+ #include "rt64_user_paths.h"
+ 
+-#if defined(__linux__)
++#if defined(__ANDROID__)
++#   include <SDL_system.h>
++#elif defined(__linux__)
+ #   include <unistd.h>
+ #   include <pwd.h>
+ #elif defined(_WIN32)
+@@ -32,6 +34,12 @@ namespace RT64 {
+         }
+ 
+         CoTaskMemFree(knownPath);
++#   elif defined(__ANDROID__)
++        // The app's private internal storage; $HOME is /data, which apps can't write.
++        const char *internalPath = SDL_AndroidGetInternalStoragePath();
++        if (internalPath != nullptr) {
++            resultPath = std::filesystem::path{ internalPath } / appId;
++        }
+ #   elif defined(__linux__) || defined(__APPLE__)
+         const char *homeDir = getenv("HOME");
+         if (homeDir == nullptr) {

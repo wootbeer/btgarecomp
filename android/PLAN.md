@@ -245,6 +245,12 @@ Fixed:
   `BattleTanxActivity` copies it to `files/assets/` whenever the app was
   installed or updated since the last copy (stamp: `lastUpdateTime`).
 
+Second run: got past that; `RT64Context` then threw creating `/data/.rt64`
+(RT64's `UserPaths::detectDataPath()` uses `$HOME`, which is `/data`).
+`lib-patches/rt64/0004-android-user-paths.patch`: on Android RT64's data folder
+is `<private storage>/rt64`. No other `$HOME`, `/tmp` or temp-dir lookups remain
+in the libraries or the game.
+
 Next: the ROM. librecomp loads `<game id>.z64` from the app folder if its hash
 matches, so the launcher (system document picker) copies the chosen ROM there.
 
