@@ -347,6 +347,14 @@ RT64 already retries `swapChain->resize()` every frame after a failed acquire
 - The game keeps running in the background (SDL pauses audio only). Pausing
   emulation while backgrounded is still to do.
 
+Graphics (owner's tests on the Retroid): with every enhancement at Original,
+and with Expand aspect + Expand HUD, most things look right. Auto resolution
++ Expand HUD makes the HUD disappear (other HUD settings fine). The window
+was 1920x914 (system bars visible; RT64's window mode setting has no Android
+path), about 2.1:1 instead of the 16:9 the widescreen/HUD fixes were made on.
+`src/main/main.cpp` now creates the window `SDL_WINDOW_FULLSCREEN_DESKTOP` on
+Android (immersive, 1920x1080). Recheck the HUD after this.
+
 Next:
 
 - Pause emulation in the background (and check the controller pak saves).

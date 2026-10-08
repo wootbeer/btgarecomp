@@ -161,6 +161,12 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     // Vulkan can't create its own surface on it.
     flags |= SDL_WINDOW_VULKAN;
 #endif
+#if defined(__ANDROID__)
+    // Always fullscreen on Android: SDL then hides the system bars (immersive mode), so the game
+    // gets the whole screen (16:9 on the Retroid Pocket 6, not 1920x914) like the desktop
+    // builds' fullscreen. The window mode setting goes through RT64, which has no Android path.
+    flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+#endif
 
     window = SDL_CreateWindow(program_name.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, flags);
     if (window == nullptr) {
