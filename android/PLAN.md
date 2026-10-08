@@ -308,6 +308,11 @@ The owner also reports the built-in controls don't drive the menus.
 controller / joystick with or without mapping) and the first 30 presses
 (`Input: ...` lines, tag BTGA).
 
+Seventh run: **the game runs on the Retroid Pocket 6** with picture, audio
+and controller (no descriptor errors since the plume patch). The controls
+seemed dead at first only because the owner's controller was off; the
+`Input: ...` device-added lines (tag BTGA) stay for controller questions.
+
 Next:
 
 - Pause/resume: on `surfaceDestroyed` the `ANativeWindow*` plume holds goes
