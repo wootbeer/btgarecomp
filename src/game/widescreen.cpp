@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "recomp.h"
 
@@ -26,15 +27,26 @@
 // window in Expand): logs full-width fills and the frame clear colour, each source
 // only when its line changes, at most 300 lines. Remove once found.
 namespace {
-    void flash_log(int source, const char* line) {
-        static char last[3][160];
+    // Per-frame summary: the fills seen since the last frame clear, then the clear and what the
+    // letterbox fix did. Logged only when it differs from the previous frame's.
+    std::string flash_frame;
+
+    void flash_log(int, const char* line) {
+        flash_frame += " | ";
+        flash_frame += line;
+    }
+
+    void flash_end_frame(const char* line) {
+        static std::string last;
         static int count = 0;
-        if (count >= 300 || std::strcmp(line, last[source]) == 0) {
+        std::string summary = std::string(line) + flash_frame;
+        flash_frame.clear();
+        if (count >= 400 || summary == last) {
             return;
         }
-        std::snprintf(last[source], sizeof(last[source]), "%s", line);
+        last = summary;
         count++;
-        std::fprintf(stderr, "[BTGA FLASH] %s\n", line);
+        std::fprintf(stderr, "[BTGA FLASH] %s\n", summary.c_str());
     }
 }
 
@@ -353,8 +365,7 @@ extern "C" void btga_box_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     int lry = uly + (uint16_t)MEM_HU(0xA, ctx->r17);
     {
         char line[160];
-        std::snprintf(line, sizeof(line), "box fill %d,%d..%d,%d data %08X %08X %08X %08X",
-            ulx, uly, lrx, lry, (uint32_t)MEM_W(0, ctx->r17), (uint32_t)MEM_W(4, ctx->r17), (uint32_t)MEM_W(8, ctx->r17), (uint32_t)MEM_W(0xC, ctx->r17));
+        std::snprintf(line, sizeof(line), "box %d,%d..%d,%d", ulx, uly, lrx, lry);
         flash_log(1, line);
     }
     Letterbox& lb = letterbox_building;
@@ -384,19 +395,25 @@ extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
     }
     letterbox_building = Letterbox{};
 
+    char flash_line[200];
     {
         uint32_t clear_head = (uint32_t)MEM_W(0x24, ctx->r30);
         gpr clear_cmd = kseg0(clear_head - 16);
-        if ((uint32_t)MEM_W(0, clear_cmd) == 0xF7000000u) {
-            char line[160];
-            std::snprintf(line, sizeof(line), "clear colour %08X rect %08X %08X letterbox %d view %d,%d..%d,%d bars %d scale %.3f",
-                (uint32_t)MEM_W(4, clear_cmd), (uint32_t)MEM_W(8, clear_cmd), (uint32_t)MEM_W(12, clear_cmd),
-                (frame_counter - letterbox_frame <= 3 && letterbox_last.bars >= 2) ? 1 : 0,
-                letterbox_last.ulx, letterbox_last.uly, letterbox_last.lrx, letterbox_last.lry, letterbox_last.bars,
-                btga::get_widescreen_scale());
-            flash_log(2, line);
-        }
+        std::snprintf(flash_line, sizeof(flash_line), "clear %08X %08X %08X lb %d view %d,%d..%d,%d bars %d scale %.3f",
+            (uint32_t)MEM_W(0, clear_cmd), (uint32_t)MEM_W(4, clear_cmd), (uint32_t)MEM_W(8, clear_cmd),
+            (frame_counter - letterbox_frame <= 3 && letterbox_last.bars >= 2) ? 1 : 0,
+            letterbox_last.ulx, letterbox_last.uly, letterbox_last.lrx, letterbox_last.lry, letterbox_last.bars,
+            btga::get_widescreen_scale());
     }
+    struct FlashEnd {
+        const char* line;
+        const char* result = "no repaint";
+        ~FlashEnd() {
+            char full[260];
+            std::snprintf(full, sizeof(full), "%s -> %s", line, result);
+            flash_end_frame(full);
+        }
+    } flash_end{ flash_line };
 
     // Letterboxed within the last couple of frames, and in Expand.
     if (btga::get_widescreen_scale() <= 1.0f || frame_counter - letterbox_frame > 3 || letterbox_last.bars < 2) {
@@ -423,9 +440,5 @@ extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
     uint32_t lrx = (uint32_t)(lb.lrx * 4 - 4), lry = (uint32_t)(lb.lry * 4 - 4); // fill mode: inclusive
     dl.cmd(0xF6000000 | (lrx << 12) | lry, ((uint32_t)(lb.ulx * 4) << 12) | (uint32_t)(lb.uly * 4));
     MEM_W(0x24, frame) = (int32_t)(uint32_t)dl.head;
-    {
-        char line[160];
-        std::snprintf(line, sizeof(line), "letterbox repaint: black, then sky %08X over %d,%d..%d,%d", sky, lb.ulx, lb.uly, lb.lrx, lb.lry);
-        flash_log(2, line);
-    }
+    flash_end.result = "repainted";
 }
