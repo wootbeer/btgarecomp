@@ -1,6 +1,7 @@
 # Android port: plan
 
-Status: step 1 partly done (host tools for cross-compiling; see Progress).
+Status: step 1 done (root CMake configures and nearly builds with the NDK;
+see Progress). Next: step 2.
 Written 2026-10-08 so a new session can start without re-deciding anything.
 
 ## Decisions (agreed with the project owner)
@@ -39,9 +40,12 @@ Written 2026-10-08 so a new session can start without re-deciding anything.
 - CMake **3.22.1 or newer** from the SDK (our root CMakeLists needs 3.20;
   the owner currently has 3.10.2 for other projects). Pin `version` in
   `externalNativeBuild`.
-- NDK r27 or newer (C++20). Pin `ndkVersion`.
-- `minSdk 26` (Android 8; Vulkan support before that is unreliable),
-  ABI `arm64-v8a` only.
+- NDK r27 or newer (C++20). Pin `ndkVersion`. Step 1 used **NDK r28c
+  (28.2.13676358)** and SDK **CMake 3.31.6** (not 4.x: CMake 4 rejects the
+  old `cmake_minimum_required` versions in several submodules).
+- `minSdk 28` (Android 9), ABI `arm64-v8a` only. Was 26; raised in step 1
+  because `lib/SlotMap` uses `aligned_alloc`, which bionic has from API 28.
+  `cmake/Android.cmake` stops the configure below 28.
 - `externalNativeBuild` points at the repo-root `CMakeLists.txt`, building
   the game as a shared library `libmain.so` (what SDLActivity loads).
 
@@ -113,42 +117,63 @@ environment's network policy. The owner added it to Allowed domains on
 
 ## Progress
 
-### Step 1 (2026-10-08, second session)
+### Step 1 (2026-10-08) -- done
 
-`dl.google.com` was still refused by the environment's network policy (403
-from the proxy), so the SDK / NDK couldn't be installed and the real Android
-toolchain hasn't been tried yet. Done meanwhile, verified with a simulated
-cross build on Linux (`-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64`,
-which sets `CMAKE_CROSSCOMPILING` and reproduced `Exec format error` from the
-arm64 `dxc-linux`):
+Installed in the sandbox under `/opt/android-sdk`: cmdline-tools, platform-tools,
+`platforms;android-35`, `ndk;28.2.13676358`, `cmake;3.31.6` (needs `dl.google.com`
+allowed; the session used Full network access).
+
+Configure command used (host tools from a desktop build folder, see below):
+
+    cmake -S . -B build-android -G Ninja \
+      -DCMAKE_TOOLCHAIN_FILE=$ANDROID_HOME/ndk/28.2.13676358/build/cmake/android.toolchain.cmake \
+      -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
+      -DBTGA_HOST_TOOLS_DIR=<desktop build folder>
+
+Result: configures cleanly. With stand-in (empty) generated sources, `ninja -k 0`
+builds everything, `libSDL2.so` included, except the two step-3 items at the end.
+
+What was added:
 
 - `cmake/CrossCompile.cmake`: when cross-compiling, `file_to_c` is an imported
-  target from `-DBTGA_HOST_TOOLS_DIR=<desktop build folder>` (host `.exe`
-  suffix on Windows), and `RecompiledFuncs/`, `RecompiledPatches/patches.c`,
-  `patches_bin.c` and `rsp/n_aspMain.cpp` must already exist (clear
-  configure error otherwise). The patch and RSP regeneration rules are left
-  out, so no N64Recomp, RSPRecomp, MIPS clang or WSL is needed.
-- `lib-patches/rt64/0002-host-build-tools.patch`: rt64 picks DXC by host
-  (`CMAKE_HOST_WIN32` / `CMAKE_HOST_APPLE` / `CMAKE_HOST_SYSTEM_PROCESSOR`),
-  and only builds `file_to_c` if the parent hasn't provided one.
-- Root `CMakeLists.txt`: the `DXC` used by recompui's shaders is picked by
-  host too; the patches `make` step branches on `CMAKE_HOST_WIN32`.
-- Desktop Linux configure and shader build unchanged (same x64 DXC, rt64
-  patch applies cleanly from a fresh submodule).
+  target from `BTGA_HOST_TOOLS_DIR` (`.exe` on a Windows host), and
+  `RecompiledFuncs/`, `RecompiledPatches/patches.c`, `patches_bin.c` and
+  `rsp/n_aspMain.cpp` must already exist (configure error listing what's
+  missing). No N64Recomp, RSPRecomp, MIPS clang or WSL is needed.
+- `cmake/Android.cmake` (only when `ANDROID`): SDL2 2.32.10 (shared,
+  `libSDL2.so`) and FreeType 2.13.3 fetched and built from source, SHA256-pinned;
+  `cmake/android/FindSDL2.cmake` / `FindFreetype.cmake` hand them to rt64's,
+  RmlUi's and our `find_package()`; zstd's dictionary builder and program off
+  (need `qsort_r`, API 36); our own `nfd` target from
+  `src/android/nfd_android.cpp` (every dialog returns an error); API 28 check.
+- `lib-patches/rt64/0002-host-tools-and-parent-provided-targets.patch`: DXC
+  picked by host OS/CPU; `file_to_c` and `nfd` only built when the parent
+  project hasn't provided them.
+- Root `CMakeLists.txt`: recompui's DXC picked by host; patches `make` step on
+  `CMAKE_HOST_WIN32`; no regeneration rules when cross-compiling; on Android the
+  game is `SHARED` with `OUTPUT_NAME main` (`libmain.so`), links SDL2, FreeType,
+  `android`, `log`, and adds the SDL include folders that rt64, recompui and
+  recompinput only add on desktop platforms.
+- Desktop Linux configure/build unchanged (rt64 patch applies from a fresh
+  submodule; real nfd; `src/android/` isn't compiled). Windows not re-tested.
 
-Still to do for step 1, with the NDK (found by reading, not yet confirmed):
+Notes:
 
-- **SDL2**: rt64 does `find_package(SDL2 REQUIRED)` on anything not Windows;
-  on Android SDL2 must be built from source (`add_subdirectory` of SDL,
-  which the SDL `android-project` also needs for `libSDL2.so`) and
-  `SDL2_INCLUDE_DIRS` / `SDL2_LIBRARIES` set before rt64 is added.
-- **nativefiledialog-extended**: picks `PLATFORM_LINUX` and requires GTK3
-  through pkg-config; rt64 links `nfd` unconditionally. Needs an Android
-  stub (lib-patch) or rt64 not linking it on Android.
-- **"Linux" checks that miss Android** (`CMAKE_SYSTEM_NAME` is `Android`):
-  plume's `PLUME_SDL_VULKAN_ENABLED` option (`IS_LINUX`), rt64's
-  `RT64_SDL_WINDOW_VULKAN` definitions, root's SDL2 / Freetype / Threads link
-  block, recompui's and recompinput's SDL include dirs
-  (`elseif (APPLE OR ... "Linux")`).
-- rt64 also builds `texture_hasher` / `texture_packer` executables; harmless
-  if they compile for Android, otherwise skip them there.
+- plume already supports Android natively: on `__ANDROID__` its `RenderWindow`
+  is `ANativeWindow*` and it uses `VK_KHR_android_surface`
+  (`PLUME_SDL_VULKAN_ENABLED` stays off there). So the game passes the
+  `ANativeWindow*` from `SDL_GetWindowWMInfo` (`info.android.window`), not
+  the `SDL_Window*`.
+- The SDL Java sources for step 2 must come from the same SDL release
+  (2.32.10, `android-project/app/src/main/java/org/libsdl/app/`).
+- The GitHub archive URL for FreeType was refused (403) here; the official
+  savannah tarball works.
+
+Left for step 3 (the only compile errors):
+
+- `lib/rt64/src/hle/rt64_application_window.cpp` includes
+  `X11/extensions/Xrandr.h` on any non-Windows, non-Apple target; needs an
+  Android branch (lib-patch).
+- `lib/RecompFrontend/recompui/src/renderer/rt64_render_context.cpp:229`
+  assigns ultramodern's `WindowHandle` (`SDL_Window*`) to plume's
+  `RenderWindow` (`ANativeWindow*` on Android); convert there (lib-patch).

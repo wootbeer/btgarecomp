@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 79dfc38..cd4559f 100644
+index 79dfc38..8ef2309 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -36,7 +36,6 @@ function(preprocess INFILE OUTFILE OPTIONS)
@@ -36,7 +36,7 @@ index 79dfc38..cd4559f 100644
          set (DXC "LD_LIBRARY_PATH=${PROJECT_SOURCE_DIR}/src/contrib/dxc/lib/x64" "${PROJECT_SOURCE_DIR}/src/contrib/dxc/bin/x64/dxc-linux")
      else()
          set (DXC "LD_LIBRARY_PATH=${PROJECT_SOURCE_DIR}/src/contrib/dxc/lib/arm64" "${PROJECT_SOURCE_DIR}/src/contrib/dxc/bin/arm64/dxc-linux")
-@@ -69,7 +74,10 @@ set(ZSTD_LEGACY_SUPPORT OFF)
+@@ -69,9 +74,15 @@ set(ZSTD_LEGACY_SUPPORT OFF)
  set(ZSTD_BUILD_STATIC ON)
  set(ZSTD_BUILD_SHARED OFF)
  
@@ -46,5 +46,11 @@ index 79dfc38..cd4559f 100644
 +    add_subdirectory(src/tools/file_to_c)
 +endif()
  add_subdirectory(src/contrib/re-spirv)
- add_subdirectory(src/contrib/nativefiledialog-extended)
+-add_subdirectory(src/contrib/nativefiledialog-extended)
++# A parent project can provide its own nfd (the Android build has no native file dialogs).
++if (NOT TARGET nfd)
++    add_subdirectory(src/contrib/nativefiledialog-extended)
++endif()
  add_subdirectory(src/contrib/zstd/build/cmake)
+ 
+ if (CMAKE_SYSTEM_NAME MATCHES "Linux" AND RT64_SDL_WINDOW_VULKAN)

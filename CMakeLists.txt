@@ -80,6 +80,8 @@ endif()
 
 # Host-built tools and pre-generated sources when cross-compiling (Android).
 include(${CMAKE_SOURCE_DIR}/cmake/CrossCompile.cmake)
+# SDL2, FreeType and nfd for Android.
+include(${CMAKE_SOURCE_DIR}/cmake/Android.cmake)
 
 # Local RT64 fixes (lib-patches/rt64/), applied to the submodule at configure time.
 include(${CMAKE_SOURCE_DIR}/cmake/ApplyLibPatches.cmake)
@@ -213,8 +215,14 @@ if (PATCH_SOURCES AND EXISTS ${CMAKE_SOURCE_DIR}/patches.toml AND NOT CMAKE_CROS
 endif()
 
 
-# Main executable
-add_executable(BattleTanxGARecompiled)
+# Main executable. On Android it's libmain.so instead, which SDLActivity loads and
+# whose main() it calls through SDL_main.
+if (ANDROID)
+    add_library(BattleTanxGARecompiled SHARED)
+    set_target_properties(BattleTanxGARecompiled PROPERTIES OUTPUT_NAME main)
+else()
+    add_executable(BattleTanxGARecompiled)
+endif()
 
 # The frontend (src/main), the game-specific fixes (src/game) and the
 # recompiled RSP audio microcode (rsp/, generated from the ROM). If none of
@@ -414,6 +422,14 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     target_link_libraries(BattleTanxGARecompiled PRIVATE "-latomic -static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
 endif()
 
+if (ANDROID)
+    target_link_libraries(BattleTanxGARecompiled PRIVATE SDL2::SDL2 Freetype::Freetype android log)
+    # rt64 links SDL2 everywhere except Android, and recompui / recompinput only add the SDL
+    # include folders on Windows, macOS and Linux.
+    target_link_libraries(rt64 SDL2::SDL2)
+    target_include_directories(BattleTanxGARecompiled PRIVATE ${SDL2_INCLUDE_DIRS})
+endif()
+
 # TODO fix the rt64 CMake script so that this doesn't need to be duplicated here
 # For DXC
 set (DXC_COMMON_OPTS "-I${PROJECT_SOURCE_DIR}/src")
@@ -465,6 +481,11 @@ if(MSVC)
 else()
     set(BTGA_CSTDINT_FORCE_INCLUDE "-include cstdint")
 endif()
+if (ANDROID)
+    target_include_directories(recompui PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_include_directories(recompinput PRIVATE ${SDL2_INCLUDE_DIRS})
+endif()
+
 foreach(_btx_rml_target rmlui_core rmlui_debugger recompui)
     if(TARGET ${_btx_rml_target})
         target_compile_options(${_btx_rml_target} PRIVATE "SHELL:$<$<COMPILE_LANGUAGE:CXX>:${BTGA_CSTDINT_FORCE_INCLUDE}>")
