@@ -260,6 +260,20 @@ window with no graphics flag to OpenGL and connects an EGL surface to it.
 The later `vkAllocateDescriptorSets` errors and the segfault on "RT64 Present"
 followed from having no swap chain; recheck after this fix.
 
+Fourth run: no crash, black screen. `No compatible surface formats were found`:
+RT64 asks for a `B8G8R8A8_UNORM` swap chain, Android surfaces offer RGBA8.
+`lib-patches/rt64/0005-android-swap-chain-format.patch` (swap chain + the video
+interface pipelines) and `lib-patches/RecompFrontend/0003-android-swap-chain-format.patch`
+(recompui's `SwapChainFormat`) use `R8G8B8A8_UNORM` on Android. Without a swap
+chain the Gfx thread spun at ~98% CPU until Android's ANR.
+
+Watch: `vkAllocateDescriptorSets failed with error code 0xC4642878` (twice,
+in runs three and four) is `VK_ERROR_OUT_OF_POOL_MEMORY`. Plume sizes each
+set's pool to its own counts (boundless ranges via variable descriptor count,
+correct per spec), so it may be Adreno-specific; plume is a nested submodule
+of rt64 (`lib/rt64/src/contrib/plume`), so a fix there needs its own patch
+plumbing. Recheck once the swap chain exists.
+
 Next: the ROM. librecomp loads `<game id>.z64` from the app folder if its hash
 matches, so the launcher (system document picker) copies the chosen ROM there.
 
