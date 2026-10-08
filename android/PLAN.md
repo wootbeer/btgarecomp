@@ -358,6 +358,18 @@ Android (immersive, 1920x1080). Recheck the HUD after this.
 the Window Mode option defaults to Fullscreen and is hidden (still registered,
 since the renderer config reads it).
 
+HUD in Expand: the owner found the health bar (the one centred element)
+stays while the edge-anchored ammo and map vanish, and the PC (D3D12) is
+fine. Anchored elements draw with a pushed whole-window scissor and can start
+left of 0 (16 px outward shift); plume's Vulkan `setScissors` passed negative
+offsets (invalid in Vulkan) and `uint32_t(right - left)` extents straight
+through, where D3D12 just clips. `lib-patches/plume/0003-vulkan-clip-negative-scissors.patch`
+clamps them (all Vulkan platforms, Linux included).
+
+Smoke/particle grain: Android only, and only in cutscenes (PC with matching
+settings is smooth). Not yet explained: the grain comes from RT64's
+G_AC_DITHER alpha compare, identical code on every platform.
+
 Open graphics bugs (owner, Retroid): Auto resolution + Expand HUD still loses
 the HUD after the fullscreen change; 2x MSAA makes the player's shots vanish
 and breaks other things; the intro's nuke flash covers the whole window in
