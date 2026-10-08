@@ -294,6 +294,20 @@ file.
 - `allowBackup="false"` plus `dataExtractionRules` excluding everything, so the
   stored ROM never leaves the device through backup or device transfer.
 
+Sixth run: ROM imported, the game started (`Initializing recomp heap`, a blip
+of sound), then a third `VK_ERROR_OUT_OF_POOL_MEMORY` and a segfault reading
+0x0 on the Gfx thread. The only variable-count ("boundless") descriptor set is
+RT64's `FramebufferRendererDescriptorTextureSet` (layout count 8192, pool sized
+to the textures in use); the Adreno driver evidently wants the pool to hold
+the layout's full count. `lib-patches/plume/0001-android-boundless-descriptor-pool.patch`
+sizes it so on Android. `btga_apply_lib_patches()` takes an optional folder
+for nested submodules (`plume` is `lib/rt64/src/contrib/plume`).
+
+The owner also reports the built-in controls don't drive the menus.
+`btga::android::startup()` now logs input devices as SDL sees them (game
+controller / joystick with or without mapping) and the first 30 presses
+(`Input: ...` lines, tag BTGA).
+
 Next:
 
 - Pause/resume: on `surfaceDestroyed` the `ANativeWindow*` plume holds goes

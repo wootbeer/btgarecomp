@@ -1,0 +1,19 @@
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index f1dd503..2e1619f 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -1899,7 +1899,14 @@ namespace plume {
+             boundlessRangeSize = std::max(desc.boundlessRangeSize, 1U);
+ 
+             const RenderDescriptorRange &lastDescriptorRange = desc.descriptorRanges[desc.descriptorRangesCount - 1];
++#       if defined(__ANDROID__)
++            // The Adreno driver fails vkAllocateDescriptorSets with VK_ERROR_OUT_OF_POOL_MEMORY
++            // unless the pool can hold the binding's full count from the layout, whatever
++            // variable count is asked for at allocation.
++            typeCounts[toVk(lastDescriptorRange.type)] += std::max(lastDescriptorRange.count, boundlessRangeSize);
++#       else
+             typeCounts[toVk(lastDescriptorRange.type)] += boundlessRangeSize;
++#       endif
+             rangeCount--;
+         }
+ 

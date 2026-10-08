@@ -10,6 +10,8 @@
 #include <filesystem>
 #include <system_error>
 
+#include "SDL2/SDL_events.h"
+#include "SDL2/SDL_gamecontroller.h"
 #include "SDL2/SDL_messagebox.h"
 #include "SDL2/SDL_system.h"
 
@@ -59,8 +61,44 @@ namespace {
     }
 }
 
+namespace {
+    // Logs how SDL sees the input devices (game controller, plain joystick, keyboard) and the
+    // first presses, to tell why a pad doesn't drive the menus.
+    int log_input_events(void*, SDL_Event* event) {
+        static int presses_logged = 0;
+        constexpr int max_presses_logged = 30;
+        switch (event->type) {
+            case SDL_CONTROLLERDEVICEADDED:
+                fprintf(stderr, "Input: game controller added: %s\n", SDL_GameControllerNameForIndex(event->cdevice.which));
+                break;
+            case SDL_JOYDEVICEADDED:
+                fprintf(stderr, "Input: joystick added: %s (game controller mapping: %s)\n",
+                    SDL_JoystickNameForIndex(event->jdevice.which),
+                    SDL_IsGameController(event->jdevice.which) ? "yes" : "no");
+                break;
+            case SDL_CONTROLLERBUTTONDOWN:
+                if (presses_logged++ < max_presses_logged) {
+                    fprintf(stderr, "Input: controller button %s\n", SDL_GameControllerGetStringForButton(SDL_GameControllerButton(event->cbutton.button)));
+                }
+                break;
+            case SDL_JOYBUTTONDOWN:
+                if (presses_logged++ < max_presses_logged) {
+                    fprintf(stderr, "Input: joystick button %d\n", event->jbutton.button);
+                }
+                break;
+            case SDL_KEYDOWN:
+                if (presses_logged++ < max_presses_logged) {
+                    fprintf(stderr, "Input: key %s\n", SDL_GetScancodeName(event->key.keysym.scancode));
+                }
+                break;
+        }
+        return 1;
+    }
+}
+
 void btga::android::startup() {
     forward_output_to_logcat();
+    SDL_AddEventWatch(log_input_events, nullptr);
 
     const char* internal_path = SDL_AndroidGetInternalStoragePath();
     if (internal_path == nullptr || chdir(internal_path) != 0) {
