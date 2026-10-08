@@ -48,8 +48,8 @@ and leave the game's own behaviour, look and balance alone.
 ## Next
 
 - Bug reports from beta testers.
-- A Linux release: `tools/package-linux.sh` builds one; waiting on a
-  tester's results (SteamOS).
+- Linux: an experimental build is published (`tools/package-linux.sh`);
+  waiting on reports from SteamOS and other Linux players.
 - A SteamOS tester's crash under Proton; the next build's crash log
   should say what failed.
 - macOS is not set up.
