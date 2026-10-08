@@ -4,7 +4,10 @@
 find_package(Git REQUIRED)
 
 function(btga_apply_lib_patches submodule)
-    file(GLOB patches "${CMAKE_SOURCE_DIR}/lib-patches/${submodule}/*.patch")
+    # CONFIGURE_DEPENDS and CMAKE_CONFIGURE_DEPENDS: adding, removing or changing a patch
+    # re-runs the configure (and so this) on the next build, not just on a manual reconfigure.
+    file(GLOB patches CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/lib-patches/${submodule}/*.patch")
+    set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${patches})
     list(SORT patches)
     foreach(patch IN LISTS patches)
         execute_process(
