@@ -334,6 +334,16 @@ RT64 already retries `swapChain->resize()` every frame after a failed acquire
   lock hit mid-frame, `queueBuffer failed`, then the present thread crashed
   reading 0x0 on the next resize). The provider now returns nullptr unless
   `Surface.isValid()`, so plume touches nothing until the new surface exists.
+- In-game it still crashed. The full tombstone (`adb shell dumpsys dropbox
+  --print data_app_native_crash`; logcat cut the driver frames) put it in
+  `vulkan.adreno.so` `vkCreateFramebuffer`, called from RT64's present
+  thread: after a failed present and a failed `resize()`, `threadPresent()`
+  rebuilt the swap chain framebuffers (the list is cleared on every resize)
+  around images Android had already freed. The launcher survived because
+  there the acquire fails, with no image in flight.
+  `lib-patches/rt64/0006-no-framebuffers-for-invalid-swap-chain.patch` only
+  creates them while the swap chain is valid (all platforms; nothing reads
+  them otherwise).
 - The game keeps running in the background (SDL pauses audio only). Pausing
   emulation while backgrounded is still to do.
 

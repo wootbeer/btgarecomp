@@ -1,0 +1,16 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -257,8 +257,10 @@
+             }
+         }
+ 
+-        // Create the framebuffers if necessary.
+-        if (swapChainFramebuffers.empty()) {
++        // Create the framebuffers if necessary. Not while the swap chain is invalid: after a failed
++        // present its images may already be gone (on Android the window's buffers are freed when it
++        // goes to the background), and creating framebuffers for them crashes the driver.
++        if (swapChainValid && swapChainFramebuffers.empty()) {
+             uint32_t textureCount = ext.swapChain->getTextureCount();
+             swapChainFramebuffers.resize(textureCount);
+             for (uint32_t i = 0; i < textureCount; i++) {
