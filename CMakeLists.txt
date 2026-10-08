@@ -424,6 +424,7 @@ endif()
 
 if (ANDROID)
     target_link_libraries(BattleTanxGARecompiled PRIVATE SDL2::SDL2 Freetype::Freetype android log)
+    target_sources(BattleTanxGARecompiled PRIVATE ${CMAKE_SOURCE_DIR}/src/android/android_startup.cpp)
     # rt64 links SDL2 everywhere except Android, and recompui / recompinput only add the SDL
     # include folders on Windows, macOS and Linux.
     target_link_libraries(rt64 SDL2::SDL2)

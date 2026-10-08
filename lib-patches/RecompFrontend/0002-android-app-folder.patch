@@ -1,0 +1,17 @@
+diff --git a/recompui/src/util/file.cpp b/recompui/src/util/file.cpp
+index 7ee84ed..5be95a6 100644
+--- a/recompui/src/util/file.cpp
++++ b/recompui/src/util/file.cpp
+@@ -83,6 +83,12 @@ namespace recompui {
+         }
+ 
+         CoTaskMemFree(known_path);
++#elif defined(__ANDROID__)
++        // The app's private internal storage (/data/data/<package>/files), the one folder an
++        // Android app can always write to.
++        if (const char* internal_path = SDL_AndroidGetInternalStoragePath()) {
++            recomp_dir = std::filesystem::path{internal_path};
++        }
+ #elif defined(__linux__) || defined(__APPLE__)
+         // check for APP_FOLDER_PATH env var
+         if (getenv("APP_FOLDER_PATH") != nullptr) {

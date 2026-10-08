@@ -35,6 +35,7 @@
 #include "SDL2/SDL.h"
 #endif
 
+#include "btga_android.h"
 #include "recompui/recompui.h"
 #include "recompui/program_config.h"
 #include "recompui/renderer.h"
@@ -403,6 +404,9 @@ void btga_report_fatal_error(const char* message);
 }
 
 int main(int argc, char** argv) {
+#if defined(__ANDROID__)
+    btga::android::startup();
+#endif
     std::set_terminate(report_unhandled_exception_and_abort);
 
     recomp::Version project_version{};

@@ -59,6 +59,14 @@ android {
         }
     }
 
+    // The game's fonts, icons and stylesheet (the repo's assets/ folder); BattleTanxActivity
+    // copies them to the app's storage on first launch.
+    sourceSets {
+        getByName("main") {
+            assets.srcDir("../../assets")
+        }
+    }
+
     externalNativeBuild {
         cmake {
             path = file("../../CMakeLists.txt")

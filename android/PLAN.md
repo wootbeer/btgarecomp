@@ -226,3 +226,25 @@ Next in step 3:
   startup message boxes, pause/resume (surface destroyed/recreated: the
   `ANativeWindow*` handed to plume goes stale).
 
+### Step 4, first device run (2026-10-08)
+
+Owner built on the PC (real generated sources) and ran it on the Retroid
+Pocket 6: `libmain.so` linked, SDL started `main`, audio opened, the window
+came up, then `recomp::mods::initialize_mods()` threw from
+`create_directories` (the app folder was `$HOME/.config/btgarecomp`).
+
+Fixed:
+
+- `lib-patches/RecompFrontend/0002-android-app-folder.patch`:
+  `get_app_folder_path()` is `SDL_AndroidGetInternalStoragePath()`
+  (`/data/data/<package>/files`) on Android.
+- `src/android/android_startup.cpp` (`btga::android::startup()`, first thing in
+  `main()`): stdout/stderr go to logcat (tag `BTGA`), and the working directory
+  is the same private folder, so `assets/...` and `crash_log.txt` resolve there.
+- The repo's `assets/` folder is packaged as the APK's assets;
+  `BattleTanxActivity` copies it to `files/assets/` whenever the app was
+  installed or updated since the last copy (stamp: `lastUpdateTime`).
+
+Next: the ROM. librecomp loads `<game id>.z64` from the app folder if its hash
+matches, so the launcher (system document picker) copies the chosen ROM there.
+
