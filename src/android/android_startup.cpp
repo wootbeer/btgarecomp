@@ -87,10 +87,14 @@ namespace {
     // that native code attached to Java (like RT64's present thread) can't find app classes.
     jclass sdl_activity_class = nullptr;
     jmethodID get_native_surface = nullptr;
+    jmethodID surface_is_valid = nullptr;
 
     // plume's window provider: the window behind SDL's current surface, with a reference of its
     // own, or nullptr while the app is in the background and has no surface. Taken through Java
     // instead of SDL's own pointer, which the UI thread releases when the surface goes away.
+    // After surfaceDestroyed() the Java Surface still hands out its old, abandoned window; any
+    // swap chain work on that fails, and on the device crashed the present thread, so a surface
+    // that isn't valid counts as none.
     ANativeWindow* current_native_window() {
         JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
         if (env == nullptr || sdl_activity_class == nullptr) {
@@ -102,6 +106,16 @@ namespace {
             return nullptr;
         }
         if (surface == nullptr) {
+            return nullptr;
+        }
+        const bool valid = env->CallBooleanMethod(surface, surface_is_valid);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            env->DeleteLocalRef(surface);
+            return nullptr;
+        }
+        if (!valid) {
+            env->DeleteLocalRef(surface);
             return nullptr;
         }
         ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
@@ -120,7 +134,12 @@ namespace {
         sdl_activity_class = static_cast<jclass>(env->NewGlobalRef(local_class));
         env->DeleteLocalRef(local_class);
         get_native_surface = env->GetStaticMethodID(sdl_activity_class, "getNativeSurface", "()Landroid/view/Surface;");
-        if (get_native_surface == nullptr) {
+        jclass surface_class = env->FindClass("android/view/Surface");
+        if (surface_class != nullptr) {
+            surface_is_valid = env->GetMethodID(surface_class, "isValid", "()Z");
+            env->DeleteLocalRef(surface_class);
+        }
+        if (get_native_surface == nullptr || surface_is_valid == nullptr) {
             env->ExceptionClear();
             sdl_activity_class = nullptr;
             return;

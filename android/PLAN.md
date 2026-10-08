@@ -328,6 +328,12 @@ RT64 already retries `swapChain->resize()` every frame after a failed acquire
   `SDLActivity.getNativeSurface()` via `ANativeWindow_fromSurface` (its own
   reference, so the UI thread releasing SDL's pointer can't race it); class and
   method looked up once on SDL's main thread.
+- Follow-up (device run): after `surfaceDestroyed()` the Java Surface still
+  hands out its old, abandoned window, so `resize()` kept rebuilding against it
+  (launcher: harmless "BufferQueue has been abandoned" every frame; in-game the
+  lock hit mid-frame, `queueBuffer failed`, then the present thread crashed
+  reading 0x0 on the next resize). The provider now returns nullptr unless
+  `Surface.isValid()`, so plume touches nothing until the new surface exists.
 - The game keeps running in the background (SDL pauses audio only). Pausing
   emulation while backgrounded is still to do.
 
