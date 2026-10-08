@@ -1,7 +1,7 @@
 # Android port: plan
 
-Status: planning done, nothing built yet. Written 2026-10-08 so a new session
-can start without re-deciding anything.
+Status: step 1 partly done (host tools for cross-compiling; see Progress).
+Written 2026-10-08 so a new session can start without re-deciding anything.
 
 ## Decisions (agreed with the project owner)
 
@@ -110,3 +110,45 @@ environment's network policy. The owner added it to Allowed domains on
 3. Library patches until it links; then the DesCore launcher for the ROM.
 4. Owner tests on the Retroid (USB, Android Studio Run), sends `adb logcat`.
 5. Touch controls, then phone testing.
+
+## Progress
+
+### Step 1 (2026-10-08, second session)
+
+`dl.google.com` was still refused by the environment's network policy (403
+from the proxy), so the SDK / NDK couldn't be installed and the real Android
+toolchain hasn't been tried yet. Done meanwhile, verified with a simulated
+cross build on Linux (`-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64`,
+which sets `CMAKE_CROSSCOMPILING` and reproduced `Exec format error` from the
+arm64 `dxc-linux`):
+
+- `cmake/CrossCompile.cmake`: when cross-compiling, `file_to_c` is an imported
+  target from `-DBTGA_HOST_TOOLS_DIR=<desktop build folder>` (host `.exe`
+  suffix on Windows), and `RecompiledFuncs/`, `RecompiledPatches/patches.c`,
+  `patches_bin.c` and `rsp/n_aspMain.cpp` must already exist (clear
+  configure error otherwise). The patch and RSP regeneration rules are left
+  out, so no N64Recomp, RSPRecomp, MIPS clang or WSL is needed.
+- `lib-patches/rt64/0002-host-build-tools.patch`: rt64 picks DXC by host
+  (`CMAKE_HOST_WIN32` / `CMAKE_HOST_APPLE` / `CMAKE_HOST_SYSTEM_PROCESSOR`),
+  and only builds `file_to_c` if the parent hasn't provided one.
+- Root `CMakeLists.txt`: the `DXC` used by recompui's shaders is picked by
+  host too; the patches `make` step branches on `CMAKE_HOST_WIN32`.
+- Desktop Linux configure and shader build unchanged (same x64 DXC, rt64
+  patch applies cleanly from a fresh submodule).
+
+Still to do for step 1, with the NDK (found by reading, not yet confirmed):
+
+- **SDL2**: rt64 does `find_package(SDL2 REQUIRED)` on anything not Windows;
+  on Android SDL2 must be built from source (`add_subdirectory` of SDL,
+  which the SDL `android-project` also needs for `libSDL2.so`) and
+  `SDL2_INCLUDE_DIRS` / `SDL2_LIBRARIES` set before rt64 is added.
+- **nativefiledialog-extended**: picks `PLATFORM_LINUX` and requires GTK3
+  through pkg-config; rt64 links `nfd` unconditionally. Needs an Android
+  stub (lib-patch) or rt64 not linking it on Android.
+- **"Linux" checks that miss Android** (`CMAKE_SYSTEM_NAME` is `Android`):
+  plume's `PLUME_SDL_VULKAN_ENABLED` option (`IS_LINUX`), rt64's
+  `RT64_SDL_WINDOW_VULKAN` definitions, root's SDL2 / Freetype / Threads link
+  block, recompui's and recompinput's SDL include dirs
+  (`elseif (APPLE OR ... "Linux")`).
+- rt64 also builds `texture_hasher` / `texture_packer` executables; harmless
+  if they compile for Android, otherwise skip them there.
