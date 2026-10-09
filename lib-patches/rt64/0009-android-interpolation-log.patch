@@ -1,0 +1,57 @@
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -1064,6 +1064,20 @@
+                 uint32_t targetIndex = 0;
+                 uint32_t framesRendered = 0;
+                 int64_t renderTimeTotalMicro = 0;
++#           if defined(__ANDROID__)
++                // TEMPORARY (Android port, interpolation jitter): per 60 game frames, how many display
++                // frames were planned, skipped for time and rendered, and the time budget.
++                struct InterpolationStats {
++                    int workloads = 0, planned = 0, skipped = 0, lines = 0;
++                    int64_t maxSetupMicro = 0, maxRenderMicro = 0;
++                };
++                static InterpolationStats interpolationStats;
++                if (generateInterpolatedFrames) {
++                    interpolationStats.workloads++;
++                    interpolationStats.planned += int(displayFrames);
++                    interpolationStats.maxSetupMicro = std::max(interpolationStats.maxSetupMicro, setupTimeMicro);
++                }
++#           endif
+                 for (uint32_t frame = 0; (frame < displayFrames) && !skipWorkloadNow; frame++) {
+                     // Evaluate if this frame should be skipped. Measure the current time and compare it to what frame is estimated should be have been rendered by now.
+                     if ((frame > 0) && (originalTimeMicro > 0)) {
+@@ -1073,6 +1087,10 @@
+                         if ((currentTimeMicro > expectedTimeMicro) || ((currentTimeMicro + measuredFrameMicro) > adjustedTimeWindowMicro)) {
+                             displayTicks += workload.viOriginalRate;
+                             skippedFrames = true;
++#                       if defined(__ANDROID__)
++                            interpolationStats.skipped++;
++                            interpolationStats.maxRenderMicro = std::max(interpolationStats.maxRenderMicro, measuredFrameMicro);
++#                       endif
+                             continue;
+                         }
+                     }
+@@ -1152,6 +1170,22 @@
+                     framesRendered++;
+                 }
+ 
++#           if defined(__ANDROID__)
++                if (generateInterpolatedFrames) {
++                    static int cutShort = 0;
++                    cutShort += skipWorkloadNow ? 1 : 0;
++                    if ((interpolationStats.workloads >= 60) && (interpolationStats.lines < 100)) {
++                        fprintf(stderr, "[RT64 INTERP] %d game frames: %d display frames planned, %d skipped for time (slowest frame %.1f ms), %d game frames cut short by the next one; setup up to %.1f ms; target %u, original %u\n",
++                            interpolationStats.workloads, interpolationStats.planned, interpolationStats.skipped, interpolationStats.maxRenderMicro / 1000.0,
++                            cutShort, interpolationStats.maxSetupMicro / 1000.0, workloadConfig.targetRate, workload.viOriginalRate);
++                        const int lines = interpolationStats.lines + 1;
++                        interpolationStats = InterpolationStats();
++                        interpolationStats.lines = lines;
++                        cutShort = 0;
++                    }
++                }
++#           endif
++
+                 // Set the skipped parameter on the frame counter if the workload wasn't skipped but some of its frames were.
+                 if (skippedFrames && !skipWorkloadNow) {
+                     {
