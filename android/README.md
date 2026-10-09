@@ -48,3 +48,25 @@ from backups and device transfers.
 - `app/src/main/java/io/github/wootbeer/btgarecomp/BattleTanxActivity.java`: the activity.
 - `cmake/Android.cmake`, `cmake/CrossCompile.cmake` (repo root): the Android side of the
   native build.
+
+## Vulkan validation (testing aid)
+
+To have Khronos' Vulkan validation layer check what RT64 sends the GPU driver, add
+`btga.vulkanValidation=true` to `android/local.properties` and press Run. The debug APK then
+carries the layer (about 22 MB, downloaded once and checked against a fixed SHA-256). Then turn on
+Android's GPU debug layers for the app (phone plugged in, `adb` from the SDK's `platform-tools`):
+
+    adb shell settings put global enable_gpu_debug_layers 1
+    adb shell settings put global gpu_debug_app io.github.wootbeer.btgarecomp
+    adb shell settings put global gpu_debug_layers VK_LAYER_KHRONOS_validation
+    adb shell setprop debug.vulkan.khronos_validation.enables VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT
+
+Restart the game; the layer's reports go to logcat (search for `Validation`). It slows the game
+down. To turn it off again:
+
+    adb shell settings delete global enable_gpu_debug_layers
+    adb shell settings delete global gpu_debug_app
+    adb shell settings delete global gpu_debug_layers
+    adb shell setprop debug.vulkan.khronos_validation.enables ""
+
+and remove the line from `local.properties`.

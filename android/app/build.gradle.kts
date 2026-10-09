@@ -1,4 +1,5 @@
 import com.android.build.api.artifact.SingleArtifact
+import java.security.MessageDigest
 import java.util.Properties
 import java.util.zip.ZipFile
 
@@ -15,6 +16,14 @@ val localProperties = Properties().apply {
 }
 val hostToolsDir: String? =
     (findProperty("btga.hostToolsDir") as String?) ?: localProperties.getProperty("btga.hostToolsDir")
+
+// Testing aid: btga.vulkanValidation=true (local.properties or -P) packs Khronos' Vulkan validation
+// layer into debug builds, for the Android GPU debug-layer settings to load (see android/README.md).
+val vulkanValidation: Boolean =
+    ((findProperty("btga.vulkanValidation") as String?) ?: localProperties.getProperty("btga.vulkanValidation")) == "true"
+val validationLayerVersion = "1.4.304.0"
+val validationLayerSha256 = "3e67710f93daa7f39823e85b4ba5aaaf6cd44d207747715fa258a6796b9798ed"
+val validationLayerDir = layout.buildDirectory.dir("validation-layer/jniLibs")
 
 android {
     namespace = "io.github.wootbeer.btgarecomp"
@@ -77,6 +86,51 @@ android {
     lint {
         abortOnError = false
     }
+
+    if (vulkanValidation) {
+        sourceSets {
+            getByName("debug") {
+                jniLibs.srcDir(validationLayerDir.get().asFile)
+            }
+        }
+        // The GPU debug-layer loader looks for the layer as a file in the app's library folder.
+        packaging {
+            jniLibs {
+                useLegacyPackaging = true
+            }
+        }
+    }
+}
+
+if (vulkanValidation) {
+    val fetchValidationLayer = tasks.register("fetchVulkanValidationLayer") {
+        val zip = layout.buildDirectory.file("validation-layer/android-binaries-$validationLayerVersion.zip")
+        outputs.dir(validationLayerDir)
+        doLast {
+            val zipFile = zip.get().asFile
+            if (!zipFile.exists()) {
+                zipFile.parentFile.mkdirs()
+                uri("https://github.com/KhronosGroup/Vulkan-ValidationLayers/releases/download/" +
+                    "vulkan-sdk-$validationLayerVersion/android-binaries-$validationLayerVersion.zip")
+                    .toURL().openStream().use { input -> zipFile.outputStream().use { input.copyTo(it) } }
+            }
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest(zipFile.readBytes()).joinToString("") { "%02x".format(it) }
+            if (digest != validationLayerSha256) {
+                zipFile.delete()
+                throw GradleException("Validation layer download has SHA-256 $digest, expected $validationLayerSha256")
+            }
+            val target = validationLayerDir.get().dir("arm64-v8a").asFile
+            target.mkdirs()
+            ZipFile(zipFile).use { z ->
+                val entry = z.getEntry("android-binaries-$validationLayerVersion/arm64-v8a/libVkLayer_khronos_validation.so")
+                z.getInputStream(entry).use { input ->
+                    target.resolve("libVkLayer_khronos_validation.so").outputStream().use { input.copyTo(it) }
+                }
+            }
+        }
+    }
+    tasks.matching { it.name == "mergeDebugJniLibFolders" }.configureEach { dependsOn(fetchValidationLayer) }
 }
 
 // The APK carries the compiled game code but never a ROM. Fails the build if a file in it is
