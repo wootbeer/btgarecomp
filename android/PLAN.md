@@ -386,8 +386,14 @@ on Adreno with the precompiled specialised shaders than with the ubershader.
 `lib-patches/rt64/0008` draws just the G_AC_DITHER calls with the ubershader
 on Android. Owner: much better, normal speed.
 
-Intro tank jitter: RT64's frame interpolation (Refresh Rate: Display); gone at
-Original. Delta time on the device is a steady 2 VIs per frame.
+Intro tank jitter (tanks driving straight) and rare flashing of the player's
+tank and its gryphon decal in game: only with RT64's frame interpolation
+(Refresh Rate: Display); gone at Original. Ruled out so far: game delta time
+(steady 2 VIs per frame), present pacing (steady 8.3 ms at 120 Hz, display
+timing in use), interpolated frames skipped for time (mostly none, a few
+bursts), the number of interpolated frames (same at 60 Hz), FMA contraction
+(now off on Android, `cmake/Android.cmake`). The PC at 144 Hz is fine. Not
+found yet; next would be logging RT64's transform matching per object.
 
 Testing aids kept:
 - `files/ubershaders-only` in the app's storage (`adb shell run-as ... touch`)
