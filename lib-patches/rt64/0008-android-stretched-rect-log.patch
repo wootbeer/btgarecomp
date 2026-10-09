@@ -1,0 +1,30 @@
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -1652,6 +1652,27 @@
+                                 horizontalMisalignment = p.horizontalMisalignment;
+                             }
+ 
++#                       if defined(__ANDROID__)
++                            // TEMPORARY (Android port, nuke flash): rectangles drawn across the whole window, and why.
++                            if ((invRatioScale == 1.0f) && (aspectRatioScale != 1.0f)) {
++                                static std::string lastRectLog;
++                                static int rectLogCount = 0;
++                                char line[320];
++                                const FixedRect &r = call.callDesc.rect;
++                                const FixedRect &fs = fbPair.scissorRect;
++                                snprintf(line, sizeof(line), "[RT64 RECT] stretched rect %d,%d..%d,%d pair scissor %d,%d..%d,%d tileCopies %d coversScissor %d aspect %d cycle %u fb %08X w %u cc %08X%08X oml %08X",
++                                    r.ulx / 4, r.uly / 4, r.lrx / 4, r.lry / 4, fs.ulx / 4, fs.uly / 4, fs.lrx / 4, fs.lry / 4,
++                                    tileCopiesUsed ? 1 : 0, coversScissorWidth ? 1 : 0, int(call.callDesc.rectAspect), call.shaderDesc.otherMode.cycleType() >> G_MDSFT_CYCLETYPE,
++                                    fbPair.colorImage.address, fbPair.colorImage.width,
++                                    call.shaderDesc.colorCombiner.L, call.shaderDesc.colorCombiner.H, call.shaderDesc.otherMode.L);
++                                if ((rectLogCount < 400) && (lastRectLog != line)) {
++                                    lastRectLog = line;
++                                    rectLogCount++;
++                                    fprintf(stderr, "%s\n", line);
++                                }
++                            }
++#                       endif
++
+                             RenderViewport viewportRect = convertViewportRect(call.callDesc.rect, p.resolutionScale, p.fbWidth, invRatioScale, extOriginPercentage, horizontalMisalignment, call.callDesc.rectLeftOrigin, call.callDesc.rectRightOrigin);
+                             triangles.screenScale = { viewportRect.width / framebuffer.viewport.width, viewportRect.height / framebuffer.viewport.height };
+                             triangles.screenOffset.x = halfPixelOffset.x + ((viewportRect.x + viewportRect.width / 2.0f) - halfViewportSize.x) / halfViewportSize.x;
