@@ -381,6 +381,11 @@ Found with a temporary RT64 log of stretched rectangles; why the PC build
 didn't show it is not known. Also clipped Vulkan clear rectangles to the
 target (`lib-patches/plume/0004`), the same rule as the scissors.
 
+Cutscene smoke grain (tank shot trails, G_AC_DITHER alpha compare): grainier
+on Adreno with the precompiled specialised shaders than with the ubershader.
+`lib-patches/rt64/0008` draws just the G_AC_DITHER calls with the ubershader
+on Android. Owner: much better, normal speed.
+
 Intro tank jitter: RT64's frame interpolation (Refresh Rate: Display); gone at
 Original. Delta time on the device is a steady 2 VIs per frame.
 
@@ -400,7 +405,7 @@ re-applies them all; Git runs with `safe.directory=*` (the owner's checkout is
 
 Open graphics bugs (owner, Retroid): credits smoke covered by a grid of
 see-through squares showing the background (Android only); cutscene smoke
-grain (Android only, better with ubershaders); 2x MSAA makes the player's
+2x MSAA makes the player's
 shots vanish; Auto resolution + Expand HUD loses the HUD after the
 fullscreen change.
 
