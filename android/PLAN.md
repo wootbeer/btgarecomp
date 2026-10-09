@@ -409,8 +409,7 @@ LOAD_OP_NONE where supported; on Adreno (tiled) some tiles then tested
 against garbage depth. `lib-patches/plume/0005` uses LOAD/STORE on Android.
 Owner: squares gone, and the leftover grain with them.
 
-Open graphics bugs (owner, Retroid): cutscene smoke
-2x MSAA makes the player's
+Open graphics bugs (owner, Retroid): 2x MSAA makes the player's
 shots vanish; Auto resolution + Expand HUD loses the HUD after the
 fullscreen change.
 
