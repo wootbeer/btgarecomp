@@ -17,6 +17,11 @@ endif()
 set(ZSTD_BUILD_DICTBUILDER OFF CACHE BOOL "" FORCE)
 set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
 
+# Clang on arm64 fuses a*b+c into one FMA by default, rounding once instead of twice. The N64
+# (no FMA) and the desktop builds (no FMA by default) round twice; keep Android the same, for the
+# recompiled game maths and for RT64's matrix decomposition used by frame interpolation.
+add_compile_options(-ffp-contract=off)
+
 include(FetchContent)
 
 # The SDL Java sources in the Android app (org.libsdl.app) must come from this same release.
