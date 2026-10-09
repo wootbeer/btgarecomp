@@ -43,7 +43,21 @@ function(btga_apply_lib_patches submodule)
     if (EXISTS "${stamp}")
         file(READ "${stamp}" applied)
         if (applied STREQUAL state)
-            return()
+            # Same set; still check it's in the tree (a checkout or submodule update undoes it).
+            set(all_in_tree TRUE)
+            foreach(patch IN LISTS patches)
+                execute_process(
+                    COMMAND ${git} apply --ignore-whitespace --reverse --check "${patch}"
+                    WORKING_DIRECTORY "${dir}"
+                    RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)
+                if (NOT result EQUAL 0)
+                    set(all_in_tree FALSE)
+                    break()
+                endif()
+            endforeach()
+            if (all_in_tree)
+                return()
+            endif()
         endif()
     endif()
 
