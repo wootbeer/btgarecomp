@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <unordered_map>
 
 #include "recomp.h"
@@ -28,33 +27,8 @@ static constexpr float kViUnits = 0.375f;
 
 // Hooked right before `swc1 $f0, 0x5948($at)` in func_800BF80C (0x800BFAC8,
 // gameplay) and func_800BFAEC (0x800BFC80, intro / attract demo / credits).
-// TEMPORARY (Android port, intro tank jitter): logs each frame's raw delta
-// time in VIs, 30 frames per line, with the host time between frames.
-static void log_frame_dt(float raw) {
-    static char line[30 * 14];
-    static int count = 0, lines = 0;
-    static auto last = std::chrono::steady_clock::now();
-    if (lines >= 200) {
-        return;
-    }
-    auto now = std::chrono::steady_clock::now();
-    double ms = std::chrono::duration<double, std::milli>(now - last).count();
-    last = now;
-    int len = (int)std::strlen(line);
-    std::snprintf(line + len, sizeof(line) - len, " %.2f/%.0f", raw / kViUnits, ms);
-    if (++count >= 30) {
-        std::fprintf(stderr, "[BTGA DT] VIs/ms:%s\n", line);
-        line[0] = '\0';
-        count = 0;
-        lines++;
-    }
-}
-
 extern "C" void btga_frame_dt(uint8_t*, recomp_context* ctx) {
     float raw = ctx->f0.fl;
-#if defined(__ANDROID__)
-    log_frame_dt(raw);
-#endif
     float snapped = std::round(raw / kViUnits) * kViUnits;
     if (snapped >= kViUnits) { // keep tiny/zero first-frame values as measured
         ctx->f0.fl = snapped;

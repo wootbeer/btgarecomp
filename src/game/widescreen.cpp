@@ -17,38 +17,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <string>
 
 #include "recomp.h"
 
 #include "btga_config.h"
-
-// TEMPORARY diagnostic (Android port, nuke flash in the intro covering the whole
-// window in Expand): logs full-width fills and the frame clear colour, each source
-// only when its line changes, at most 300 lines. Remove once found.
-namespace {
-    // Per-frame summary: the fills seen since the last frame clear, then the clear and what the
-    // letterbox fix did. Logged only when it differs from the previous frame's.
-    std::string flash_frame;
-
-    void flash_log(int, const char* line) {
-        flash_frame += " | ";
-        flash_frame += line;
-    }
-
-    void flash_end_frame(const char* line) {
-        static std::string last;
-        static int count = 0;
-        std::string summary = std::string(line) + flash_frame;
-        flash_frame.clear();
-        if (count >= 400 || summary == last) {
-            return;
-        }
-        last = summary;
-        count++;
-        std::fprintf(stderr, "[BTGA FLASH] %s\n", summary.c_str());
-    }
-}
 
 namespace {
     std::atomic<float> widescreen_scale{ 1.0f };
@@ -310,13 +282,6 @@ extern "C" void btga_hud_texrect(uint8_t* rdram, recomp_context* ctx) {
 extern "C" void btga_hud_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     int ulx = (int16_t)ctx->r17;
     int lrx = ulx + (uint16_t)MEM_HU(0, ctx->r16);
-    if (ulx <= 0 && lrx >= 320) {
-        gpr el = ctx->r30;
-        char line[160];
-        std::snprintf(line, sizeof(line), "interp fill x %d..%d el %02X %02X%02X%02X%02X y %d hud %d",
-            ulx, lrx, MEM_BU(0, el), MEM_BU(1, el), MEM_BU(2, el), MEM_BU(3, el), MEM_BU(4, el), (int)MEM_H(4, el), hud_script ? 1 : 0);
-        flash_log(0, line);
-    }
     if (!anchoring_active(rdram)) {
         return;
     }
@@ -363,11 +328,6 @@ extern "C" void btga_box_fillrect_begin(uint8_t* rdram, recomp_context* ctx) {
     int uly = (int16_t)MEM_H(6, ctx->r17);
     int lrx = ulx + (uint16_t)MEM_HU(8, ctx->r17);
     int lry = uly + (uint16_t)MEM_HU(0xA, ctx->r17);
-    {
-        char line[160];
-        std::snprintf(line, sizeof(line), "box %d,%d..%d,%d", ulx, uly, lrx, lry);
-        flash_log(1, line);
-    }
     Letterbox& lb = letterbox_building;
     if (ulx <= 0 && lrx > 0 && lrx < 160 && uly <= 0) {
         lb.ulx = lrx; lb.bars++;           // left bar
@@ -394,26 +354,6 @@ extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
         letterbox_last = letterbox_building;
     }
     letterbox_building = Letterbox{};
-
-    char flash_line[200];
-    {
-        uint32_t clear_head = (uint32_t)MEM_W(0x24, ctx->r30);
-        gpr clear_cmd = kseg0(clear_head - 16);
-        std::snprintf(flash_line, sizeof(flash_line), "clear %08X %08X %08X lb %d view %d,%d..%d,%d bars %d scale %.3f",
-            (uint32_t)MEM_W(0, clear_cmd), (uint32_t)MEM_W(4, clear_cmd), (uint32_t)MEM_W(8, clear_cmd),
-            (frame_counter - letterbox_frame <= 3 && letterbox_last.bars >= 2) ? 1 : 0,
-            letterbox_last.ulx, letterbox_last.uly, letterbox_last.lrx, letterbox_last.lry, letterbox_last.bars,
-            btga::get_widescreen_scale());
-    }
-    struct FlashEnd {
-        const char* line;
-        const char* result = "no repaint";
-        ~FlashEnd() {
-            char full[260];
-            std::snprintf(full, sizeof(full), "%s -> %s", line, result);
-            flash_end_frame(full);
-        }
-    } flash_end{ flash_line };
 
     // Letterboxed within the last couple of frames, and in Expand.
     if (btga::get_widescreen_scale() <= 1.0f || frame_counter - letterbox_frame > 3 || letterbox_last.bars < 2) {
@@ -446,5 +386,4 @@ extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
     dl.cmd(0xE0525464, 0x10000064); // gEXEnable
     dl.cmd(0x64000033, 0x2);        // gEXSetRectAspect(G_EX_ASPECT_ADJUST)
     MEM_W(0x24, frame) = (int32_t)(uint32_t)dl.head;
-    flash_end.result = "repainted";
 }
