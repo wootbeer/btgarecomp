@@ -403,8 +403,13 @@ folder): a changed, added or removed patch resets that submodule's tree and
 re-applies them all; Git runs with `safe.directory=*` (the owner's checkout is
 "owned" by Administrators).
 
-Open graphics bugs (owner, Retroid): credits smoke covered by a grid of
-see-through squares showing the background (Android only); cutscene smoke
+Credits/intro smoke covered by a grid of see-through squares: plume renders
+depth-tested, non-writing draws with a read-only depth attachment using
+LOAD_OP_NONE where supported; on Adreno (tiled) some tiles then tested
+against garbage depth. `lib-patches/plume/0005` uses LOAD/STORE on Android.
+Owner: squares gone, and the leftover grain with them.
+
+Open graphics bugs (owner, Retroid): cutscene smoke
 2x MSAA makes the player's
 shots vanish; Auto resolution + Expand HUD loses the HUD after the
 fullscreen change.
