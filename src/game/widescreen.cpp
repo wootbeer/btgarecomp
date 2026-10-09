@@ -439,6 +439,12 @@ extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
     dl.cmd(0xF7000000, sky);
     uint32_t lrx = (uint32_t)(lb.lrx * 4 - 4), lry = (uint32_t)(lb.lry * 4 - 4); // fill mode: inclusive
     dl.cmd(0xF6000000 | (lrx << 12) | lry, ((uint32_t)(lb.ulx * 4) << 12) | (uint32_t)(lb.uly * 4));
+    // The intro's nuke flash is the game's full-screen fade rectangle in white, which RT64
+    // stretches to the window like any rectangle spanning the whole scissor. Keep full-screen
+    // rectangles in the 4:3 area for the rest of this letterboxed frame (RT64 resets extended
+    // state at the start of every frame). Fill-mode clears, like the black above, still stretch.
+    dl.cmd(0xE0525464, 0x10000064); // gEXEnable
+    dl.cmd(0x64000033, 0x2);        // gEXSetRectAspect(G_EX_ASPECT_ADJUST)
     MEM_W(0x24, frame) = (int32_t)(uint32_t)dl.head;
     flash_end.result = "repainted";
 }
