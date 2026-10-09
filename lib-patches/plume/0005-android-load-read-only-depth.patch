@@ -1,0 +1,17 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -2661,7 +2661,14 @@
+ 
+             // Upgrade the operations to NONE if supported. Fixes the following validation issue: https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/2349
+             // We prefer to just ignore this potential hazard on older Vulkan versions as it just seems to be an edge case for some hardware.
++#       if defined(__ANDROID__)
++            // Not on Android: with LOAD_OP_NONE for a read-only depth attachment, Adreno (a tiling GPU)
++            // depth-tested against garbage in some tiles, hiding depth-tested, non-writing draws like
++            // smoke in a grid of squares. Load and store as for any depth attachment.
++            const bool preferNoneForReadOnly = false;
++#       else
+             const bool preferNoneForReadOnly = desc.depthAttachmentReadOnly && device->loadStoreOpNoneSupported;
++#       endif
+             VkAttachmentDescription attachment = {};
+             attachment.format = toVk(depthAttachmentViewDesc.format);
+             attachment.samples = VkSampleCountFlagBits(depthAttachment->desc.multisampling.sampleCount);
