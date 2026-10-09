@@ -51,7 +51,15 @@ function(btga_apply_lib_patches submodule)
             # Neither applied nor applicable: an older version of a patch is in the working
             # tree. Start over from the submodule's own sources and apply them all again.
             message(STATUS "Patches changed: resetting ${dir} and applying them again")
-            execute_process(COMMAND "${GIT_EXECUTABLE}" checkout -- . WORKING_DIRECTORY "${dir}")
+            # safe.directory: Git refuses to work in a checkout it thinks another user owns,
+            # which Windows reports for folders created as Administrator.
+            execute_process(
+                COMMAND "${GIT_EXECUTABLE}" -c safe.directory=* checkout -- .
+                WORKING_DIRECTORY "${dir}"
+                RESULT_VARIABLE reset_result ERROR_VARIABLE reset_error)
+            if (NOT reset_result EQUAL 0)
+                message(FATAL_ERROR "Couldn't reset ${dir} to apply the changed patches:\n${reset_error}")
+            endif()
             btga_apply_lib_patches_from_scratch("${dir}" "${patches}")
             return()
         endif()
