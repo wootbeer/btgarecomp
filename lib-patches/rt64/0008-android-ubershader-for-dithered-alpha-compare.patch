@@ -1,0 +1,18 @@
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -1607,7 +1607,14 @@
+                     {
+                         triangles.shaderDesc = call.shaderDesc;
+ 
+-                        RasterShader *gpuShader = p.ubershadersOnly ? nullptr : p.rasterShaderCache->getGPUShader(call.shaderDesc);
++                        bool useUbershader = p.ubershadersOnly;
++#                   if defined(__ANDROID__)
++                        // Draws whose alpha compare is dithered (cutscene smoke) come out grainier on
++                        // Adreno with the specialised shaders than with the ubershader; draw just those
++                        // with the ubershader.
++                        useUbershader = useUbershader || (call.shaderDesc.otherMode.alphaCompare() == G_AC_DITHER);
++#                   endif
++                        RasterShader *gpuShader = useUbershader ? nullptr : p.rasterShaderCache->getGPUShader(call.shaderDesc);
+                         if (gpuShader != nullptr) {
+                             triangles.pipeline = gpuShader->pipeline.get();
+                         }
