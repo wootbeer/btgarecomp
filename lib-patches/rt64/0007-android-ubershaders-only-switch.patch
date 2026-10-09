@@ -1,0 +1,17 @@
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -398,6 +398,14 @@
+ 
+         // Create the queues.
+         workloadQueue = std::make_unique<WorkloadQueue>();
++#   if defined(__ANDROID__)
++        // Testing switch: an empty file named ubershaders-only in the app's storage makes RT64 draw
++        // everything with its ubershader instead of the specialized (spec-constant) shaders.
++        if (std::filesystem::exists("ubershaders-only")) {
++            workloadQueue->ubershadersOnly = true;
++            fprintf(stderr, "RT64: ubershaders only\n");
++        }
++#   endif
+         presentQueue = std::make_unique<PresentQueue>();
+ 
+         // Create the shared resources for the queues.
