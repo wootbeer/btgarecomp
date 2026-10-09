@@ -371,14 +371,38 @@ Smoke/particle grain: Android only, and only in cutscenes (PC with matching
 settings is smooth). Not yet explained: the grain comes from RT64's
 G_AC_DITHER alpha compare, identical code on every platform.
 
-Open graphics bugs (owner, Retroid): Auto resolution + Expand HUD still loses
-the HUD after the fullscreen change; 2x MSAA makes the player's shots vanish
-and breaks other things; the intro's nuke flash covers the whole window in
-Expand instead of the 4:3 picture (shared widescreen code, so likely on PC
-too). Waiting on PC comparisons (Graphics API = Vulkan). TEMPORARY
-`[BTGA FLASH]` logging in `src/game/widescreen.cpp` (full-width fills from the
-overlay interpreter and the box drawer, and the frame clear colour) to find
-how the flash is drawn; remove after.
+Nuke flash (intro, Expand): the flash is the game's full-screen fade rectangle
+(G_CC_PRIMITIVE, prim white) drawn after the letterbox repaint. RT64 stretches
+any rectangle spanning the whole scissor to the window, so it covered the black
+sides. The letterbox hook in `src/game/widescreen.cpp` now also sets
+`gEXSetRectAspect(G_EX_ASPECT_ADJUST)` for the rest of a letterboxed frame:
+the flash stays in the 4:3 area (owner: fine in Expand, perfect in Original).
+Found with a temporary RT64 log of stretched rectangles; why the PC build
+didn't show it is not known. Also clipped Vulkan clear rectangles to the
+target (`lib-patches/plume/0004`), the same rule as the scissors.
+
+Intro tank jitter: RT64's frame interpolation (Refresh Rate: Display); gone at
+Original. Delta time on the device is a steady 2 VIs per frame.
+
+Testing aids kept:
+- `files/ubershaders-only` in the app's storage (`adb shell run-as ... touch`)
+  draws everything with RT64's ubershader (`lib-patches/rt64/0007`). With it
+  the cutscene grain is better (so partly the precompiled SPIR-V
+  specialisations on Adreno); the credits grid and the flash were unchanged.
+- `btga.vulkanValidation=true` packs the Khronos validation layer
+  (android/README.md). A run through the intro with synchronization
+  validation reported nothing but a present-acquire hazard.
+
+Lib patches now carry a stamp per submodule (patch names + SHA-256 in its Git
+folder): a changed, added or removed patch resets that submodule's tree and
+re-applies them all; Git runs with `safe.directory=*` (the owner's checkout is
+"owned" by Administrators).
+
+Open graphics bugs (owner, Retroid): credits smoke covered by a grid of
+see-through squares showing the background (Android only); cutscene smoke
+grain (Android only, better with ubershaders); 2x MSAA makes the player's
+shots vanish; Auto resolution + Expand HUD loses the HUD after the
+fullscreen change.
 
 Next:
 
