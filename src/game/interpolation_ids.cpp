@@ -23,6 +23,8 @@
 // order (G_EX_ORDER_LINEAR). Anything without a stable owner keeps RT64's
 // automatic matching.
 #include <cstdint>
+#include <cstdio>
+#include <vector>
 #include <unordered_map>
 
 #include "recomp.h"
@@ -57,6 +59,15 @@ namespace {
     }
 
     bool group_pushed = false;
+
+    // TEMPORARY (Android port): one frame in 60, every queued matrix, to find the objects
+    // still matched automatically (the intro tanks' gryphon decal).
+    struct LogEntry {
+        uint32_t source, mtx, mesh, dl;
+        uint32_t stack[16];
+    };
+    std::vector<LogEntry> log_entries;
+    int log_frame = 0, log_lines = 0;
 
     gpr kseg0(uint32_t address) {
         return (gpr)(int32_t)address;
@@ -150,6 +161,14 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
         gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
     }
+
+    if ((log_frame == 30) && (log_entries.size() < 400)) {
+        LogEntry e{ source, mtx, (uint32_t)ctx->r19, (uint32_t)ctx->r30, {} };
+        for (int i = 0; i < 16; i++) {
+            e.stack[i] = (uint32_t)MEM_W(0x50 + 4 * i, ctx->r29); // caller's frame from its 0x10
+        }
+        log_entries.push_back(e);
+    }
 }
 
 // From the frame clear (src/game/widescreen.cpp), at the head of the frame's display list:
@@ -169,6 +188,27 @@ uint32_t btga_interp_frame_base_group(uint8_t* rdram, uint32_t head) {
 
 // From the frame clear (src/game/widescreen.cpp): start a new generation.
 void btga_interp_new_frame() {
+    if (log_frame == 30) {
+        const Generation& gen = generations[current];
+        for (const LogEntry& e : log_entries) {
+            auto uses = gen.source_uses.find(e.source);
+            const int n = (uses != gen.source_uses.end()) ? uses->second : 0;
+            if ((n == 1) || (log_lines >= 1500)) {
+                continue; // tagged
+            }
+            log_lines++;
+            std::fprintf(stderr, "[BTGA SHARED] src %08X x%d mtx %08X mesh %08X dl %08X |", e.source, n, e.mtx, e.mesh, e.dl);
+            for (uint32_t w : e.stack) {
+                std::fprintf(stderr, " %08X", w);
+            }
+            std::fprintf(stderr, "\n");
+        }
+        if (log_lines < 1500) {
+            std::fprintf(stderr, "[BTGA SHARED] ---\n");
+        }
+        log_entries.clear();
+    }
+    log_frame = (log_frame + 1) % 60;
     current ^= 1;
     generations[current].mtx_source.clear();
     generations[current].source_uses.clear();
