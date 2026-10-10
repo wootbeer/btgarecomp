@@ -16,20 +16,15 @@
 //   gSPMatrix through func_8007AC34 into the main display list (head at
 //   *(0x80114500)+0xC8), then the record's display lists.
 //
-// So the float matrix's address identifies the object across frames. The
-// first step remembers which float matrix each Mtx came from; the walker then
-// puts a gEXMatrixGroup with that ID in front of every matrix load. A model
-// drawn more than once per frame repeats its ID, and RT64 pairs repeats in
-// order (G_EX_ORDER_LINEAR). Matrices without a float source keep RT64's
+// The first step finds each queued Mtx's owner -- the float matrix it came from,
+// or for a ready Mtx the Mtx itself (see btga_interp_queue_mtx) -- and the walker
+// puts a gEXMatrixGroup with that address as ID in front of every matrix load. A
+// model drawn more than once per frame repeats its ID, and RT64 pairs repeats in
+// order (G_EX_ORDER_LINEAR). Anything without a stable owner keeps RT64's
 // automatic matching.
-#include <algorithm>
-#include <array>
 #include <cstdint>
-#include <string>
-#include <vector>
 #include <cstdio>
 #include <unordered_map>
-#include <unordered_set>
 
 #include "recomp.h"
 
@@ -68,8 +63,6 @@ namespace {
         int frames = 0, tagged = 0, shared = 0, unknown = 0, lines = 0;
     };
     Stats stats;
-    std::unordered_map<uint32_t, std::array<int, 2>> site_stats;
-    std::unordered_set<uint32_t> ready_mtx_seen;
 
     bool group_pushed = false;
 
@@ -114,9 +107,16 @@ namespace {
 
 // func_8007B1F0, at L_8007B2B0 (both paths join there): $s5 is the Mtx about to be
 // queued, $s1 the float matrix it came from (0 when the caller passed a ready Mtx).
-extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
+//
+// The ready Mtx (tanks and most other objects) are each object's own, in object memory
+// around 0x802A0000-0x802EFFFF, reused every frame: about 100 distinct ones per second
+// queued thousands of times. Their address is the object's ID. Only those in the per-frame
+// matrix pools (0x801298C0, 2 x 0xC000) say nothing about the object; they stay automatic.
+extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
     const uint32_t mtx = (uint32_t)ctx->r21;
-    const uint32_t source = (uint32_t)ctx->r17;
+    const uint32_t float_source = (uint32_t)ctx->r17;
+    const bool in_pool = (mtx >= 0x801298C0u) && (mtx < 0x801298C0u + 2 * 0xC000u);
+    const uint32_t source = (float_source != 0) ? float_source : (in_pool ? 0u : mtx);
     Generation& gen = generations[current];
     auto it = gen.mtx_source.find(mtx);
     if (it != gen.mtx_source.end()) {
@@ -132,16 +132,6 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
         gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
     }
-
-    // TEMPORARY (Android port).
-    // Recompiled calls don't set $ra, so instead: where the ready Mtx live. Inside the
-    // per-frame matrix pools (0x801298C0, 2 x 0xC000) they say nothing about the object;
-    // elsewhere they may be the object's own and stable. Keyed by 64 KB region.
-    if (source == 0) {
-        const bool in_pool = (mtx >= 0x801298C0u) && (mtx < 0x801298C0u + 2 * 0xC000u);
-        site_stats[in_pool ? 0u : (mtx & 0xFFFF0000u)][0]++;
-        ready_mtx_seen.insert(mtx);
-    }
 }
 
 // From the frame clear (src/game/widescreen.cpp): start a new generation.
@@ -151,24 +141,9 @@ void btga_interp_new_frame() {
     generations[current].source_uses.clear();
     if (++stats.frames >= 60) {
         if (stats.lines < 200) {
-            std::fprintf(stderr, "[BTGA IDS] 60 frames: %d matrix loads tagged, %d shared source (automatic), %d no source (automatic)\n",
+            std::fprintf(stderr, "[BTGA IDS] 60 frames: %d matrix loads tagged, %d with a shared float matrix (automatic), %d from the per-frame pool (automatic)\n",
                 stats.tagged, stats.shared, stats.unknown);
         }
-        if (stats.lines < 200) {
-            std::vector<std::pair<uint32_t, std::array<int, 2>>> sites(site_stats.begin(), site_stats.end());
-            std::sort(sites.begin(), sites.end(), [](const auto& a, const auto& b) { return (a.second[0] + a.second[1]) > (b.second[0] + b.second[1]); });
-            char head[96];
-            std::snprintf(head, sizeof(head), "[BTGA READY MTX] %zu distinct;", ready_mtx_seen.size());
-            std::string line = head;
-            for (size_t i = 0; (i < sites.size()) && (i < 10); i++) {
-                char part[64];
-                std::snprintf(part, sizeof(part), " %s%08X: %d", sites[i].first == 0 ? "pool/" : "", sites[i].first, sites[i].second[0]);
-                line += part;
-            }
-            std::fprintf(stderr, "%s (region: queued, per 60 frames)\n", line.c_str());
-        }
-        site_stats.clear();
-        ready_mtx_seen.clear();
         const int lines = stats.lines + 1;
         stats = Stats();
         stats.lines = lines;
