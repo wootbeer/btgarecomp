@@ -78,30 +78,40 @@ namespace {
         MEM_W(0xC8, ctx_struct) = (int32_t)((uint32_t)head + 8);
     }
 
-    // gEXMatrixGroup(id, G_EX_INTERPOLATE_DECOMPOSE, push, G_MTX_MODELVIEW, ...) with RT64's
-    // default components: position, rotation, scale, skew, perspective, tiles and look-at
-    // AUTO, vertices and texcoords SKIP, aspect AUTO, not editable.
-    void write_matrix_group(uint8_t* rdram, uint32_t id, bool push) {
-        constexpr uint32_t kAuto = 2;
+    // gEXMatrixGroupDecomposedNormal(id, push, G_MTX_MODELVIEW, G_EX_EDIT_NONE), as Banjo and
+    // other recomps tag their objects: position, rotation, scale, skew, perspective and tiles
+    // always interpolated, vertices and texcoords skipped, look-at automatic.
+    //
+    // Not RT64's AUTO components (its default): AUTO position stops interpolating on any frame
+    // where the object's speed jumps by 10x over the previous frame, so an object whose
+    // per-frame movement is uneven flips between smoothed and snapped frames -- the
+    // back-and-forth jitter. Untagged models (id G_EX_ID_AUTO) keep automatic matching but get
+    // the same components.
+    uint32_t matrix_group_params(uint32_t id, bool push) {
+        constexpr uint32_t kInterpolate = 1, kAuto = 2;
         const uint32_t order = (id == kIdAuto) ? 1u : 0u; // G_EX_ORDER_AUTO for the automatic group, LINEAR for IDs
         const uint32_t params =
             (push ? 1u : 0u) |       // push
             (0u << 1) |              // proj: modelview
             (1u << 2) |              // mode: decompose
-            (kAuto << 3) |           // position
-            (kAuto << 5) |           // rotation
-            (kAuto << 7) |           // scale
-            (kAuto << 9) |           // skew
-            (kAuto << 11) |          // perspective
+            (kInterpolate << 3) |    // position
+            (kInterpolate << 5) |    // rotation
+            (kInterpolate << 7) |    // scale
+            (kInterpolate << 9) |    // skew
+            (kInterpolate << 11) |   // perspective
             (0u << 13) |             // vertices: skip
-            (kAuto << 15) |          // tiles
+            (kInterpolate << 15) |   // tiles
             (order << 17) |          // ordering
             (0u << 19) |             // not editable
             (0u << 20) |             // aspect: auto
             (0u << 22) |             // texcoords: skip
             (kAuto << 24);           // look-at
+        return params;
+    }
+
+    void write_matrix_group(uint8_t* rdram, uint32_t id, bool push) {
         write_cmd(rdram, 0x6400000Cu, id); // G_EX_MATRIXGROUP_V1
-        write_cmd(rdram, params, 0);
+        write_cmd(rdram, matrix_group_params(id, push), 0);
     }
 }
 
@@ -145,6 +155,21 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
             (uint32_t)MEM_W(0xA0, up), (uint32_t)MEM_W(0xA4, up), (uint32_t)MEM_W(0xA8, up), (uint32_t)MEM_W(0xAC, up),
             (uint32_t)MEM_W(0xB0, up), (uint32_t)MEM_W(0xB4, up), (uint32_t)MEM_W(0xC4, up));
     }
+}
+
+// From the frame clear (src/game/widescreen.cpp), at the head of the frame's display list:
+// give the base of RT64's model matrix-group stack (reset every frame) the same components,
+// for everything drawn without passing the queue walker (terrain, effects, ...). Returns the
+// new head.
+uint32_t btga_interp_frame_base_group(uint8_t* rdram, uint32_t head) {
+    const gpr h = kseg0(head);
+    MEM_W(0x00, h) = (int32_t)0xE0525464u; // gEXEnable
+    MEM_W(0x04, h) = (int32_t)0x10000064u;
+    MEM_W(0x08, h) = (int32_t)0x6400000Cu; // gEXMatrixGroup, no push: replaces the base entry
+    MEM_W(0x0C, h) = (int32_t)kIdAuto;
+    MEM_W(0x10, h) = (int32_t)matrix_group_params(kIdAuto, false);
+    MEM_W(0x14, h) = 0;
+    return head + 0x18;
 }
 
 // From the frame clear (src/game/widescreen.cpp): start a new generation.

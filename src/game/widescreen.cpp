@@ -349,9 +349,20 @@ extern "C" void btga_box_fillrect_end(uint8_t*, recomp_context*) {
 // func_8007A250, right after the frame clear's G_FILLRECT (fill colour set
 // just before it): the display-list head is the stack variable 0x24($fp).
 void btga_interp_new_frame(); // src/game/interpolation_ids.cpp
+uint32_t btga_interp_frame_base_group(uint8_t* rdram, uint32_t head);
 
 extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
     btga_interp_new_frame();
+    // Frame-interpolation components for everything drawn this frame (interpolation_ids.cpp),
+    // appended on the way out: the letterbox code below expects the game's clear right before
+    // the head.
+    struct BaseGroupOnExit {
+        uint8_t* rdram;
+        gpr frame;
+        ~BaseGroupOnExit() {
+            MEM_W(0x24, frame) = (int32_t)btga_interp_frame_base_group(rdram, (uint32_t)MEM_W(0x24, frame));
+        }
+    } base_group_on_exit{ rdram, ctx->r30 };
     frame_counter++;
     if (letterbox_building.bars >= 2) {
         letterbox_last = letterbox_building;
