@@ -120,8 +120,8 @@ namespace {
         }
     }
 
-    // Stick bottom left with Z above it; A and B bottom right under the C buttons; L and R in the top
-    // corners; START bottom centre, MENU top centre. Sizes follow the screen height and the Size setting.
+    // Stick bottom left; A and B bottom right under the C buttons, Z above those under R; L and R in
+    // the top corners; START bottom centre, MENU top centre. Sizes follow the screen height and the Size setting.
     void layout(int width, int height) {
         const float w = (float)width;
         const float h = (float)height;
@@ -137,7 +137,6 @@ namespace {
         const float stick_cy = h - m - r * 1.15f;
         descore_touch_set_stick(0, stick_cx, stick_cy, r, on_stick);
         descore_touch_set_stick_style(0, dpad_style ? DESCORE_TOUCH_STICK_DPAD : DESCORE_TOUCH_STICK_ANALOG);
-        set_button(BUTTON_Z, m, stick_cy - r * 1.3f - gap - c, c * 1.3f, c);
 
         set_button(BUTTON_A, w - m - c, h - m - c, c, c);
         set_button(BUTTON_B, w - m - c * 2.0f - gap, h - m - c, c, c);
@@ -152,6 +151,13 @@ namespace {
 
         set_button(BUTTON_L, m, m, c * 1.6f, c * 0.7f);
         set_button(BUTTON_R, w - m - c * 1.6f, m, c * 1.6f, c * 0.7f);
+
+        // Z (the main gun) over the C buttons, under R; shorter if the two leave little room.
+        const float r_bottom = m + c * 0.7f + gap;
+        const float c_up_top = cy - s * 1.5f - gap * 2.0f;
+        const float z_h = std::max(std::min(c, c_up_top - r_bottom), c * 0.5f);
+        const float z_y = std::max(c_up_top - z_h, r_bottom);
+        set_button(BUTTON_Z, cx - c * 0.7f, z_y, c * 1.4f, z_h);
 
         set_button(BUTTON_START, w * 0.5f - c * 0.7f, h - m - c * 0.6f, c * 1.4f, c * 0.6f);
         set_button(BUTTON_MENU, w * 0.5f - c * 0.7f, m, c * 1.4f, c * 0.6f);
