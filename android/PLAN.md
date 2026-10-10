@@ -424,7 +424,14 @@ Owner: no more flash on corners, still now and then on straights after hills.
 extra ones with its last transform from last frame (RT64 left them unpaired,
 snapping). Only affects ORDER_LINEAR IDs, which only this game's code sets.
 
-Open: the arrows over other tanks seem to lag behind on fast camera moves.
+Owner: decal on the tank fixed.
+
+Known limit: the arrows over other tanks lag slightly behind on fast camera
+moves at Display (some ghosting at Original too, maybe the OLED). They keep
+their size at any distance, so they are 2D (not drawn through the matrix
+queue: hiding the shared queue matrices left them), and RT64 does not
+interpolate rectangles: they stay where the game placed them at 30 fps while
+the tanks under them are interpolated. Not worth a deeper change for now.
 
 Shots visible through the back of the turret: also at Original, so not
 interpolation; not looked at yet.

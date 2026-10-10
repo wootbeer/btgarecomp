@@ -23,8 +23,6 @@
 // order (G_EX_ORDER_LINEAR). Anything without a stable owner keeps RT64's
 // automatic matching.
 #include <cstdint>
-#include <cstdio>
-#include <vector>
 #include <unordered_map>
 
 #include "recomp.h"
@@ -59,44 +57,6 @@ namespace {
     }
 
     bool group_pushed = false;
-
-    // TEMPORARY (Android port): one frame in 60, the queued matrices still matched
-    // automatically, with the registers func_8007B1F0 saved for its caller (s0-s7, fp) and
-    // the caller's stack arguments -- to find the object behind the arrows over tanks.
-    struct LogEntry {
-        uint32_t source, mtx, mesh, dl;
-        uint32_t saved[9];
-        uint32_t args[6];
-    };
-    std::vector<LogEntry> log_entries;
-    int log_frame = 0, log_lines = 0;
-
-    // TEMPORARY (Android port): the file btga-hide in the working folder (the app's files)
-    // lists float matrix addresses in hex; whatever is drawn with them is hidden (its Mtx
-    // zeroed), to see on screen which objects they are. Read again every 60 frames.
-    std::vector<uint32_t> hidden_sources;
-
-    void read_hidden_sources() {
-        hidden_sources.clear();
-        if (FILE* f = std::fopen("btga-hide", "r")) {
-            unsigned int address;
-            while (std::fscanf(f, "%x", &address) == 1) {
-                hidden_sources.push_back(address);
-            }
-            std::fclose(f);
-        }
-    }
-
-    uint32_t source_of(uint32_t mtx) {
-        for (int g = 0; g < 2; g++) {
-            const Generation& gen = generations[(current + 2 - g) % 2];
-            auto it = gen.mtx_source.find(mtx);
-            if (it != gen.mtx_source.end()) {
-                return it->second;
-            }
-        }
-        return 0;
-    }
 
     gpr kseg0(uint32_t address) {
         return (gpr)(int32_t)address;
@@ -195,17 +155,6 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
         gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
     }
-
-    if ((log_frame == 30) && (log_entries.size() < 400)) {
-        LogEntry e{ source, mtx, (uint32_t)ctx->r19, (uint32_t)ctx->r30, {}, {} };
-        for (int i = 0; i < 9; i++) {
-            e.saved[i] = (uint32_t)MEM_W(0x18 + 4 * i, ctx->r29);
-        }
-        for (int i = 0; i < 6; i++) {
-            e.args[i] = (uint32_t)MEM_W(0x50 + 4 * i, ctx->r29);
-        }
-        log_entries.push_back(e);
-    }
 }
 
 // From the frame clear (src/game/widescreen.cpp), at the head of the frame's display list:
@@ -225,34 +174,6 @@ uint32_t btga_interp_frame_base_group(uint8_t* rdram, uint32_t head) {
 
 // From the frame clear (src/game/widescreen.cpp): start a new generation.
 void btga_interp_new_frame() {
-    if (log_frame == 30) {
-        const Generation& gen = generations[current];
-        for (const LogEntry& e : log_entries) {
-            auto uses = gen.source_uses.find(e.source);
-            const int n = (uses != gen.source_uses.end()) ? uses->second : 0;
-            if ((n == 1) || (e.source == 0) || (log_lines >= 1500)) {
-                continue; // tagged, or from the per-frame pool
-            }
-            log_lines++;
-            std::fprintf(stderr, "[BTGA SHARED] src %08X x%d mtx %08X mesh %08X dl %08X | s0-7,fp", e.source, n, e.mtx, e.mesh, e.dl);
-            for (uint32_t w : e.saved) {
-                std::fprintf(stderr, " %08X", w);
-            }
-            std::fprintf(stderr, " | args");
-            for (uint32_t w : e.args) {
-                std::fprintf(stderr, " %08X", w);
-            }
-            std::fprintf(stderr, "\n");
-        }
-        if (log_lines < 1500) {
-            std::fprintf(stderr, "[BTGA SHARED] ---\n");
-        }
-        log_entries.clear();
-    }
-    if (log_frame == 0) {
-        read_hidden_sources();
-    }
-    log_frame = (log_frame + 1) % 60;
     current ^= 1;
     generations[current].mtx_source.clear();
     generations[current].source_uses.clear();
@@ -283,16 +204,6 @@ extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t limit = (uint32_t)MEM_W(0x5C, ctx->r29);
     if (!group_pushed && (head + 0x400 > limit)) {
         return;
-    }
-    if (!hidden_sources.empty()) {
-        const uint32_t source = source_of(mtx);
-        for (uint32_t hidden : hidden_sources) {
-            if ((source == hidden) && (source != 0)) {
-                for (int i = 0; i < 0x40; i += 4) {
-                    MEM_W(i, kseg0(mtx)) = 0;
-                }
-            }
-        }
     }
     const uint32_t id = id_for(mtx);
     if (!group_pushed) {
