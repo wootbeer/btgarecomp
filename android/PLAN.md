@@ -407,10 +407,15 @@ the game's draw queue, func_8007B1F0 / func_8007B65C):
   uneven per-frame motion flipped between smoothed and snapped frames.
 Tried and worse: IDs from the queue position or the display list address.
 
-Left: in game, a slight jitter/flash of the player's tank every few seconds
-(owner: not bad). The player tank comes through the shared scratch matrices,
-so it is still matched automatically; its caller's saved registers showed no
-per-tank pointer. Next: find the tank's own object for an ID.
+Tanks (hull and turret, built in shared scratch matrices by func_800AE184)
+take their ID from the tank object its caller loops over in $s3 (0x4CC apart).
+Each tank's gryphon decal is queued later with the hull's Mtx but naming the
+scratch matrix; a re-queued Mtx now keeps its first owner, so hull and decal
+share the tank's ID (the decal had kept wobbling in the intro). To confirm:
+the occasional in-game flash of the player's tank.
+
+Shots visible through the back of the turret: also at Original, so not
+interpolation; not looked at yet.
 
 Android's own screen recording breaks the game's rendering (owner, Retroid);
 not looked at.
