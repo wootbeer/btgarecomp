@@ -490,5 +490,7 @@ Touch controls and the app menu (as in gsrandroid, the owner's Golden Sun port):
   system bars reported hidden (flags 6) and it was gone with the overlay left out (owner's test): a
   drawing view over SDL's SurfaceView makes the window composite over the whole game, and the
   navigation bar backdrop showed. `TouchControlsView` is now a SurfaceView of its own, layered as a
-  media overlay just above the game's. `BattleTanxActivity` also hides the system bars again on focus
+  media overlay just above the game's. (The owner's other descore ports, e.g. jillandroid, never
+  meet this: they draw the controls into their own GL frame with descore_touch_draw() before
+  eglSwapBuffers, one SurfaceView and nothing over it. Here RT64 owns the Vulkan swap chain.) `BattleTanxActivity` also hides the system bars again on focus
   and as soon as they show (SDL waits 2 s).
