@@ -23,6 +23,7 @@
 // order (G_EX_ORDER_LINEAR). Anything without a stable owner keeps RT64's
 // automatic matching.
 #include <cstdint>
+#include <string>
 #include <cstdio>
 #include <unordered_map>
 
@@ -136,6 +137,21 @@ extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
 
 // From the frame clear (src/game/widescreen.cpp): start a new generation.
 void btga_interp_new_frame() {
+    // TEMPORARY (Android port): the float matrices shared by several objects this frame.
+    if ((stats.frames == 0) && (stats.lines < 100)) {
+        const Generation& gen = generations[current];
+        std::string line = "[BTGA SHARED]";
+        int shown = 0;
+        for (const auto& use : gen.source_uses) {
+            if ((use.second > 1) && (shown < 12)) {
+                char part[48];
+                std::snprintf(part, sizeof(part), " %08X x%u", use.first, use.second);
+                line += part;
+                shown++;
+            }
+        }
+        std::fprintf(stderr, "%s\n", line.c_str());
+    }
     current ^= 1;
     generations[current].mtx_source.clear();
     generations[current].source_uses.clear();
