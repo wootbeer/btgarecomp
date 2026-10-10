@@ -392,8 +392,28 @@ tank and its gryphon decal in game: only with RT64's frame interpolation
 (steady 2 VIs per frame), present pacing (steady 8.3 ms at 120 Hz, display
 timing in use), interpolated frames skipped for time (mostly none, a few
 bursts), the number of interpolated frames (same at 60 Hz), FMA contraction
-(now off on Android, `cmake/Android.cmake`). The PC at 144 Hz is fine. Not
-found yet; next would be logging RT64's transform matching per object.
+(now off on Android, `cmake/Android.cmake`). The PC at 144 Hz is fine.
+
+Fixed in the intro by `src/game/interpolation_ids.cpp` (hooks in the TOML on
+the game's draw queue, func_8007B1F0 / func_8007B65C):
+- each matrix load gets a gEXMatrixGroup; objects with their own Mtx, or an
+  unshared float matrix, get its address as ID (repeats paired in order);
+  pool Mtx and shared scratch matrices (the multi-part tank drawer,
+  func_800AE184, at 0x8021B2A0/0x8021B2E8) keep automatic matching;
+- the components are gEXMatrixGroupDecomposedNormal's (position etc. always
+  interpolated), for tagged and automatic groups, and also set at the base of
+  the frame for everything drawn outside the queue. RT64's AUTO position stops
+  interpolating whenever an object's speed jumps 10x from the last frame, so
+  uneven per-frame motion flipped between smoothed and snapped frames.
+Tried and worse: IDs from the queue position or the display list address.
+
+Left: in game, a slight jitter/flash of the player's tank every few seconds
+(owner: not bad). The player tank comes through the shared scratch matrices,
+so it is still matched automatically; its caller's saved registers showed no
+per-tank pointer. Next: find the tank's own object for an ID.
+
+Android's own screen recording breaks the game's rendering (owner, Retroid);
+not looked at.
 
 Testing aids kept:
 - `files/ubershaders-only` in the app's storage (`adb shell run-as ... touch`)
