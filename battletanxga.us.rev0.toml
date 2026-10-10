@@ -1679,3 +1679,27 @@ before_vram = 0x800885CC
 text = """
     { extern void btga_deadline_step(uint8_t *rdram, recomp_context *ctx); btga_deadline_step(rdram, ctx); }
 """
+
+# Matrix IDs for RT64's frame interpolation (src/game/interpolation_ids.cpp):
+# the float matrix behind each queued model's Mtx, then a gEXMatrixGroup with
+# that ID before every matrix the queue walker loads, popped at its exit.
+[[patches.hook]]
+func = "func_8007B1F0"
+before_vram = 0x8007B2B0
+text = """
+    { extern void btga_interp_queue_mtx(uint8_t *rdram, recomp_context *ctx); btga_interp_queue_mtx(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007B65C"
+before_vram = 0x8007B7B4
+text = """
+    { extern void btga_interp_matrix_load(uint8_t *rdram, recomp_context *ctx); btga_interp_matrix_load(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007B65C"
+before_vram = 0x8007B8B8
+text = """
+    { extern void btga_interp_queue_end(uint8_t *rdram, recomp_context *ctx); btga_interp_queue_end(rdram, ctx); }
+"""
