@@ -1,14 +1,25 @@
 --- a/src/hle/rt64_workload_queue.cpp
 +++ b/src/hle/rt64_workload_queue.cpp
-@@ -1087,6 +1087,13 @@
+@@ -10,6 +10,11 @@
+ 
+ #define ENABLE_HIGH_RESOLUTION_RENDERER 1
+ 
++#if defined(__ANDROID__)
++// TEMPORARY (Android port): defined in rt64_present_queue.cpp.
++extern std::atomic<uint64_t> btgaInterpTargetTags[16];
++#endif
++
+ namespace RT64 {
+     // WorkloadQueue
+ 
+@@ -1087,6 +1092,12 @@
                          // Override the render target.
                          if (usingMSAA || (frame > 0)) {
                              overrideTarget = interpolatedTargets[targetIndex].get();
 +#                       if defined(__ANDROID__)
 +                            // TEMPORARY (Android port): which workload and step each interpolated target holds.
-+                            extern std::atomic<uint64_t> btgaInterpTargetTags[16];
 +                            if (targetIndex < 16) {
-+                                btgaInterpTargetTags[targetIndex] = (uint64_t(workload.workloadId) << 8) | frame;
++                                ::btgaInterpTargetTags[targetIndex] = (uint64_t(workload.workloadId) << 8) | frame;
 +                            }
 +#                       endif
                              overrideModifier = (targetIndex + 1);
@@ -39,7 +50,7 @@
 +                    // rendered, at the step expected? Counted per 240 interpolated presents.
 +                    {
 +                        static int presented = 0, otherWorkload = 0, wrongStep = 0, lines = 0;
-+                        const uint64_t tag = (targetIndex < 16) ? btgaInterpTargetTags[targetIndex].load() : 0;
++                        const uint64_t tag = (targetIndex < 16) ? ::btgaInterpTargetTags[targetIndex].load() : 0;
 +                        const uint64_t tagWorkload = tag >> 8;
 +                        const uint32_t tagStep = uint32_t(tag & 0xFF);
 +                        presented++;
