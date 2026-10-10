@@ -71,6 +71,33 @@ namespace {
     std::vector<LogEntry> log_entries;
     int log_frame = 0, log_lines = 0;
 
+    // TEMPORARY (Android port): the file btga-hide in the working folder (the app's files)
+    // lists float matrix addresses in hex; whatever is drawn with them is hidden (its Mtx
+    // zeroed), to see on screen which objects they are. Read again every 60 frames.
+    std::vector<uint32_t> hidden_sources;
+
+    void read_hidden_sources() {
+        hidden_sources.clear();
+        if (FILE* f = std::fopen("btga-hide", "r")) {
+            unsigned int address;
+            while (std::fscanf(f, "%x", &address) == 1) {
+                hidden_sources.push_back(address);
+            }
+            std::fclose(f);
+        }
+    }
+
+    uint32_t source_of(uint32_t mtx) {
+        for (int g = 0; g < 2; g++) {
+            const Generation& gen = generations[(current + 2 - g) % 2];
+            auto it = gen.mtx_source.find(mtx);
+            if (it != gen.mtx_source.end()) {
+                return it->second;
+            }
+        }
+        return 0;
+    }
+
     gpr kseg0(uint32_t address) {
         return (gpr)(int32_t)address;
     }
@@ -222,6 +249,9 @@ void btga_interp_new_frame() {
         }
         log_entries.clear();
     }
+    if (log_frame == 0) {
+        read_hidden_sources();
+    }
     log_frame = (log_frame + 1) % 60;
     current ^= 1;
     generations[current].mtx_source.clear();
@@ -253,6 +283,16 @@ extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t limit = (uint32_t)MEM_W(0x5C, ctx->r29);
     if (!group_pushed && (head + 0x400 > limit)) {
         return;
+    }
+    if (!hidden_sources.empty()) {
+        const uint32_t source = source_of(mtx);
+        for (uint32_t hidden : hidden_sources) {
+            if ((source == hidden) && (source != 0)) {
+                for (int i = 0; i < 0x40; i += 4) {
+                    MEM_W(i, kseg0(mtx)) = 0;
+                }
+            }
+        }
     }
     const uint32_t id = id_for(mtx);
     if (!group_pushed) {
