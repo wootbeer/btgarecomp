@@ -466,6 +466,18 @@ HUD: both gone after the fixes above (owner, Retroid).
 Next:
 
 - Pause emulation in the background (and check the controller pak saves).
-- Re-picking a ROM: today only by clearing the app's storage.
-- Touch controls.
+- Re-picking a ROM and touch controls: done, see below; to test on the device.
 
+Touch controls and the app menu (as in gsrandroid, the owner's Golden Sun port):
+- descore's touch module (the owner's shared Android shell, in gsrandroid) is copied to
+  `src/android/descore/touch`, here under GPLv3 (same author). Added for this port, to merge back when
+  descore becomes its own project: `DESCORE_TOUCH_NO_GL` (RT64 draws with Vulkan, so the app's Java
+  overlay draws the controls from `descore_touch_get_shapes()`), and `descore_touch_hit_test()` (a
+  touch on no control goes on to the game's own menus).
+- `src/android/touch_controls.cpp`: the layout (stick or D-pad, Z, A, B, C buttons, L, R, START,
+  MENU) and the N64 buttons; `src/main/main.cpp` adds them to player 1's input on Android, unless a
+  game menu has the input. `TouchControlsView` shows them only while a match takes input, hides them
+  while a gamepad is in use (a handheld's built-in one too) and brings them back on a touch.
+- Back or MENU opens `GameMenu`: Touch Controls (Joystick / D-pad, Size in descore's 9 steps,
+  Opacity from descore's 30% floor), Change ROM (removes the stored ROM and closes the app; the next
+  start asks for one; saves kept) and Quit.

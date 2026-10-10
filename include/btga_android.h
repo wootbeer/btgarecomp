@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #if defined(__ANDROID__)
@@ -14,5 +15,9 @@ namespace btga::android {
     // picked copy. Says what's wrong in a message box if it isn't the right ROM. Call after the
     // config path and games are registered, before recomp::start().
     void import_picked_rom(const std::u8string& game_id);
+
+    // The on-screen touch controls (src/android/touch_controls.cpp): ORs in the buttons they hold,
+    // and replaces the stick while theirs is off centre.
+    void add_touch_input(uint16_t* buttons, float* x, float* y);
 }
 #endif

@@ -341,6 +341,17 @@ static ultramodern::input::connected_device_info_t get_connected_device_info(int
     };
 }
 
+#if defined(__ANDROID__)
+// Player 1 also gets the on-screen touch controls, unless one of the game's menus has the input.
+static bool get_n64_input_with_touch(int player_index, uint16_t* buttons_out, float* x_out, float* y_out) {
+    const bool got = recompinput::profiles::get_n64_input(player_index, buttons_out, x_out, y_out);
+    if ((player_index == 0) && !recompinput::game_input_disabled()) {
+        btga::android::add_touch_input(buttons_out, x_out, y_out);
+    }
+    return got;
+}
+#endif
+
 // --- Misc callbacks -----------------------------------------------------
 
 static std::string get_game_thread_name(const OSThread* t) {
@@ -502,7 +513,11 @@ int main(int argc, char** argv) {
 
     ultramodern::input::callbacks_t input_callbacks{
         .poll_input = recompinput::poll_inputs,
+#if defined(__ANDROID__)
+        .get_input = get_n64_input_with_touch,
+#else
         .get_input = recompinput::profiles::get_n64_input,
+#endif
         .set_rumble = recompinput::set_rumble,
         .get_connected_device_info = get_connected_device_info,
     };

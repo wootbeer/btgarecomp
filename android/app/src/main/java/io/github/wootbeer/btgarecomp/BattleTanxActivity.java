@@ -1,8 +1,14 @@
 package io.github.wootbeer.btgarecomp;
 
+import android.content.Context;
 import android.content.res.AssetManager;
+import android.hardware.input.InputManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.InputDevice;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
+import android.view.ViewGroup;
 
 import org.libsdl.app.SDLActivity;
 
@@ -17,13 +23,123 @@ import java.nio.file.Files;
 /**
  * Hosts the native game (libmain.so, built from the repo-root CMakeLists.txt) through SDL.
  */
-public class BattleTanxActivity extends SDLActivity {
+public class BattleTanxActivity extends SDLActivity implements InputManager.InputDeviceListener {
     private static final String TAG = "BTGA";
+
+    private TouchControlsView touchControls;
+    private GameMenu menu;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         installAssets();
         super.onCreate(savedInstanceState);
+
+        // SDL's layout holds the game's surface; the touch controls go over it.
+        if (mLayout != null && !mBrokenLibraries) {
+            touchControls = new TouchControlsView(this);
+            mLayout.addView(touchControls, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            menu = new GameMenu(this, touchControls);
+            touchControls.setMenuListener(menu::show);
+
+            InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
+            if (inputManager != null) {
+                inputManager.registerInputDeviceListener(this, null);
+            }
+            touchControls.setGamepadInUse(anyGamepadConnected());
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
+        if (inputManager != null && touchControls != null) {
+            inputManager.unregisterInputDeviceListener(this);
+        }
+        super.onDestroy();
+    }
+
+    // Back (and a gamepad's menu button) opens the app's menu instead of closing the game.
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (menu != null && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_MENU)) {
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                menu.show();
+            }
+            return true;
+        }
+        if (touchControls != null && isGamepadEvent(event.getSource()) && event.getAction() == KeyEvent.ACTION_DOWN) {
+            touchControls.setGamepadInUse(true);
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean dispatchGenericMotionEvent(MotionEvent event) {
+        if (touchControls != null && isGamepadEvent(event.getSource()) && event.getAction() == MotionEvent.ACTION_MOVE) {
+            for (int axis : new int[] { MotionEvent.AXIS_X, MotionEvent.AXIS_Y, MotionEvent.AXIS_Z,
+                    MotionEvent.AXIS_RZ, MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y }) {
+                if (Math.abs(event.getAxisValue(axis)) > 0.5f) {
+                    touchControls.setGamepadInUse(true);
+                    break;
+                }
+            }
+        }
+        return super.dispatchGenericMotionEvent(event);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (menu != null) {
+            menu.show();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    // Controls start hidden when a gamepad is connected (a handheld's built-in one included) and go when
+    // one connects; a touch brings them back.
+    @Override
+    public void onInputDeviceAdded(int deviceId) {
+        if (touchControls != null && isGamepad(InputDevice.getDevice(deviceId))) {
+            touchControls.setGamepadInUse(true);
+        }
+    }
+
+    @Override
+    public void onInputDeviceRemoved(int deviceId) {
+        if (touchControls != null && !anyGamepadConnected()) {
+            touchControls.setGamepadInUse(false);
+        }
+    }
+
+    @Override
+    public void onInputDeviceChanged(int deviceId) {
+    }
+
+    private static boolean isGamepadEvent(int source) {
+        return (source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                || (source & InputDevice.SOURCE_DPAD) == InputDevice.SOURCE_DPAD;
+    }
+
+    private static boolean isGamepad(InputDevice device) {
+        if (device == null || device.isVirtual()) {
+            return false;
+        }
+        int sources = device.getSources();
+        return (sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                || (sources & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK;
+    }
+
+    private static boolean anyGamepadConnected() {
+        for (int id : InputDevice.getDeviceIds()) {
+            if (isGamepad(InputDevice.getDevice(id))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
