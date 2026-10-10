@@ -1703,3 +1703,10 @@ before_vram = 0x8007B8B8
 text = """
     { extern void btga_interp_queue_end(uint8_t *rdram, recomp_context *ctx); btga_interp_queue_end(rdram, ctx); }
 """
+
+[[patches.hook]]
+func = "func_8007B65C"
+before_vram = 0x8007B738
+text = """
+    { extern void btga_interp_bucket_start(uint8_t *rdram, recomp_context *ctx); btga_interp_bucket_start(rdram, ctx); }
+"""

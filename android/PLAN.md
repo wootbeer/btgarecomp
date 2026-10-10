@@ -411,8 +411,14 @@ Tanks (hull and turret, built in shared scratch matrices by func_800AE184)
 take their ID from the tank object its caller loops over in $s3 (0x4CC apart).
 Each tank's gryphon decal is queued later with the hull's Mtx but naming the
 scratch matrix; a re-queued Mtx now keeps its first owner, so hull and decal
-share the tank's ID (the decal had kept wobbling in the intro). To confirm:
-the occasional in-game flash of the player's tank.
+share the tank's ID (the decal had kept wobbling in the intro). Owner: decal
+wobble and the tank's flash gone.
+
+The player's decal still flashed on sharp turns: the queue walker (32 buckets
+of record lists) reloads the Mtx only when it differs from the last one, which
+carries over between lists, so the decal sometimes shared the hull's load and
+sometimes not; RT64 pairs an ID's loads in order and left it unpaired. A hook
+at the start of each list (0x8007B738) forgets the last Mtx. Needs a regen.
 
 Shots visible through the back of the turret: also at Original, so not
 interpolation; not looked at yet.

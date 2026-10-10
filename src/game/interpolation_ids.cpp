@@ -179,6 +179,19 @@ void btga_interp_new_frame() {
     generations[current].source_uses.clear();
 }
 
+// func_8007B65C, at L_8007B738: the start of one bucket's record list (the walker goes
+// through 32 buckets of lists, for each view). It loads a record's Mtx only when it differs
+// from the last one loaded (0x3C($sp)), and that carries over from the previous list. So
+// whether an object's records in two buckets share one load depends on which records happen
+// to end one list and start the next -- the player's tank decal (its own bucket, the hull's
+// Mtx) sometimes did, sometimes not. RT64 pairs the loads of an ID in order, so the decal
+// then went unpaired and snapped while the hull was interpolated: a flash on sharp turns.
+// Forget the last Mtx here, so each list starts with a load (the same matrix again changes
+// nothing drawn) and an object's loads are the same from frame to frame.
+extern "C" void btga_interp_bucket_start(uint8_t* rdram, recomp_context* ctx) {
+    MEM_W(0x3C, ctx->r29) = 0;
+}
+
 // func_8007B65C, before 0x8007B7B4 (ahead of the gSPMatrix through func_8007AC34): $v0 is
 // the record's Mtx.
 extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
