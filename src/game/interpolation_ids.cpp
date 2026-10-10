@@ -118,7 +118,23 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t mtx = (uint32_t)ctx->r21;
     const uint32_t float_source = (uint32_t)ctx->r17;
     const bool in_pool = (mtx >= 0x801298C0u) && (mtx < 0x801298C0u + 2 * 0xC000u);
-    const uint32_t source = (float_source != 0) ? float_source : (in_pool ? 0u : mtx);
+    uint32_t source = (float_source != 0) ? float_source : (in_pool ? 0u : mtx);
+
+    // Tanks: the multi-part model drawer func_800AE184 builds every tank's hull and turret
+    // matrices in the same two scratch matrices, so their address says nothing. Its caller
+    // loops over the tank objects (0x4CC apart, from 0x801AD128) in $s3; the drawer saves
+    // that at 0x84 of its frame, which sits right above ours (0x40). The scratch matrix,
+    // its own argument, is at 0x4C there -- checked, so another caller is left alone.
+    if ((float_source == 0x8021B2A0u) || (float_source == 0x8021B2E8u)) {
+        const gpr drawer_sp = ctx->r29 + 0x40;
+        if ((uint32_t)MEM_W(0x4C, drawer_sp) == float_source) {
+            const uint32_t object = (uint32_t)MEM_W(0x84, drawer_sp);
+            if ((object >= 0x80000000u) && (object < 0x80800000u) && ((object & 3) == 0)) {
+                // Odd, so never the address of an Mtx or float matrix used as an ID.
+                source = object | ((float_source == 0x8021B2A0u) ? 1u : 3u);
+            }
+        }
+    }
     Generation& gen = generations[current];
     auto it = gen.mtx_source.find(mtx);
     if (it != gen.mtx_source.end()) {
