@@ -1,6 +1,8 @@
 // Game-specific options on the General tab: which pak each controller holds,
-// and local multiplayer. See include/btga_config.h.
+// and local multiplayer; on Android also the on-screen touch controls. See
+// include/btga_config.h.
 #include "btga_config.h"
+#include "btga_android.h"
 
 #include "recompui/config.h"
 
@@ -56,6 +58,48 @@ void btga::config::add_general_options(recomp::config::Config& general) {
         "<b>Assign players</b> to choose each player's controller or keyboard.",
         false
     );
+
+#if defined(__ANDROID__)
+    // The on-screen touch controls (src/android/touch_controls.cpp), which read these through
+    // the change callbacks (also run when the saved settings load).
+    general.add_enum_option(
+        "touch_movement",
+        "Touch Movement",
+        "How the on-screen controls move your tank: an analog <b>Joystick</b>, or a <b>D-pad</b> "
+        "that steers in 8 directions."
+        "<br/><br/>"
+        "The touch controls show during a match and hide while a gamepad is in use; touch the "
+        "screen to bring them back.",
+        std::vector<recomp::config::ConfigOptionEnumOption>{
+            {0, "Joystick", "Joystick"},
+            {1, "DPad", "D-pad"},
+        },
+        0u
+    );
+    general.add_option_change_callback("touch_movement", [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+        btga::android::set_touch_dpad(std::get<uint32_t>(value) == 1);
+    });
+
+    general.add_number_option(
+        "touch_size",
+        "Touch Controls Size",
+        "The size of the on-screen controls.",
+        90, 180, 5, 0, true, 100
+    );
+    general.add_option_change_callback("touch_size", [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+        btga::android::set_touch_size(std::get<double>(value));
+    });
+
+    general.add_number_option(
+        "touch_opacity",
+        "Touch Controls Opacity",
+        "How solid the on-screen controls are drawn.",
+        30, 100, 5, 0, true, 30
+    );
+    general.add_option_change_callback("touch_opacity", [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+        btga::android::set_touch_opacity(std::get<double>(value));
+    });
+#endif
 }
 
 btga::config::Accessory btga::config::get_accessory(int port) {

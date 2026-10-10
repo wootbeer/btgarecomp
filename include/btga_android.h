@@ -19,5 +19,15 @@ namespace btga::android {
     // The on-screen touch controls (src/android/touch_controls.cpp): ORs in the buttons they hold,
     // and replaces the stick while theirs is off centre.
     void add_touch_input(uint16_t* buttons, float* x, float* y);
+
+    // The touch controls' settings from the General tab (src/main/game_config.cpp): D-pad rather
+    // than joystick, size in percent (90-180), opacity in percent (30-100).
+    void set_touch_dpad(bool dpad);
+    void set_touch_size(double percent);
+    void set_touch_opacity(double percent);
+
+    // Builds the launcher menu: recompui's default one plus Change ROM
+    // (src/android/android_launcher.cpp). Call before recomp::start().
+    void register_launcher();
 }
 #endif

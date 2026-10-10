@@ -2,6 +2,7 @@ package io.github.wootbeer.btgarecomp;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -90,8 +91,12 @@ public class RomPickerActivity extends Activity {
     }
 
     private boolean copyToStorage(Uri uri) {
-        File target = new File(getFilesDir(), PICKED_ROM);
-        try (InputStream in = getContentResolver().openInputStream(uri);
+        return copyToFile(this, uri, new File(getFilesDir(), PICKED_ROM));
+    }
+
+    /** Copies a picked document to a file; on failure deletes what was written. */
+    static boolean copyToFile(Context context, Uri uri, File target) {
+        try (InputStream in = context.getContentResolver().openInputStream(uri);
              OutputStream out = new FileOutputStream(target)) {
             if (in == null) {
                 return false;
@@ -103,7 +108,7 @@ public class RomPickerActivity extends Activity {
             }
             return true;
         } catch (IOException e) {
-            Log.e(TAG, "Couldn't copy the chosen ROM", e);
+            Log.e(TAG, "Couldn't copy the chosen file", e);
             target.delete();
             return false;
         }

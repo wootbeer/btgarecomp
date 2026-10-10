@@ -8,7 +8,8 @@
 // own icons (tools/make_icons.py).
 //
 // Not done yet: no mod/texture-pack content types and no launcher menu
-// customization (the library's default_launcher_init_callback runs).
+// customization (the library's default_launcher_init_callback runs; on
+// Android src/android/android_launcher.cpp adds Change ROM to it).
 
 #include <algorithm>
 #include <cstdio>
@@ -535,8 +536,11 @@ int main(int argc, char** argv) {
         .get_game_thread_name = get_game_thread_name,
     };
 
-    // recompui's own default launcher menu is used -- no
-    // register_launcher_init_callback call here (see file-level comment).
+    // recompui's own default launcher menu is used (see file-level comment);
+    // on Android the same one plus Change ROM.
+#if defined(__ANDROID__)
+    btga::android::register_launcher();
+#endif
 
     recomp::start({
         .argc = argc,

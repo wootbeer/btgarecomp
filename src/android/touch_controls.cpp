@@ -1,13 +1,15 @@
 // On-screen touch controls (Android). The game's layout and its N64 buttons, on top of descore's touch
 // module (src/android/descore/touch), as gsr_controls.c is for Golden Sun in gsrandroid.
 //
-// Java (TouchControlsView) runs everything here on the UI thread: it forwards touches, the screen size
-// and the Touch Options, and draws the controls from descore_touch_get_shapes(). The game thread only
-// reads the resulting buttons and stick (add_touch_input), through atomics.
+// Java (TouchControlsView) runs everything here on the UI thread: it forwards touches and the screen
+// size, and draws the controls from descore_touch_get_shapes(). Their settings come from the General
+// tab (src/main/game_config.cpp) and the game thread reads the buttons and stick (add_touch_input),
+// both through atomics.
 #include <jni.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 
 extern "C" {
@@ -31,7 +33,7 @@ namespace {
         BUTTON_C_DOWN,
         BUTTON_C_LEFT,
         BUTTON_C_RIGHT,
-        BUTTON_MENU, // a tap button: opens the app's menu (Java)
+        BUTTON_MENU, // a tap button: opens the game's menu (Java sends Escape)
         BUTTON_COUNT
     };
 
@@ -57,8 +59,26 @@ namespace {
     std::atomic<float> stick_x{ 0.0f };
     std::atomic<float> stick_y{ 0.0f };
 
+    // Settings, from the General tab; laid out again by Java when they change.
+    std::atomic<bool> setting_dpad{ false };
+    std::atomic<double> setting_size{ 100.0 };
+    std::atomic<double> setting_opacity{ 30.0 };
+    std::atomic<bool> settings_changed{ false };
+
     bool dpad_style = false;
     bool menu_tapped = false;
+
+    // The descore Size step nearest to a size in percent.
+    int scale_step_for(double percent) {
+        int best = DESCORE_TOUCH_SCALE_DEFAULT_STEP;
+        for (int i = 0; i < DESCORE_TOUCH_SCALE_NUM_STEPS; i++) {
+            if (std::abs(kDescoreTouchScaleValues[i] * 100.0 - percent) <
+                std::abs(kDescoreTouchScaleValues[best] * 100.0 - percent)) {
+                best = i;
+            }
+        }
+        return best;
+    }
 
     void on_key(unsigned char key, int down) {
         if (key >= BUTTON_MENU) {
@@ -140,6 +160,21 @@ namespace {
     bool initialized = false;
 }
 
+void btga::android::set_touch_dpad(bool dpad) {
+    setting_dpad.store(dpad);
+    settings_changed.store(true);
+}
+
+void btga::android::set_touch_size(double percent) {
+    setting_size.store(percent);
+    settings_changed.store(true);
+}
+
+void btga::android::set_touch_opacity(double percent) {
+    setting_opacity.store(percent);
+    settings_changed.store(true);
+}
+
 void btga::android::add_touch_input(uint16_t* buttons, float* x, float* y) {
     *buttons |= (uint16_t)held_buttons.load();
     const float tx = stick_x.load();
@@ -152,17 +187,18 @@ void btga::android::add_touch_input(uint16_t* buttons, float* x, float* y) {
 
 extern "C" {
 
-// Screen size and Touch Options; lays the controls out again.
+// Screen size; lays the controls out again with the current settings.
 JNIEXPORT void JNICALL Java_io_github_wootbeer_btgarecomp_TouchControlsView_nativeLayout(
-    JNIEnv*, jclass, jint width, jint height, jfloat density, jint scale_step, jfloat opacity, jboolean dpad) {
+    JNIEnv*, jclass, jint width, jint height, jfloat density) {
     if (!initialized) {
         descore_touch_init(BUTTON_COUNT, on_key, on_tap);
         initialized = true;
     }
+    settings_changed.store(false);
     descore_touch_set_display_density(density);
-    descore_touch_set_scale_step(scale_step);
-    descore_touch_set_opacity(opacity);
-    dpad_style = dpad;
+    descore_touch_set_scale_step(scale_step_for(setting_size.load()));
+    descore_touch_set_opacity((float)(setting_opacity.load() / 100.0));
+    dpad_style = setting_dpad.load();
     layout(width, height);
 }
 
@@ -214,10 +250,13 @@ JNIEXPORT jstring JNICALL Java_io_github_wootbeer_btgarecomp_TouchControlsView_n
     return env->NewStringUTF((button >= 0 && button < BUTTON_COUNT) ? kLabels[button] : "");
 }
 
-// The controls are for gameplay: hidden on the launcher and while one of the game's menus takes input.
-JNIEXPORT jboolean JNICALL Java_io_github_wootbeer_btgarecomp_TouchControlsView_nativeControlsActive(
+// Bit 0: the controls are for now -- a match takes input (not on the launcher, nor while one of the
+// game's menus has it). Bit 1: the settings changed, lay out again. Bit 2: the game has started.
+JNIEXPORT jint JNICALL Java_io_github_wootbeer_btgarecomp_TouchControlsView_nativePoll(
     JNIEnv*, jclass) {
-    return ultramodern::is_game_started() && !recompinput::game_input_disabled();
+    const bool started = ultramodern::is_game_started();
+    const bool active = started && !recompinput::game_input_disabled();
+    return (active ? 1 : 0) | (settings_changed.load() ? 2 : 0) | (started ? 4 : 0);
 }
 
 }

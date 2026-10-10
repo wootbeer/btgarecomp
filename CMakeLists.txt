@@ -427,6 +427,7 @@ endif()
 if (ANDROID)
     target_link_libraries(BattleTanxGARecompiled PRIVATE SDL2::SDL2 Freetype::Freetype android log)
     target_sources(BattleTanxGARecompiled PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/android/android_launcher.cpp
         ${CMAKE_SOURCE_DIR}/src/android/android_startup.cpp
         ${CMAKE_SOURCE_DIR}/src/android/touch_controls.cpp
         ${CMAKE_SOURCE_DIR}/src/android/descore/touch/descore_touch.c

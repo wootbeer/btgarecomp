@@ -478,6 +478,11 @@ Touch controls and the app menu (as in gsrandroid, the owner's Golden Sun port):
   MENU) and the N64 buttons; `src/main/main.cpp` adds them to player 1's input on Android, unless a
   game menu has the input. `TouchControlsView` shows them only while a match takes input, hides them
   while a gamepad is in use (a handheld's built-in one too) and brings them back on a touch.
-- Back or MENU opens `GameMenu`: Touch Controls (Joystick / D-pad, Size in descore's 9 steps,
-  Opacity from descore's 30% floor), Change ROM (removes the stored ROM and closes the app; the next
-  start asks for one; saves kept) and Quit.
+- Their settings are on the game's own General tab (owner: no separate Android menu), Android only:
+  Touch Movement (Joystick / D-pad), Touch Controls Size (90-180%, mapped to descore's 9 steps) and
+  Opacity (from descore's 30% floor) (`src/main/game_config.cpp`). MENU and, once the game runs,
+  Back send Escape, which opens and closes the game's menu.
+- Change ROM: on the launcher under Start Game once a ROM is stored (`src/android/android_launcher.cpp`,
+  recompui's default launcher plus that option). The Android `nfd` (`src/android/nfd_android.cpp`)
+  now opens one file through the system document picker (`BattleTanxActivity.pickFileForNative`),
+  and the choice is validated and stored as Load ROM does.

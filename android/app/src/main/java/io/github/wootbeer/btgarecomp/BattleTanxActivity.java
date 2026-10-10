@@ -1,8 +1,11 @@
 package io.github.wootbeer.btgarecomp;
 
+import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.AssetManager;
 import android.hardware.input.InputManager;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.InputDevice;
@@ -26,8 +29,11 @@ import java.nio.file.Files;
 public class BattleTanxActivity extends SDLActivity implements InputManager.InputDeviceListener {
     private static final String TAG = "BTGA";
 
+    private static final int PICK_FILE = 1;
+    /** Where a file chosen for the game (Change ROM) is copied; the game deletes it once read. */
+    private static final String PICKED_FILE = "picked-file.bin";
+
     private TouchControlsView touchControls;
-    private GameMenu menu;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,8 +45,7 @@ public class BattleTanxActivity extends SDLActivity implements InputManager.Inpu
             touchControls = new TouchControlsView(this);
             mLayout.addView(touchControls, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            menu = new GameMenu(this, touchControls);
-            touchControls.setMenuListener(menu::show);
+            touchControls.setMenuListener(this::openGameMenu);
 
             InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
             if (inputManager != null) {
@@ -59,13 +64,19 @@ public class BattleTanxActivity extends SDLActivity implements InputManager.Inpu
         super.onDestroy();
     }
 
-    // Back (and a gamepad's menu button) opens the app's menu instead of closing the game.
+    /** The game's own menu opens (and closes) on Escape; the MENU control and Back send it. */
+    private void openGameMenu() {
+        onNativeKeyDown(KeyEvent.KEYCODE_ESCAPE);
+        onNativeKeyUp(KeyEvent.KEYCODE_ESCAPE);
+    }
+
+    // Back opens and closes the game's menu once the game is running; on the launcher it still closes
+    // the app.
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        int keyCode = event.getKeyCode();
-        if (menu != null && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_MENU)) {
+        if (touchControls != null && event.getKeyCode() == KeyEvent.KEYCODE_BACK && touchControls.isGameStarted()) {
             if (event.getAction() == KeyEvent.ACTION_UP) {
-                menu.show();
+                openGameMenu();
             }
             return true;
         }
@@ -89,14 +100,43 @@ public class BattleTanxActivity extends SDLActivity implements InputManager.Inpu
         return super.dispatchGenericMotionEvent(event);
     }
 
+    /**
+     * Called by the game (src/android/nfd_android.cpp, its file dialog) to have the user choose a file:
+     * shows the system document picker, copies the choice into the app's storage and hands the copy's
+     * path back through nativeFilePicked, or null if nothing was chosen.
+     */
+    public void pickFileForNative() {
+        runOnUiThread(() -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("*/*"); // ROM dumps have no registered MIME type
+            try {
+                startActivityForResult(intent, PICK_FILE);
+            } catch (ActivityNotFoundException e) {
+                Log.e(TAG, "No document picker", e);
+                nativeFilePicked(null);
+            }
+        });
+    }
+
     @Override
-    public void onBackPressed() {
-        if (menu != null) {
-            menu.show();
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode != PICK_FILE) {
+            super.onActivityResult(requestCode, resultCode, data);
             return;
         }
-        super.onBackPressed();
+        Uri uri = (resultCode == RESULT_OK && data != null) ? data.getData() : null;
+        if (uri == null) {
+            nativeFilePicked(null);
+            return;
+        }
+        new Thread(() -> {
+            File target = new File(getFilesDir(), PICKED_FILE);
+            nativeFilePicked(RomPickerActivity.copyToFile(this, uri, target) ? target.getAbsolutePath() : null);
+        }).start();
     }
+
+    private static native void nativeFilePicked(String path);
 
     // Controls start hidden when a gamepad is connected (a handheld's built-in one included) and go when
     // one connects; a touch brings them back.

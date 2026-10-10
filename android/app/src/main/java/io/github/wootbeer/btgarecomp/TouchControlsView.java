@@ -2,7 +2,6 @@ package io.github.wootbeer.btgarecomp;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.os.Handler;
@@ -12,26 +11,15 @@ import android.view.View;
 
 /**
  * The on-screen touch controls, laid over the game's surface. The controls themselves (layout, touch
- * handling, the N64 buttons they press) live in native code, src/android/touch_controls.cpp on top of
- * descore's touch module; this view forwards touches and the Touch Options to it and draws the shapes it
- * reports, the same flat translucent gray as descore's GL drawing.
+ * handling, the N64 buttons they press, their settings on the game's General tab) live in native code,
+ * src/android/touch_controls.cpp on top of descore's touch module; this view forwards touches to it and
+ * draws the shapes it reports, the same flat translucent gray as descore's GL drawing.
  *
  * Shown only while a match takes input (not on the launcher or under the game's own menus), and hidden
  * while a gamepad is in use: any gamepad input hides them, touching the screen brings them back. A touch
  * that misses every control goes on to the game beneath, for its menus.
  */
 public class TouchControlsView extends View {
-    private static final String PREFS = "touch";
-    private static final String PREF_SCALE_STEP = "scale_step";
-    private static final String PREF_OPACITY = "opacity";
-    private static final String PREF_DPAD = "dpad";
-
-    /** descore's Size steps (DESCORE_TOUCH_SCALE_*). */
-    static final float[] SCALE_VALUES = { 0.90f, 0.95f, 1.00f, 1.10f, 1.20f, 1.35f, 1.50f, 1.65f, 1.80f };
-    static final int SCALE_DEFAULT_STEP = 2;
-    /** descore's default opacity, which is also the lowest. */
-    static final float OPACITY_MIN = 0.30f;
-
     private static final int FLOATS_PER_SHAPE = 7;
     private static final int POLL_MS = 250;
 
@@ -40,7 +28,6 @@ public class TouchControlsView extends View {
         void onMenuRequested();
     }
 
-    private final SharedPreferences prefs;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -49,13 +36,19 @@ public class TouchControlsView extends View {
     private MenuListener menuListener;
 
     private boolean active;
+    private boolean gameStarted;
     private boolean gamepadInUse;
     private boolean laidOut;
 
     private final Runnable poll = new Runnable() {
         @Override
         public void run() {
-            boolean nowActive = nativeControlsActive();
+            int state = nativePoll();
+            boolean nowActive = (state & 1) != 0;
+            gameStarted = (state & 4) != 0;
+            if ((state & 2) != 0) {
+                relayout();
+            }
             if (nowActive != active) {
                 active = nowActive;
                 invalidate();
@@ -66,7 +59,6 @@ public class TouchControlsView extends View {
 
     public TouchControlsView(Context context) {
         super(context);
-        prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         fill.setStyle(Paint.Style.FILL);
         label.setTextAlign(Paint.Align.CENTER);
         label.setFakeBoldText(true);
@@ -76,31 +68,9 @@ public class TouchControlsView extends View {
         menuListener = listener;
     }
 
-    int getScaleStep() {
-        return Math.max(0, Math.min(SCALE_VALUES.length - 1, prefs.getInt(PREF_SCALE_STEP, SCALE_DEFAULT_STEP)));
-    }
-
-    float getOpacity() {
-        return Math.max(OPACITY_MIN, Math.min(1.0f, prefs.getFloat(PREF_OPACITY, OPACITY_MIN)));
-    }
-
-    boolean isDpad() {
-        return prefs.getBoolean(PREF_DPAD, false);
-    }
-
-    void setScaleStep(int step) {
-        prefs.edit().putInt(PREF_SCALE_STEP, step).apply();
-        relayout();
-    }
-
-    void setOpacity(float opacity) {
-        prefs.edit().putFloat(PREF_OPACITY, opacity).apply();
-        relayout();
-    }
-
-    void setDpad(boolean dpad) {
-        prefs.edit().putBoolean(PREF_DPAD, dpad).apply();
-        relayout();
+    /** Whether the game itself is running (past the launcher). */
+    boolean isGameStarted() {
+        return gameStarted;
     }
 
     /** A gamepad was used (true), or the screen was touched (false). */
@@ -117,8 +87,7 @@ public class TouchControlsView extends View {
         if (getWidth() <= 0 || getHeight() <= 0) {
             return;
         }
-        nativeLayout(getWidth(), getHeight(), getResources().getDisplayMetrics().density,
-                getScaleStep(), getOpacity(), isDpad());
+        nativeLayout(getWidth(), getHeight(), getResources().getDisplayMetrics().density);
         if (!laidOut) {
             laidOut = true;
             nativeSetGamepadConnected(gamepadInUse);
@@ -208,12 +177,11 @@ public class TouchControlsView extends View {
         return true;
     }
 
-    private static native void nativeLayout(int width, int height, float density, int scaleStep, float opacity,
-            boolean dpad);
+    private static native void nativeLayout(int width, int height, float density);
     private static native int nativeTouch(int action, int pointerId, float x, float y);
     private static native boolean nativeHitTest(float x, float y);
     private static native void nativeSetGamepadConnected(boolean connected);
     private static native int nativeGetShapes(float[] out);
     private static native String nativeButtonLabel(int button);
-    private static native boolean nativeControlsActive();
+    private static native int nativePoll();
 }

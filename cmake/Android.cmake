@@ -51,6 +51,8 @@ unset(BUILD_SHARED_LIBS)
 # nativefiledialog-extended has no Android backend; rt64 takes this nfd instead of building its own.
 add_library(nfd STATIC "${CMAKE_SOURCE_DIR}/src/android/nfd_android.cpp")
 target_include_directories(nfd PUBLIC "${CMAKE_SOURCE_DIR}/lib/rt64/src/contrib/nativefiledialog-extended/src/include")
+# Opening a file goes through the app's Java activity, reached with SDL's JNI helpers.
+target_link_libraries(nfd PRIVATE SDL2::SDL2)
 
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/android")
 # Sets SDL2_INCLUDE_DIRS here too (rt64's find_package() only sets them in its own scope).
