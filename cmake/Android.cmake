@@ -22,6 +22,12 @@ set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
 # recompiled game maths and for RT64's matrix decomposition used by frame interpolation.
 add_compile_options(-ffp-contract=off)
 
+# EXPERIMENT (Android port, interpolation jitter): RT64's maths library hlsl++ has an ARM NEON
+# path; frame interpolation jitters on the device and is smooth on the PC (SSE path), even with
+# every model matched by ID. Use hlsl++'s portable scalar path everywhere, to see whether the
+# NEON path is the difference. Must be the same for every target (its types cross libraries).
+add_compile_definitions(HLSLPP_SCALAR)
+
 include(FetchContent)
 
 # The SDL Java sources in the Android app (org.libsdl.app) must come from this same release.
