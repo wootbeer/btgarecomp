@@ -19,6 +19,12 @@ namespace btga::config {
     // recompui::config::create_general_tab() and recompui::config::finalize().
     void add_general_options(recomp::config::Config& general);
 
+#if defined(__ANDROID__)
+    // Fills the Touch Controls tab (Android): the on-screen controls' movement style, size and
+    // opacity. Call on the tab's Config before recompui::config::finalize().
+    void add_touch_options(recomp::config::Config& touch);
+#endif
+
     Accessory get_accessory(int port);
     bool get_local_multiplayer();
 }

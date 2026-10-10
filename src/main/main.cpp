@@ -479,6 +479,9 @@ int main(int argc, char** argv) {
     btga::config::add_general_options(recompui::config::create_general_tab(general_tab_options));
     recompui::config::create_graphics_tab();
     recompui::config::create_controls_tab();
+#if defined(__ANDROID__)
+    btga::config::add_touch_options(recompui::config::create_config_tab("Touch Controls", "touch_controls", false));
+#endif
     recompui::config::create_sound_tab();
     recompui::config::create_mods_tab();
     recompui::config::finalize();
