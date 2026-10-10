@@ -113,7 +113,7 @@ namespace {
 // around 0x802A0000-0x802EFFFF, reused every frame: about 100 distinct ones per second
 // queued thousands of times. Their address is the object's ID. Only those in the per-frame
 // matrix pools (0x801298C0, 2 x 0xC000) say nothing about the object; they stay automatic.
-extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
+extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t mtx = (uint32_t)ctx->r21;
     const uint32_t float_source = (uint32_t)ctx->r17;
     const bool in_pool = (mtx >= 0x801298C0u) && (mtx < 0x801298C0u + 2 * 0xC000u);
@@ -132,6 +132,17 @@ extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
     if (source != 0) {
         gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
+    }
+
+    // TEMPORARY (Android port): for the shared scratch matrices around 0x8021B000, the
+    // caller's saved registers (s0, s1, s2..s7, fp at 0x18..0x38($sp) of this frame) and the
+    // arguments, to find which one holds the object -- one frame in 60.
+    if ((float_source & 0xFFFFF000u) == 0x8021B000u && (stats.frames == 30) && (stats.lines < 40)) {
+        std::fprintf(stderr, "[BTGA CALLER] src %08X mesh %08X a1 %08X a2 %08X a3 %08X | s0 %08X s1 %08X s2 %08X s3 %08X s4 %08X s5 %08X s6 %08X s7 %08X fp %08X\n",
+            float_source, (uint32_t)ctx->r19, (uint32_t)ctx->r30, (uint32_t)ctx->r20, (uint32_t)MEM_W(0x14, ctx->r29),
+            (uint32_t)MEM_W(0x18, ctx->r29), (uint32_t)MEM_W(0x1C, ctx->r29), (uint32_t)MEM_W(0x20, ctx->r29), (uint32_t)MEM_W(0x24, ctx->r29),
+            (uint32_t)MEM_W(0x28, ctx->r29), (uint32_t)MEM_W(0x2C, ctx->r29), (uint32_t)MEM_W(0x30, ctx->r29), (uint32_t)MEM_W(0x34, ctx->r29),
+            (uint32_t)MEM_W(0x38, ctx->r29));
     }
 }
 
