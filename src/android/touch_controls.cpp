@@ -121,7 +121,7 @@ namespace {
     }
 
     // Stick bottom left; A and B bottom right under the C buttons, Z above those under R; L and R in
-    // the top corners; START bottom centre, MENU top centre. Sizes follow the screen height and the Size setting.
+    // the top corners; MENU and START top centre. Sizes follow the screen height and the Size setting.
     void layout(int width, int height) {
         const float w = (float)width;
         const float h = (float)height;
@@ -159,8 +159,9 @@ namespace {
         const float z_y = std::max(c_up_top - z_h, r_bottom);
         set_button(BUTTON_Z, cx - c * 0.7f, z_y, c * 1.4f, z_h);
 
-        set_button(BUTTON_START, w * 0.5f - c * 0.7f, h - m - c * 0.6f, c * 1.4f, c * 0.6f);
-        set_button(BUTTON_MENU, w * 0.5f - c * 0.7f, m, c * 1.4f, c * 0.6f);
+        // Top centre, side by side (owner: START at the bottom covered the health bar).
+        set_button(BUTTON_MENU, w * 0.5f - c * 1.4f - gap * 0.5f, m, c * 1.4f, c * 0.6f);
+        set_button(BUTTON_START, w * 0.5f + gap * 0.5f, m, c * 1.4f, c * 0.6f);
     }
 
     bool initialized = false;

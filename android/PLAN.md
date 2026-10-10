@@ -475,7 +475,8 @@ Touch controls and the app menu (as in gsrandroid, the owner's Golden Sun port):
   overlay draws the controls from `descore_touch_get_shapes()`), and `descore_touch_hit_test()` (a
   touch on no control goes on to the game's own menus).
 - `src/android/touch_controls.cpp`: the layout (stick or D-pad; A, B, the C buttons and Z (the gun,
-  owner: above the C buttons under R); L, R, START,
+  owner: above the C buttons under R); L, R; MENU and START top centre (owner: START at the bottom
+  covered the health bar),
   MENU) and the N64 buttons; `src/main/main.cpp` adds them to player 1's input on Android, unless a
   game menu has the input. `TouchControlsView` shows them only while a match takes input, hides them
   while a gamepad is in use (a handheld's built-in one too) and brings them back on a touch.
