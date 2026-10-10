@@ -419,6 +419,12 @@ of record lists) reloads the Mtx only when it differs from the last one, which
 carries over between lists, so the decal sometimes shared the hull's load and
 sometimes not; RT64 pairs an ID's loads in order and left it unpaired. A hook
 at the start of each list (0x8007B738) forgets the last Mtx. Needs a regen.
+Owner: no more flash on corners, still now and then on straights after hills.
+`lib-patches/rt64/0009`: an ID with more transforms than last frame pairs the
+extra ones with its last transform from last frame (RT64 left them unpaired,
+snapping). Only affects ORDER_LINEAR IDs, which only this game's code sets.
+
+Open: the arrows over other tanks seem to lag behind on fast camera moves.
 
 Shots visible through the back of the turret: also at Original, so not
 interpolation; not looked at yet.
