@@ -1,0 +1,106 @@
+--- a/src/render/rt64_raster_shader_cache.cpp
++++ b/src/render/rt64_raster_shader_cache.cpp
+@@ -4,6 +4,16 @@
+ 
+ #include "rt64_raster_shader_cache.h"
+ 
++#include <atomic>
++#include <chrono>
++#include <cstdio>
++
++// TEMPORARY (Android port): lag spikes in busy scenes. Specialised shaders compiled and the
++// time it took; ubershader draws (counted by the framebuffer renderer). Logged by the workload queue.
++std::atomic<uint32_t> btgaDiagShadersCompiled{ 0 };
++std::atomic<uint32_t> btgaDiagUberDraws{ 0 };
++std::atomic<uint32_t> btgaDiagUberDitherDraws{ 0 };
++
+ #include "common/rt64_thread.h"
+ 
+ #define ENABLE_OPTIMIZED_SHADER_GENERATION
+@@ -60,8 +70,12 @@
+                 assert((shaderCache->shaderUber != nullptr) && "Ubershader should've been created by the time a new shader is submitted to the cache.");
+                 const RenderPipelineLayout *uberPipelineLayout = shaderCache->shaderUber->pipelineLayout.get();
+                 const RenderMultisampling multisampling = shaderCache->multisampling;
++                const auto btgaDiagCompileStart = std::chrono::steady_clock::now();
+                 std::unique_ptr<RasterShader> newShader = std::make_unique<RasterShader>(shaderCache->device, shaderDesc, uberPipelineLayout, shaderCache->shaderFormat, multisampling, shaderCache->shaderCompiler.get(), &shaderCache->optimizerCacheSPIRV);
+ 
++                fprintf(stderr, "[RT64 SHADER] compiled in %.0f ms\n",
++                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - btgaDiagCompileStart).count());
++                btgaDiagShadersCompiled++;
+                 {
+                     const std::unique_lock<std::mutex> lock(shaderCache->GPUShadersMutex);
+                     shaderCache->GPUShaders[shaderDesc.hash()] = std::move(newShader);
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -4,6 +4,11 @@
+ 
+ #include "rt64_framebuffer_renderer.h"
+ 
++#include <atomic>
++
++extern std::atomic<uint32_t> btgaDiagUberDraws; // TEMPORARY (Android port), rt64_raster_shader_cache.cpp
++extern std::atomic<uint32_t> btgaDiagUberDitherDraws;
++
+ #include "../include/rt64_extended_gbi.h"
+ 
+ #include "common/rt64_elapsed_timer.h"
+@@ -1619,6 +1624,10 @@
+                             triangles.pipeline = gpuShader->pipeline.get();
+                         }
+                         else {
++                            btgaDiagUberDraws++;
++                            if (call.shaderDesc.otherMode.alphaCompare() == G_AC_DITHER) {
++                                btgaDiagUberDitherDraws++;
++                            }
+                             const bool copyMode = (call.shaderDesc.otherMode.cycleType() == G_CYC_COPY);
+                             triangles.pipeline = rasterShaderUber->getPipeline(
+                                 !copyMode && call.shaderDesc.otherMode.zCmp() && (call.shaderDesc.otherMode.zMode() != ZMODE_DEC),
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -4,6 +4,15 @@
+ 
+ #include "rt64_workload_queue.h"
+ 
++#include <atomic>
++#include <chrono>
++#include <cstdio>
++
++// TEMPORARY (Android port), rt64_raster_shader_cache.cpp
++extern std::atomic<uint32_t> btgaDiagShadersCompiled;
++extern std::atomic<uint32_t> btgaDiagUberDraws;
++extern std::atomic<uint32_t> btgaDiagUberDitherDraws;
++
+ #include "common/rt64_thread.h"
+ 
+ #include "rt64_present_queue.h"
+@@ -911,6 +920,14 @@
+                 }
+ 
+                 ElapsedTimer workloadTimer;
++                // TEMPORARY (Android port): time since the last workload started, and what this one drew.
++                static auto btgaDiagLastStart = std::chrono::steady_clock::now();
++                const auto btgaDiagStart = std::chrono::steady_clock::now();
++                const double btgaDiagGapMs = std::chrono::duration<double, std::milli>(btgaDiagStart - btgaDiagLastStart).count();
++                btgaDiagLastStart = btgaDiagStart;
++                const uint32_t btgaDiagUber0 = btgaDiagUberDraws.load();
++                const uint32_t btgaDiagDither0 = btgaDiagUberDitherDraws.load();
++                const uint32_t btgaDiagShaders0 = btgaDiagShadersCompiled.load();
+                 workloadProfiler.start();
+                 threadConfigurationUpdate(workload.viFbSize, workloadConfig);
+ 
+@@ -1168,6 +1185,15 @@
+                     threadAdvanceBarrier();
+                 }
+ 
++                {
++                    const double btgaDiagRenderMs = workloadTimer.elapsedMicroseconds() / 1000.0;
++                    if ((btgaDiagGapMs > 60.0) || (btgaDiagRenderMs > 30.0)) {
++                        fprintf(stderr, "[RT64 SLOW] %.0f ms since the last frame, rendered in %.0f ms; ubershader draws %u (dithered %u), shaders compiled meanwhile %u\n",
++                            btgaDiagGapMs, btgaDiagRenderMs, btgaDiagUberDraws.load() - btgaDiagUber0,
++                            btgaDiagUberDitherDraws.load() - btgaDiagDither0, btgaDiagShadersCompiled.load() - btgaDiagShaders0);
++                    }
++                }
++
+                 processCursor = -1;
+                 workloadProfiler.end();
+                 workloadProfiler.log();

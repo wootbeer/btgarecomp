@@ -513,3 +513,13 @@ the device.
 Touch controls hidden for a gamepad came back on a swipe from the top edge (pulling the status bar):
 a touch starting within 48dp of the top or bottom edge no longer brings them back.
 
+Lag spikes in busy scenes (many explosions, buildings hit), the game then skipping ahead; often but
+not every time (owner, Retroid). Suspects: RT64 compiles each new specialised shader in the
+background and draws with the ubershader meanwhile (slow on Adreno; no shader cache kept between
+runs), and `lib-patches/rt64/0008` draws every dithered-alpha (smoke) call with the ubershader.
+Temporary `lib-patches/rt64/0010` logs shader compiles ([RT64 SHADER]) and slow frames with their
+ubershader draws ([RT64 SLOW]).
+
+Also open: the sprite under the player's tank (its shadow?) jitters slightly now and then at Display
+rate; likely a shared matrix still matched automatically.
+
