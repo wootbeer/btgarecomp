@@ -112,7 +112,7 @@ namespace {
 // around 0x802A0000-0x802EFFFF, reused every frame: about 100 distinct ones per second
 // queued thousands of times. Their address is the object's ID. Only those in the per-frame
 // matrix pools (0x801298C0, 2 x 0xC000) say nothing about the object; they stay automatic.
-extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
+extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t mtx = (uint32_t)ctx->r21;
     const uint32_t float_source = (uint32_t)ctx->r17;
     const bool in_pool = (mtx >= 0x801298C0u) && (mtx < 0x801298C0u + 2 * 0xC000u);
@@ -131,6 +131,19 @@ extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
     if (source != 0) {
         gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
+    }
+
+    // TEMPORARY (Android port): for the shared scratch matrices (tanks), the registers that
+    // func_800AE184 (the multi-part model drawer, frame 0xA0 just above ours) saved for its
+    // caller, and that caller's stack arguments -- to find the tank's own record. One frame in 60.
+    if (((float_source & 0xFFFFF000u) == 0x8021B000u) && (stats.frames == 30) && (stats.lines < 30)) {
+        const gpr up = ctx->r29 + 0x40;
+        std::fprintf(stderr, "[BTGA TANK] src %08X mesh %08X | s0 %08X s1 %08X s2 %08X s3 %08X s4 %08X s5 %08X s6 %08X s7 %08X fp %08X | args %08X %08X %08X %08X %08X %08X %08X\n",
+            float_source, (uint32_t)ctx->r19,
+            (uint32_t)MEM_W(0x78, up), (uint32_t)MEM_W(0x7C, up), (uint32_t)MEM_W(0x80, up), (uint32_t)MEM_W(0x84, up), (uint32_t)MEM_W(0x88, up),
+            (uint32_t)MEM_W(0x8C, up), (uint32_t)MEM_W(0x90, up), (uint32_t)MEM_W(0x94, up), (uint32_t)MEM_W(0x98, up),
+            (uint32_t)MEM_W(0xA0, up), (uint32_t)MEM_W(0xA4, up), (uint32_t)MEM_W(0xA8, up), (uint32_t)MEM_W(0xAC, up),
+            (uint32_t)MEM_W(0xB0, up), (uint32_t)MEM_W(0xB4, up), (uint32_t)MEM_W(0xC4, up));
     }
 }
 
