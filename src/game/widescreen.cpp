@@ -348,7 +348,10 @@ extern "C" void btga_box_fillrect_end(uint8_t*, recomp_context*) {
 
 // func_8007A250, right after the frame clear's G_FILLRECT (fill colour set
 // just before it): the display-list head is the stack variable 0x24($fp).
+void btga_interp_new_frame(); // src/game/interpolation_ids.cpp
+
 extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
+    btga_interp_new_frame();
     frame_counter++;
     if (letterbox_building.bars >= 2) {
         letterbox_last = letterbox_building;

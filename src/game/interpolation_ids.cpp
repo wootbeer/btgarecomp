@@ -23,6 +23,7 @@
 // order (G_EX_ORDER_LINEAR). Matrices without a float source keep RT64's
 // automatic matching.
 #include <cstdint>
+#include <cstdio>
 #include <unordered_map>
 
 #include "recomp.h"
@@ -31,8 +32,37 @@ namespace {
     constexpr uint32_t kGfxContextPtr = 0x80114500; // -> struct with the main DL head at +0xC8
     constexpr uint32_t kIdAuto = 0xFFFFFFFFu;        // G_EX_ID_AUTO
 
-    // Pool Mtx address -> float matrix address it was converted from.
-    std::unordered_map<uint32_t, uint32_t> mtx_source;
+    // Per frame: pool Mtx address -> float matrix it was converted from, and how many
+    // distinct Mtx each float matrix produced. Some callers build several objects' matrices
+    // in one scratch matrix; its address is no object's identity, so those keep RT64's
+    // automatic matching (round 1 of this gave them all one ID, and RT64 blended between
+    // different objects, scaling them up and back). Two generations, swapped at the frame
+    // clear, since queueing and drawing need not fall in the same one.
+    struct Generation {
+        std::unordered_map<uint32_t, uint32_t> mtx_source;
+        std::unordered_map<uint32_t, uint32_t> source_uses;
+    };
+    Generation generations[2];
+    int current = 0;
+
+    uint32_t id_for(uint32_t mtx) {
+        for (int g = 0; g < 2; g++) {
+            const Generation& gen = generations[(current + 2 - g) % 2];
+            auto it = gen.mtx_source.find(mtx);
+            if (it != gen.mtx_source.end()) {
+                auto uses = gen.source_uses.find(it->second);
+                return (uses != gen.source_uses.end() && uses->second == 1) ? it->second : 0xFFFFFFFFu;
+            }
+        }
+        return 0xFFFFFFFFu;
+    }
+
+    // TEMPORARY (Android port): per 60 frames, matrix loads tagged with an ID, left automatic
+    // because their source is shared, and left automatic with no known source.
+    struct Stats {
+        int frames = 0, tagged = 0, shared = 0, unknown = 0, lines = 0;
+    };
+    Stats stats;
 
     bool group_pushed = false;
 
@@ -80,11 +110,36 @@ namespace {
 extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
     const uint32_t mtx = (uint32_t)ctx->r21;
     const uint32_t source = (uint32_t)ctx->r17;
-    if (source != 0) {
-        mtx_source[mtx] = source;
+    Generation& gen = generations[current];
+    auto it = gen.mtx_source.find(mtx);
+    if (it != gen.mtx_source.end()) {
+        if (it->second == source) {
+            return; // the same object queued again (another display list for it)
+        }
+        if (--gen.source_uses[it->second] == 0) {
+            gen.source_uses.erase(it->second);
+        }
+        gen.mtx_source.erase(it);
     }
-    else {
-        mtx_source.erase(mtx);
+    if (source != 0) {
+        gen.mtx_source[mtx] = source;
+        gen.source_uses[source]++;
+    }
+}
+
+// From the frame clear (src/game/widescreen.cpp): start a new generation.
+void btga_interp_new_frame() {
+    current ^= 1;
+    generations[current].mtx_source.clear();
+    generations[current].source_uses.clear();
+    if (++stats.frames >= 60) {
+        if (stats.lines < 200) {
+            std::fprintf(stderr, "[BTGA IDS] 60 frames: %d matrix loads tagged, %d shared source (automatic), %d no source (automatic)\n",
+                stats.tagged, stats.shared, stats.unknown);
+        }
+        const int lines = stats.lines + 1;
+        stats = Stats();
+        stats.lines = lines;
     }
 }
 
@@ -101,8 +156,17 @@ extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
     if (!group_pushed && (head + 0x400 > limit)) {
         return;
     }
-    auto it = mtx_source.find(mtx);
-    const uint32_t id = (it != mtx_source.end()) ? it->second : kIdAuto;
+    const uint32_t id = id_for(mtx);
+    if (id != kIdAuto) {
+        stats.tagged++;
+    }
+    else {
+        bool known = false;
+        for (const Generation& gen : generations) {
+            known = known || (gen.mtx_source.find(mtx) != gen.mtx_source.end());
+        }
+        (known ? stats.shared : stats.unknown)++;
+    }
     if (!group_pushed) {
         write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
         write_matrix_group(rdram, id, true);
