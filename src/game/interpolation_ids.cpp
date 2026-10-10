@@ -42,6 +42,11 @@ namespace {
     struct Generation {
         std::unordered_map<uint32_t, uint32_t> mtx_source;
         std::unordered_map<uint32_t, uint32_t> source_uses;
+        // The record's first display list ($a1 of func_8007B1F0), per Mtx. For objects built
+        // in a shared scratch matrix (the tank hulls and turrets at 0x8021B2A0 / 0x8021B2E8)
+        // it's a per-part list the drawing code allocates in the same order every frame
+        // (0x8017CF60, 0x8017D000, ...), so it tells the parts apart where the matrix can't.
+        std::unordered_map<uint32_t, uint32_t> mtx_dl;
     };
     Generation generations[2];
     int current = 0;
@@ -52,7 +57,11 @@ namespace {
             auto it = gen.mtx_source.find(mtx);
             if (it != gen.mtx_source.end()) {
                 auto uses = gen.source_uses.find(it->second);
-                return (uses != gen.source_uses.end() && uses->second == 1) ? it->second : 0xFFFFFFFFu;
+                if ((uses != gen.source_uses.end()) && (uses->second == 1)) {
+                    return it->second;
+                }
+                auto dl = gen.mtx_dl.find(mtx);
+                return ((dl != gen.mtx_dl.end()) && (dl->second != 0)) ? (dl->second | 1u) : 0xFFFFFFFFu;
             }
         }
         return 0xFFFFFFFFu;
@@ -132,17 +141,7 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     if (source != 0) {
         gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
-    }
-
-    // TEMPORARY (Android port): for the shared scratch matrices around 0x8021B000, the
-    // caller's saved registers (s0, s1, s2..s7, fp at 0x18..0x38($sp) of this frame) and the
-    // arguments, to find which one holds the object -- one frame in 60.
-    if ((float_source & 0xFFFFF000u) == 0x8021B000u && (stats.frames == 30) && (stats.lines < 40)) {
-        std::fprintf(stderr, "[BTGA CALLER] src %08X mesh %08X a1 %08X a2 %08X a3 %08X | s0 %08X s1 %08X s2 %08X s3 %08X s4 %08X s5 %08X s6 %08X s7 %08X fp %08X\n",
-            float_source, (uint32_t)ctx->r19, (uint32_t)ctx->r30, (uint32_t)ctx->r20, (uint32_t)MEM_W(0x14, ctx->r29),
-            (uint32_t)MEM_W(0x18, ctx->r29), (uint32_t)MEM_W(0x1C, ctx->r29), (uint32_t)MEM_W(0x20, ctx->r29), (uint32_t)MEM_W(0x24, ctx->r29),
-            (uint32_t)MEM_W(0x28, ctx->r29), (uint32_t)MEM_W(0x2C, ctx->r29), (uint32_t)MEM_W(0x30, ctx->r29), (uint32_t)MEM_W(0x34, ctx->r29),
-            (uint32_t)MEM_W(0x38, ctx->r29));
+        gen.mtx_dl[mtx] = (uint32_t)ctx->r30;
     }
 }
 
@@ -165,10 +164,11 @@ void btga_interp_new_frame() {
     }
     current ^= 1;
     generations[current].mtx_source.clear();
+    generations[current].mtx_dl.clear();
     generations[current].source_uses.clear();
     if (++stats.frames >= 60) {
         if (stats.lines < 200) {
-            std::fprintf(stderr, "[BTGA IDS] 60 frames: %d matrix loads tagged, %d with a shared float matrix (automatic), %d from the per-frame pool (automatic)\n",
+            std::fprintf(stderr, "[BTGA IDS] 60 frames: %d matrix loads tagged by object, %d by display list (shared scratch matrix), %d automatic\n",
                 stats.tagged, stats.shared, stats.unknown);
         }
         const int lines = stats.lines + 1;
@@ -191,15 +191,11 @@ extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
         return;
     }
     const uint32_t id = id_for(mtx);
-    if (id != kIdAuto) {
-        stats.tagged++;
+    if (id == kIdAuto) {
+        stats.unknown++;
     }
     else {
-        bool known = false;
-        for (const Generation& gen : generations) {
-            known = known || (gen.mtx_source.find(mtx) != gen.mtx_source.end());
-        }
-        (known ? stats.shared : stats.unknown)++;
+        ((id & 1u) ? stats.shared : stats.tagged)++;
     }
     if (!group_pushed) {
         write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
