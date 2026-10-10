@@ -29,6 +29,8 @@ import android.view.SurfaceView;
 public class TouchControlsView extends SurfaceView implements SurfaceHolder.Callback {
     private static final int FLOATS_PER_SHAPE = 7;
     private static final int POLL_MS = 250;
+    /** The top and bottom strips where system swipes start; a touch there doesn't bring the controls back. */
+    private static final float SYSTEM_EDGE_DP = 48.0f;
 
     /** Called when the MENU control is tapped. */
     interface MenuListener {
@@ -192,6 +194,14 @@ public class TouchControlsView extends SurfaceView implements SurfaceHolder.Call
         if (action == MotionEvent.ACTION_DOWN) {
             if (!active || !laidOut) {
                 return false;
+            }
+            if (gamepadInUse) {
+                // Hidden for a gamepad: a touch brings them back, but not one from the top or bottom edge,
+                // where the system's own swipes (status bar, navigation) start.
+                float edge = SYSTEM_EDGE_DP * getResources().getDisplayMetrics().density;
+                if (event.getY() < edge || event.getY() > getHeight() - edge) {
+                    return false;
+                }
             }
             setGamepadInUse(false);
             if (!nativeHitTest(event.getX(), event.getY())) {

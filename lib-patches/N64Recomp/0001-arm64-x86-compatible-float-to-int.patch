@@ -1,0 +1,42 @@
+--- a/include/recomp.h
++++ b/include/recomp.h
+@@ -393,6 +393,39 @@
+ #define CVT_L_D(val) \
+     do_cvt_l_d(val)
+ 
++#if defined(__aarch64__)
++// BattleTanx recomp (Android): float-to-int conversions that give what x86 gives. A C cast or
++// lrint of NaN or of a value out of the integer's range is undefined, and the CPUs differ: x86
++// returns the "integer indefinite" value (INT32_MIN / INT64_MIN) and, with Windows's 32-bit long,
++// lrint does too past int32; ARM64 saturates (and returns 0 for NaN). The game was only ever
++// tested against x86 behaviour on PC, where it is right (on Android, shots went through walls).
++static inline int32_t x86_compatible_s32(double val) {
++    return (val >= -2147483648.0 && val < 2147483648.0) ? (int32_t)val : INT32_MIN; // NaN fails both
++}
++
++static inline int64_t x86_compatible_s64(double val) {
++    return (val >= -9223372036854775808.0 && val < 9223372036854775808.0) ? (int64_t)val : INT64_MIN;
++}
++
++#undef TRUNC_W_S
++#undef TRUNC_W_D
++#undef TRUNC_L_S
++#undef TRUNC_L_D
++#undef CVT_W_S
++#undef CVT_W_D
++#undef CVT_L_S
++#undef CVT_L_D
++#define TRUNC_W_S(val) x86_compatible_s32((double)(val))
++#define TRUNC_W_D(val) x86_compatible_s32((double)(val))
++#define TRUNC_L_S(val) x86_compatible_s64((double)(val))
++#define TRUNC_L_D(val) x86_compatible_s64((double)(val))
++// Rounded in the current rounding mode first, as lrint does.
++#define CVT_W_S(val) x86_compatible_s32(rint((double)(val)))
++#define CVT_W_D(val) x86_compatible_s32(rint((double)(val)))
++#define CVT_L_S(val) x86_compatible_s64(rint((double)(val)))
++#define CVT_L_D(val) x86_compatible_s64(rint((double)(val)))
++#endif
++
+ #define NAN_CHECK(val) \
+     assert(val == val)
+ 

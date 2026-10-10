@@ -502,3 +502,14 @@ leaves the button out on Android. Install Mods works instead: the Android `nfd` 
 files (the document picker with multiple selection), copied under their own names to files/picked/.
 Whether mods themselves run on Android (their code is recompiled at runtime) is not tried yet.
 
+Shots going through the gray walls/fences on Android (not on PC). Not reproduced here; the likely
+cause is the float-to-int conversions in the recompiled code (N64Recomp's recomp.h: TRUNC_* are C
+casts, CVT_* lrint), undefined for NaN or out-of-range values, where x86 gives INT32_MIN/INT64_MIN
+(and Windows's 32-bit long makes lrint do so past int32) but ARM64 saturates and gives 0 for NaN.
+`lib-patches/N64Recomp/0001` makes them give the x86 values on ARM64 only (checked against x86 for
+NaN, infinities, out-of-range and ordinary values). FMA contraction was already off. To confirm on
+the device.
+
+Touch controls hidden for a gamepad came back on a swipe from the top edge (pulling the status bar):
+a touch starting within 48dp of the top or bottom edge no longer brings them back.
+
