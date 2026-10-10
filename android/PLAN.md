@@ -433,8 +433,9 @@ queue: hiding the shared queue matrices left them), and RT64 does not
 interpolate rectangles: they stay where the game placed them at 30 fps while
 the tanks under them are interpolated. Not worth a deeper change for now.
 
-Shots visible through the back of the turret: also at Original, so not
-interpolation; not looked at yet.
+Shots visible through the back of the turret: also at Original and on the PC
+build, so neither interpolation nor Android; RT64 at high resolution or the
+game itself. Not an Android port issue.
 
 Android's own screen recording breaks the game's rendering (owner, Retroid);
 not looked at.
