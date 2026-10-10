@@ -486,6 +486,9 @@ Touch controls and the app menu (as in gsrandroid, the owner's Golden Sun port):
   recompui's default launcher plus that option). The Android `nfd` (`src/android/nfd_android.cpp`)
   now opens one file through the system document picker (`BattleTanxActivity.pickFileForNative`),
   and the choice is validated and stored as Load ROM does. Owner: works.
-- A black navigation-bar strip stayed at the bottom since the overlay went in (cause not pinned
-  down). `BattleTanxActivity` now hides the system bars again on focus and as soon as they show
-  (SDL waits 2 s), and sets the flags on the overlay too.
+- A black strip covered the bottom since the overlay went in, from the launcher on, though the
+  system bars reported hidden (flags 6) and it was gone with the overlay left out (owner's test): a
+  drawing view over SDL's SurfaceView makes the window composite over the whole game, and the
+  navigation bar backdrop showed. `TouchControlsView` is now a SurfaceView of its own, layered as a
+  media overlay just above the game's. `BattleTanxActivity` also hides the system bars again on focus
+  and as soon as they show (SDL waits 2 s).

@@ -42,10 +42,7 @@ public class BattleTanxActivity extends SDLActivity implements InputManager.Inpu
         super.onCreate(savedInstanceState);
 
         // SDL's layout holds the game's surface; the touch controls go over it.
-        // TEMPORARY (black bar at the bottom): files/no-touch-overlay leaves the overlay out.
-        boolean noOverlay = new File(getFilesDir(), "no-touch-overlay").exists();
-        Log.i(TAG, "[BTGA BARS] touch overlay " + (noOverlay ? "left out" : "added"));
-        if (mLayout != null && !mBrokenLibraries && !noOverlay) {
+        if (mLayout != null && !mBrokenLibraries) {
             touchControls = new TouchControlsView(this);
             mLayout.addView(touchControls, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -65,9 +62,6 @@ public class BattleTanxActivity extends SDLActivity implements InputManager.Inpu
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        Log.i(TAG, "[BTGA BARS] focus " + hasFocus + ", decor flags "
-                + Integer.toHexString(getWindow().getDecorView().getSystemUiVisibility())
-                + ", fullscreen " + mFullscreenModeActive);
         if (hasFocus) {
             hideSystemBars();
         }
@@ -76,8 +70,6 @@ public class BattleTanxActivity extends SDLActivity implements InputManager.Inpu
     // SDL hides the bars again 2 s after they show; do it straight away.
     @Override
     public void onSystemUiVisibilityChange(int visibility) {
-        Log.i(TAG, "[BTGA BARS] system UI visibility " + Integer.toHexString(visibility)
-                + ", fullscreen " + mFullscreenModeActive);
         super.onSystemUiVisibilityChange(visibility);
         if ((visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0
                 || (visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {

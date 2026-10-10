@@ -4,10 +4,13 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.PorterDuff;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.MotionEvent;
-import android.view.View;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 
 /**
  * The on-screen touch controls, laid over the game's surface. The controls themselves (layout, touch
@@ -18,8 +21,12 @@ import android.view.View;
  * Shown only while a match takes input (not on the launcher or under the game's own menus), and hidden
  * while a gamepad is in use: any gamepad input hides them, touching the screen brings them back. A touch
  * that misses every control goes on to the game beneath, for its menus.
+ *
+ * A SurfaceView of its own, layered just above the game's (setZOrderMediaOverlay), rather than a plain
+ * view: a drawing view over SDL's SurfaceView makes the window composite over the whole game, and its
+ * navigation bar backdrop then showed as a black strip across the bottom.
  */
-public class TouchControlsView extends View {
+public class TouchControlsView extends SurfaceView implements SurfaceHolder.Callback {
     private static final int FLOATS_PER_SHAPE = 7;
     private static final int POLL_MS = 250;
 
@@ -39,6 +46,7 @@ public class TouchControlsView extends View {
     private boolean gameStarted;
     private boolean gamepadInUse;
     private boolean laidOut;
+    private boolean surfaceReady;
 
     private final Runnable poll = new Runnable() {
         @Override
@@ -51,7 +59,7 @@ public class TouchControlsView extends View {
             }
             if (nowActive != active) {
                 active = nowActive;
-                invalidate();
+                redraw();
             }
             handler.postDelayed(this, POLL_MS);
         }
@@ -59,6 +67,9 @@ public class TouchControlsView extends View {
 
     public TouchControlsView(Context context) {
         super(context);
+        getHolder().setFormat(PixelFormat.TRANSLUCENT);
+        getHolder().addCallback(this);
+        setZOrderMediaOverlay(true);
         fill.setStyle(Paint.Style.FILL);
         label.setTextAlign(Paint.Align.CENTER);
         label.setFakeBoldText(true);
@@ -80,7 +91,7 @@ public class TouchControlsView extends View {
         }
         gamepadInUse = inUse;
         nativeSetGamepadConnected(inUse);
-        invalidate();
+        redraw();
     }
 
     private void relayout() {
@@ -92,7 +103,7 @@ public class TouchControlsView extends View {
             laidOut = true;
             nativeSetGamepadConnected(gamepadInUse);
         }
-        invalidate();
+        redraw();
     }
 
     @Override
@@ -114,10 +125,41 @@ public class TouchControlsView extends View {
     }
 
     @Override
-    protected void onDraw(Canvas canvas) {
-        if (!active || !laidOut) {
+    public void surfaceCreated(SurfaceHolder holder) {
+        surfaceReady = true;
+        redraw();
+    }
+
+    @Override
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        redraw();
+    }
+
+    @Override
+    public void surfaceDestroyed(SurfaceHolder holder) {
+        surfaceReady = false;
+    }
+
+    /** Draws the controls into this view's surface (cleared when they are hidden). */
+    private void redraw() {
+        if (!surfaceReady) {
             return;
         }
+        Canvas canvas = getHolder().lockCanvas();
+        if (canvas == null) {
+            return;
+        }
+        try {
+            canvas.drawColor(0, PorterDuff.Mode.CLEAR);
+            if (active && laidOut) {
+                drawControls(canvas);
+            }
+        } finally {
+            getHolder().unlockCanvasAndPost(canvas);
+        }
+    }
+
+    private void drawControls(Canvas canvas) {
         int count = nativeGetShapes(shapes);
         for (int i = 0; i < count; i++) {
             int o = i * FLOATS_PER_SHAPE;
@@ -170,7 +212,7 @@ public class TouchControlsView extends View {
                 menu |= (nativeTouch(action, event.getPointerId(i), event.getX(i), event.getY(i)) & 2) != 0;
             }
         }
-        invalidate();
+        redraw();
         if (menu && menuListener != null) {
             menuListener.onMenuRequested();
         }
