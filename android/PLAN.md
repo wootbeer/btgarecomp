@@ -495,3 +495,10 @@ Touch controls and the app menu (as in gsrandroid, the owner's Golden Sun port):
   meet this: they draw the controls into their own GL frame with descore_touch_draw() before
   eglSwapBuffers, one SurfaceView and nothing over it. Here RT64 owns the Vulkan swap chain.) `BattleTanxActivity` also hides the system bars again on focus
   and as soon as they show (SDL waits 2 s).
+
+Mods on Android: Open Mods Folder did nothing (the Linux branch runs xdg-open), and the mods folder is
+in the app's private storage, which no file manager can open: `lib-patches/RecompFrontend/0005`
+leaves the button out on Android. Install Mods works instead: the Android `nfd` also opens several
+files (the document picker with multiple selection), copied under their own names to files/picked/.
+Whether mods themselves run on Android (their code is recompiled at runtime) is not tried yet.
+

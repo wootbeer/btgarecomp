@@ -1,12 +1,15 @@
 package io.github.wootbeer.btgarecomp;
 
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.AssetManager;
+import android.database.Cursor;
 import android.hardware.input.InputManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.util.Log;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -23,6 +26,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Hosts the native game (libmain.so, built from the repo-root CMakeLists.txt) through SDL.
@@ -30,9 +35,9 @@ import java.nio.file.Files;
 public class BattleTanxActivity extends SDLActivity implements InputManager.InputDeviceListener {
     private static final String TAG = "BTGA";
 
-    private static final int PICK_FILE = 1;
-    /** Where a file chosen for the game (Change ROM) is copied; the game deletes it once read. */
-    private static final String PICKED_FILE = "picked-file.bin";
+    private static final int PICK_FILES = 1;
+    /** Where files chosen for the game (Change ROM, Install Mods) are copied. */
+    private static final String PICKED_FOLDER = "picked";
 
     private TouchControlsView touchControls;
 
@@ -139,42 +144,81 @@ public class BattleTanxActivity extends SDLActivity implements InputManager.Inpu
     }
 
     /**
-     * Called by the game (src/android/nfd_android.cpp, its file dialog) to have the user choose a file:
-     * shows the system document picker, copies the choice into the app's storage and hands the copy's
-     * path back through nativeFilePicked, or null if nothing was chosen.
+     * Called by the game (src/android/nfd_android.cpp, its file dialogs) to have the user choose a file,
+     * or several: shows the system document picker, copies the choices into the app's storage under
+     * their own names (Install Mods goes by them) and hands the copies' paths back through
+     * nativeFilesPicked, or null if nothing was chosen.
      */
-    public void pickFileForNative() {
+    public void pickFilesForNative(boolean multiple) {
         runOnUiThread(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("*/*"); // ROM dumps have no registered MIME type
+            intent.setType("*/*"); // ROM dumps and mods have no registered MIME type
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, multiple);
             try {
-                startActivityForResult(intent, PICK_FILE);
+                startActivityForResult(intent, PICK_FILES);
             } catch (ActivityNotFoundException e) {
                 Log.e(TAG, "No document picker", e);
-                nativeFilePicked(null);
+                nativeFilesPicked(null);
             }
         });
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode != PICK_FILE) {
+        if (requestCode != PICK_FILES) {
             super.onActivityResult(requestCode, resultCode, data);
             return;
         }
-        Uri uri = (resultCode == RESULT_OK && data != null) ? data.getData() : null;
-        if (uri == null) {
-            nativeFilePicked(null);
+        List<Uri> uris = new ArrayList<>();
+        if (resultCode == RESULT_OK && data != null) {
+            ClipData clips = data.getClipData();
+            if (clips != null) {
+                for (int i = 0; i < clips.getItemCount(); i++) {
+                    uris.add(clips.getItemAt(i).getUri());
+                }
+            } else if (data.getData() != null) {
+                uris.add(data.getData());
+            }
+        }
+        if (uris.isEmpty()) {
+            nativeFilesPicked(null);
             return;
         }
         new Thread(() -> {
-            File target = new File(getFilesDir(), PICKED_FILE);
-            nativeFilePicked(RomPickerActivity.copyToFile(this, uri, target) ? target.getAbsolutePath() : null);
+            // A fresh folder each time; the game has finished with the last pick's copies by now.
+            File folder = new File(getFilesDir(), PICKED_FOLDER);
+            deleteRecursively(folder);
+            folder.mkdirs();
+            List<String> paths = new ArrayList<>();
+            for (int i = 0; i < uris.size(); i++) {
+                File target = new File(folder, displayName(uris.get(i), "file" + i));
+                if (RomPickerActivity.copyToFile(this, uris.get(i), target)) {
+                    paths.add(target.getAbsolutePath());
+                }
+            }
+            nativeFilesPicked(paths.isEmpty() ? null : paths.toArray(new String[0]));
         }).start();
     }
 
-    private static native void nativeFilePicked(String path);
+    /** The document's file name, made safe as one; `fallback` if it has none. */
+    private String displayName(Uri uri, String fallback) {
+        String name = null;
+        try (Cursor cursor = getContentResolver().query(uri, new String[] { OpenableColumns.DISPLAY_NAME },
+                null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                name = cursor.getString(0);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "No name for " + uri, e);
+        }
+        if (name == null || name.isEmpty()) {
+            return fallback;
+        }
+        return name.replace('/', '_');
+    }
+
+    private static native void nativeFilesPicked(String[] paths);
 
     // Controls start hidden when a gamepad is connected (a handheld's built-in one included) and go when
     // one connects; a touch brings them back.

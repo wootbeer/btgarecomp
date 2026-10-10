@@ -1,0 +1,15 @@
+--- a/recompui/src/composites/ui_mod_menu.cpp
++++ b/recompui/src/composites/ui_mod_menu.cpp
+@@ -729,8 +729,12 @@
+             refresh_button = context.create_element<IconButton>(footer_container, "icons/Reset.svg", recompui::ButtonStyle::Secondary, recompui::IconButtonSize::XLarge);
+             refresh_button->add_pressed_callback([this](){ refresh_mods(true); });
+ 
++#if !defined(__ANDROID__)
++            // Android: the mods folder is in the app's private storage, which no file manager can
++            // open; mods are added with Install Mods (the system document picker) instead.
+             mods_folder_button = context.create_element<Button>(footer_container, "Open Mods Folder", recompui::ButtonStyle::Tertiary);
+             mods_folder_button->add_pressed_callback([this](){ open_mods_folder(); });
++#endif
+         } // footer_container
+     } // this
+     
