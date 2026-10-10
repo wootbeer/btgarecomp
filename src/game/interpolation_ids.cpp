@@ -22,7 +22,11 @@
 // drawn more than once per frame repeats its ID, and RT64 pairs repeats in
 // order (G_EX_ORDER_LINEAR). Matrices without a float source keep RT64's
 // automatic matching.
+#include <algorithm>
+#include <array>
 #include <cstdint>
+#include <string>
+#include <vector>
 #include <cstdio>
 #include <unordered_map>
 
@@ -63,6 +67,7 @@ namespace {
         int frames = 0, tagged = 0, shared = 0, unknown = 0, lines = 0;
     };
     Stats stats;
+    std::unordered_map<uint32_t, std::array<int, 2>> site_stats;
 
     bool group_pushed = false;
 
@@ -107,7 +112,7 @@ namespace {
 
 // func_8007B1F0, at L_8007B2B0 (both paths join there): $s5 is the Mtx about to be
 // queued, $s1 the float matrix it came from (0 when the caller passed a ready Mtx).
-extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
+extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t mtx = (uint32_t)ctx->r21;
     const uint32_t source = (uint32_t)ctx->r17;
     Generation& gen = generations[current];
@@ -125,6 +130,10 @@ extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
         gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
     }
+
+    // TEMPORARY (Android port): which call sites queue the models (return address saved at
+    // 0x3C($sp)), with and without a float matrix.
+    site_stats[(uint32_t)MEM_W(0x3C, ctx->r29)][source != 0 ? 1 : 0]++;
 }
 
 // From the frame clear (src/game/widescreen.cpp): start a new generation.
@@ -137,6 +146,18 @@ void btga_interp_new_frame() {
             std::fprintf(stderr, "[BTGA IDS] 60 frames: %d matrix loads tagged, %d shared source (automatic), %d no source (automatic)\n",
                 stats.tagged, stats.shared, stats.unknown);
         }
+        if (stats.lines < 200) {
+            std::vector<std::pair<uint32_t, std::array<int, 2>>> sites(site_stats.begin(), site_stats.end());
+            std::sort(sites.begin(), sites.end(), [](const auto& a, const auto& b) { return (a.second[0] + a.second[1]) > (b.second[0] + b.second[1]); });
+            std::string line = "[BTGA SITES]";
+            for (size_t i = 0; (i < sites.size()) && (i < 10); i++) {
+                char part[64];
+                std::snprintf(part, sizeof(part), " %08X: %d/%d", sites[i].first, sites[i].second[1], sites[i].second[0]);
+                line += part;
+            }
+            std::fprintf(stderr, "%s (site: with float matrix/ready Mtx, per 60 frames)\n", line.c_str());
+        }
+        site_stats.clear();
         const int lines = stats.lines + 1;
         stats = Stats();
         stats.lines = lines;
