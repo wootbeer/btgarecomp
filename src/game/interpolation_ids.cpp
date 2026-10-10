@@ -16,12 +16,10 @@
 //   gSPMatrix through func_8007AC34 into the main display list (head at
 //   *(0x80114500)+0xC8), then the record's display lists.
 //
-// So the float matrix's address identifies the object across frames. The
-// first step remembers which float matrix each Mtx came from; the walker then
-// puts a gEXMatrixGroup with that ID in front of every matrix load. A model
-// drawn more than once per frame repeats its ID, and RT64 pairs repeats in
-// order (G_EX_ORDER_LINEAR). Matrices without a float source keep RT64's
-// automatic matching.
+// The first step gives each queued Mtx an ID (see Generation below); the walker
+// then puts a gEXMatrixGroup with that ID in front of every matrix load. Repeats
+// of an ID are paired in order (G_EX_ORDER_LINEAR). Matrices loaded by other
+// code keep RT64's automatic matching.
 #include <cstdint>
 #include <cstdio>
 #include <unordered_map>
@@ -32,33 +30,67 @@ namespace {
     constexpr uint32_t kGfxContextPtr = 0x80114500; // -> struct with the main DL head at +0xC8
     constexpr uint32_t kIdAuto = 0xFFFFFFFFu;        // G_EX_ID_AUTO
 
-    // Per frame: pool Mtx address -> float matrix it was converted from, and how many
-    // distinct Mtx each float matrix produced. Some callers build several objects' matrices
-    // in one scratch matrix; its address is no object's identity, so those keep RT64's
-    // automatic matching (round 1 of this gave them all one ID, and RT64 blended between
-    // different objects, scaling them up and back). Two generations, swapped at the frame
-    // clear, since queueing and drawing need not fall in the same one.
+    // Per frame: for each queued Mtx, the float matrix it was converted from and an ID by
+    // position in the queue; and how many distinct Mtx each float matrix produced.
+    //
+    // A float matrix used for one Mtx per frame belongs to one object, and its address is
+    // that object's ID. Many callers, though (tanks among them), build their objects'
+    // matrices one after another in a shared scratch matrix, or pass a ready Mtx; giving a
+    // shared scratch address as the ID made RT64 blend between different objects (first
+    // attempt: models scaled up and back). Those get an ID from where they were queued:
+    // the calling site, the mesh, and how many times that site has queued that mesh so far
+    // this frame -- the game walks its objects in the same order every frame, so the third
+    // hull queued from a site is the same tank next frame.
+    //
+    // Two generations, swapped at the frame clear, since queueing and drawing need not
+    // fall in the same one.
+    struct Entry {
+        uint32_t source = 0;
+        uint32_t ordinal_id = 0;
+    };
     struct Generation {
-        std::unordered_map<uint32_t, uint32_t> mtx_source;
+        std::unordered_map<uint32_t, Entry> mtx_entries;
         std::unordered_map<uint32_t, uint32_t> source_uses;
+        std::unordered_map<uint64_t, uint32_t> site_mesh_counts;
     };
     Generation generations[2];
     int current = 0;
 
-    uint32_t id_for(uint32_t mtx) {
+    uint32_t ordinal_id(uint32_t site, uint32_t mesh, uint32_t k) {
+        uint32_t h = 2166136261u;
+        for (uint32_t v : { site, mesh, k }) {
+            for (int i = 0; i < 4; i++) {
+                h = (h ^ ((v >> (i * 8)) & 0xFF)) * 16777619u;
+            }
+        }
+        // Clear of the float-matrix IDs (KSEG0 addresses, 0x80000000 and up), and never 0
+        // (G_EX_ID_IGNORE) or 0xFFFFFFFF (G_EX_ID_AUTO).
+        return 0x10000000u | (h & 0x6FFFFFFFu);
+    }
+
+    // Returns the ID, or 0xFFFFFFFF if the Mtx wasn't queued through func_8007B1F0.
+    uint32_t id_for(uint32_t mtx, bool& by_source) {
         for (int g = 0; g < 2; g++) {
             const Generation& gen = generations[(current + 2 - g) % 2];
-            auto it = gen.mtx_source.find(mtx);
-            if (it != gen.mtx_source.end()) {
-                auto uses = gen.source_uses.find(it->second);
-                return (uses != gen.source_uses.end() && uses->second == 1) ? it->second : 0xFFFFFFFFu;
+            auto it = gen.mtx_entries.find(mtx);
+            if (it != gen.mtx_entries.end()) {
+                const Entry& entry = it->second;
+                if (entry.source != 0) {
+                    auto uses = gen.source_uses.find(entry.source);
+                    if ((uses != gen.source_uses.end()) && (uses->second == 1)) {
+                        by_source = true;
+                        return entry.source;
+                    }
+                }
+                by_source = false;
+                return entry.ordinal_id;
             }
         }
         return 0xFFFFFFFFu;
     }
 
-    // TEMPORARY (Android port): per 60 frames, matrix loads tagged with an ID, left automatic
-    // because their source is shared, and left automatic with no known source.
+    // TEMPORARY (Android port): per 60 frames, matrix loads tagged by their float matrix, by
+    // their position in the queue, and left automatic (not queued through func_8007B1F0).
     struct Stats {
         int frames = 0, tagged = 0, shared = 0, unknown = 0, lines = 0;
     };
@@ -106,23 +138,23 @@ namespace {
 }
 
 // func_8007B1F0, at L_8007B2B0 (both paths join there): $s5 is the Mtx about to be
-// queued, $s1 the float matrix it came from (0 when the caller passed a ready Mtx).
-extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
+// queued, $s1 the float matrix it came from (0 when the caller passed a ready Mtx), $s3 the
+// mesh; the caller's return address is saved at 0x3C($sp).
+extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t mtx = (uint32_t)ctx->r21;
     const uint32_t source = (uint32_t)ctx->r17;
+    const uint32_t mesh = (uint32_t)ctx->r19;
+    const uint32_t site = (uint32_t)MEM_W(0x3C, ctx->r29);
     Generation& gen = generations[current];
-    auto it = gen.mtx_source.find(mtx);
-    if (it != gen.mtx_source.end()) {
-        if (it->second == source) {
-            return; // the same object queued again (another display list for it)
-        }
-        if (--gen.source_uses[it->second] == 0) {
-            gen.source_uses.erase(it->second);
-        }
-        gen.mtx_source.erase(it);
+    if (gen.mtx_entries.find(mtx) != gen.mtx_entries.end()) {
+        return; // the same object queued again (another display list for the same matrix)
     }
+    const uint64_t site_mesh = (uint64_t(site) << 32) | mesh;
+    Entry entry;
+    entry.source = source;
+    entry.ordinal_id = ordinal_id(site, mesh, gen.site_mesh_counts[site_mesh]++);
+    gen.mtx_entries[mtx] = entry;
     if (source != 0) {
-        gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
     }
 }
@@ -130,11 +162,12 @@ extern "C" void btga_interp_queue_mtx(uint8_t*, recomp_context* ctx) {
 // From the frame clear (src/game/widescreen.cpp): start a new generation.
 void btga_interp_new_frame() {
     current ^= 1;
-    generations[current].mtx_source.clear();
+    generations[current].mtx_entries.clear();
     generations[current].source_uses.clear();
+    generations[current].site_mesh_counts.clear();
     if (++stats.frames >= 60) {
         if (stats.lines < 200) {
-            std::fprintf(stderr, "[BTGA IDS] 60 frames: %d matrix loads tagged, %d shared source (automatic), %d no source (automatic)\n",
+            std::fprintf(stderr, "[BTGA IDS] 60 frames: %d matrix loads tagged by object matrix, %d by queue position, %d automatic\n",
                 stats.tagged, stats.shared, stats.unknown);
         }
         const int lines = stats.lines + 1;
@@ -156,16 +189,13 @@ extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
     if (!group_pushed && (head + 0x400 > limit)) {
         return;
     }
-    const uint32_t id = id_for(mtx);
-    if (id != kIdAuto) {
-        stats.tagged++;
+    bool by_source = false;
+    const uint32_t id = id_for(mtx, by_source);
+    if (id == kIdAuto) {
+        stats.unknown++;
     }
     else {
-        bool known = false;
-        for (const Generation& gen : generations) {
-            known = known || (gen.mtx_source.find(mtx) != gen.mtx_source.end());
-        }
-        (known ? stats.shared : stats.unknown)++;
+        (by_source ? stats.tagged : stats.shared)++;
     }
     if (!group_pushed) {
         write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
