@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 134)
+## Overview (as of round 135)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -65,6 +65,34 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-12, round 135: widescreen HUD edges on Vulkan (Linux, Steam Deck)
+
+Found while porting BattleTanx 1 and on the Android branch
+(`claude/modest-ramanujan-s0wyga`): with Vulkan, the parts of the HUD that
+the widescreen anchoring moves past the left edge could vanish. Round 104
+widens the scissor for anchored draws, so some scissor and fill-rectangle
+coordinates start left of the image (negative x). Direct3D 12 (Windows)
+clips such rectangles; Vulkan requires them inside the target, and a
+driver may drop whatever is drawn with them. The Linux / Steam Deck build
+uses Vulkan, so its widescreen HUD was likely broken there.
+
+Fix: the Android branch's two plume patches (plume is RT64's graphics
+layer, a submodule inside rt64), clipping the rectangles the way D3D12
+does:
+- `lib-patches/plume/0003-vulkan-clip-negative-scissors.patch`
+- `lib-patches/plume/0004-vulkan-clip-clear-rects.patch`
+
+Kept under the same names as on the Android branch so a later merge doesn't
+duplicate them. Patching a submodule nested inside another needed the
+Android branch's `cmake/ApplyLibPatches.cmake` (taken as is): it takes the
+submodule folder, records the applied set in a stamp and resets and
+re-applies when that set changes. `CMakeLists.txt` now also applies
+`btga_apply_lib_patches(plume lib/rt64/src/contrib/plume)`.
+
+Verified: both patches apply, a second configure applies nothing, and the
+Linux build compiles. Windows is unaffected (Direct3D 12 by default). Not
+yet checked on a Steam Deck.
 
 ## 2026-10-06, round 134: Proton crash report; better crash logs; Linux package
 
