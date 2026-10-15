@@ -73,8 +73,9 @@ The game itself also asks for the ROM on first launch (it accepts `.z64`,
 ## 4. Generate the recompiled code
 
 Build N64Recomp and run it on the config. This writes `RecompiledFuncs/`
-(gitignored; regenerate it after any change to the `.toml` or the symbol
-file).
+(gitignored). This is needed once; after that the main build reruns
+N64Recomp by itself whenever the `.toml` or the symbol file changes, for
+example after a `git pull`.
 
 **Windows** (in a Developer PowerShell for VS 2022, see "Windows shell"
 below):

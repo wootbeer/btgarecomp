@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 135)
+## Overview (as of round 136)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -65,6 +65,53 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-15, round 136: interpolation fixes from the BattleTanx 1 port; regenerate on config changes
+
+The BattleTanx 1 port (same engine, same RT64 commit `43373749`) wrote up
+fixes that apply here (`docs/GA_PORT_NOTES.md` in wootbeer/btrecomp). Its
+RT64 `0001` is byte-identical to ours.
+
+**RT64 patches** (`lib-patches/rt64/`), all for RT64's frame interpolation
+(Refresh Rate above the game's 30 fps; no effect at Original). Numbered
+0011-0015 so they sort after the Android branch's 0002-0010 and can't
+collide with them on a merge; same relative order as in BT1:
+- `0011-auto-match-max-distance`: automatic matching no longer pairs
+  look-alike objects more than 256 units apart (one entering and one
+  leaving the draw range flew across the screen on in-between frames).
+- `0012-vi-rate-from-latest-factor`: the game's rate comes from the latest
+  VI count, so mixed 2/3-VI frames (loads, busy scenes, the intro) no
+  longer switch interpolation off and on.
+- `0013-id-match-max-distance`: the same 256-unit limit for matching by
+  ID. No effect here yet (no interpolation IDs on this branch); kept so the
+  set matches the one BT1 tested.
+- `0014-exact-projection-for-estimated-view`: in-between frames now use a
+  projection that gives the game's exact view-projection, as round 122's
+  `0001` already does for real frames, so effects drawn against geometry
+  stop failing the depth test between frames (BT1's explosion flashing).
+- `0015-camera-view-interpolation`: the camera is interpolated as a camera
+  (rotation slerped, position lerped) instead of entry by entry, which
+  threw a chase-camera's tank sideways on in-between frames during turns.
+  Falls back to the old blend if the matrix doesn't decompose.
+
+Checked against what was already fixed: `0001` still applies first and its
+real-frame path is unchanged (`0014` only replaces the estimate used on
+in-between frames). Round 131's smoothness fix was in game timing
+(`frame_dt_fix.cpp`), untouched.
+
+**Build:** `CMakeLists.txt` now reruns N64Recomp (target
+`RecompiledFuncsGen`) when `battletanxga.us.rev0.toml` or the symbol file
+changes, once `RecompiledFuncs/` exists and the ROM is in place. The
+regenerated files are BYPRODUCTS, so they recompile in the same build; the
+executable also waits for it, since `register_overlays.cpp` includes
+`recomp_overlays.inl`. The first build after this regenerates once.
+
+Verified: all RT64 patches apply in order, a no-change rebuild does
+nothing, touching the TOML regenerates and relinks, and the Linux build
+compiles. Interpolation not yet checked in game.
+
+Not taken from BT1: its interpolation-ID lessons (they apply to the
+Android branch's `interpolation_ids.cpp`, not on this branch).
 
 ## 2026-10-12, round 135: widescreen HUD edges on Vulkan (Linux, Steam Deck)
 

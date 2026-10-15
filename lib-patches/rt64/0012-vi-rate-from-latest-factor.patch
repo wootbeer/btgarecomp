@@ -1,0 +1,20 @@
+--- a/src/hle/rt64_vi.cpp
++++ b/src/hle/rt64_vi.cpp
+@@ -162,9 +162,15 @@
+     }
+ 
+     uint32_t VIHistory::logicalRateFromFactors() {
+-        if ((factors[0] != 0) && std::all_of(factors.begin(), factors.end(), [&](uint32_t factor) { return factor == factors[0]; })) {
++        // BattleTanx recomp: use the latest factor, even when the last few differ. The game's frames take two,
++        // three or four VIs, and its motion per frame is proportional to that time. Returning 0 ("unknown") for
++        // mixed factors switched frame interpolation off and on from one frame to the next, and its timing reset
++        // each time: motion was uneven at the display rate. The latest factor is how long the previous frame was
++        // shown, the time the frame being interpolated covers.
++        const uint32_t latest = factors[factorCursor];
++        if (latest != 0) {
+             const uint32_t FullRate = 60; // TODO: PAL support.
+-            return FullRate / factors[0];
++            return FullRate / latest;
+         }
+         else {
+             return 0;

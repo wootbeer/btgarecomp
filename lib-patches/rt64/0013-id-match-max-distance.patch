@@ -1,0 +1,19 @@
+--- a/src/hle/rt64_game_frame.cpp
++++ b/src/hle/rt64_game_frame.cpp
+@@ -733,6 +733,16 @@
+     }
+ 
+     void GameFrame::matchTransform(Workload &curWorkload, const Workload &prevWorkload, GameFrameMap::WorkloadMap &curWorkloadMap, const GameFrameMap::WorkloadMap *prevWorkloadMap, uint32_t curTransformIndex, uint32_t prevTransformIndex, ModifiedBuffers &modifiedBuffers) {
++        // BattleTanx recomp: no pairing over more than 256 units, for IDs too (automatic matching already rejects
++        // those). An ID can be reused for a new object elsewhere; left unpaired, it's drawn where it is.
++        const float MaxPositionDifference = 256.0f;
++        const hlslpp::float3 curPosition = hlslpp::float4x4(curWorkload.drawData.worldTransforms[curTransformIndex])[3].xyz;
++        const hlslpp::float3 prevPosition = hlslpp::float4x4(prevWorkload.drawData.worldTransforms[prevTransformIndex])[3].xyz;
++        const float positionDifference = hlslpp::length(curPosition - prevPosition);
++        if (positionDifference > MaxPositionDifference) {
++            return;
++        }
++
+         GameFrameMap::TransformMap &curTransformMap = curWorkloadMap.transforms[curTransformIndex];
+         if (prevWorkloadMap != nullptr) {
+             curTransformMap.rigidBody = prevWorkloadMap->transforms[prevTransformIndex].rigidBody;

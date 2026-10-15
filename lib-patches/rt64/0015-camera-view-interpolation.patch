@@ -1,0 +1,54 @@
+--- a/src/render/rt64_projection_processor.cpp
++++ b/src/render/rt64_projection_processor.cpp
+@@ -15,6 +15,34 @@
+         matrix[3][0] *= aspectRatioScale;
+     }
+     
++    // BattleTanx recomp: interpolate a view matrix as a camera. Blending the matrix component by component moves
++    // the camera along the chord of its turn in view space, and the world's objects are interpolated separately in
++    // world space, so they don't stay put in front of a turning camera: a chase camera swinging round its tank
++    // threw the tank sideways in every in-between frame (about 13 units at mid-frame for a 15 degree turn 100 units
++    // behind it). Here the orientation is slerped and the camera's position (not the matrix's translation) is
++    // lerped, then the matrix is rebuilt from both.
++    static hlslpp::float4x4 lerpCameraView(const hlslpp::float4x4 &a, const hlslpp::float4x4 &b, float weight) {
++        const DecomposedTransform da(a);
++        const DecomposedTransform db(b);
++        if (!da.valid || !db.valid || (da.coordinateFlip != db.coordinateFlip)) {
++            return lerpMatrixComponents(a, b, true, true, true, weight);
++        }
++
++        const DecomposedTransform dl = lerpTransforms(da, db, weight, true, true, true, true, true, true);
++        hlslpp::float4x4 m = recomposeMatrix(dl.rotation, dl.scale, dl.skew, dl.translation, dl.perspective);
++
++        // Row vectors: a point p maps to p x M3 + t, so the camera sits at -t x inverse(M3).
++        const hlslpp::float3 cameraA = -hlslpp::mul(hlslpp::float3(a[3].xyz), hlslpp::inverse(extract3x3(a)));
++        const hlslpp::float3 cameraB = -hlslpp::mul(hlslpp::float3(b[3].xyz), hlslpp::inverse(extract3x3(b)));
++        const hlslpp::float3 camera = hlslpp::lerp(cameraA, cameraB, weight);
++        m[3].xyz = -hlslpp::mul(camera, extract3x3(m));
++        if (matrixIsNaN(m)) {
++            return lerpMatrixComponents(a, b, true, true, true, weight);
++        }
++
++        return m;
++    }
++
+     // ProjectionProcessor
+ 
+     ProjectionProcessor::ProjectionProcessor() { }
+@@ -123,8 +151,14 @@
+                 const interop::float4x4 curProjTransform = projMatrix;
+                 interop::float4x4 adjustedPrevProj = *prevProjMatrix;
+                 adjustProjectionMatrix(adjustedPrevProj, projRatioScale);
+-                viewMatrix = rigidBody->lerp(p.curFrameWeight, *prevViewMatrix, curViewTransform, true);
+-                prevViewTransform = rigidBody->lerp(p.prevFrameWeight, *prevViewMatrix, curViewTransform, true);
++                if (rigidBody->lerpTranslation && rigidBody->lerpRotation) {
++                    viewMatrix = lerpCameraView(*prevViewMatrix, curViewTransform, p.curFrameWeight);
++                    prevViewTransform = lerpCameraView(*prevViewMatrix, curViewTransform, p.prevFrameWeight);
++                }
++                else {
++                    viewMatrix = rigidBody->lerp(p.curFrameWeight, *prevViewMatrix, curViewTransform, true);
++                    prevViewTransform = rigidBody->lerp(p.prevFrameWeight, *prevViewMatrix, curViewTransform, true);
++                }
+ 
+                 // We only interpolate the projection if the view matrix has been interpolated.
+                 const bool interpolateProjection = rigidBody->lerpTranslation || rigidBody->lerpRotation;

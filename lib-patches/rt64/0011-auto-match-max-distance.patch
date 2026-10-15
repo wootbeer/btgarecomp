@@ -1,0 +1,19 @@
+--- a/src/hle/rt64_game_frame.cpp
++++ b/src/hle/rt64_game_frame.cpp
+@@ -235,6 +235,16 @@
+ 
+         matchResult.positionDifference = hlslpp::length(curPos - prevPos);
+ 
++        // BattleTanx recomp: don't pair transforms that are too far apart to be the same object one frame later.
++        // Matching has no distance limit otherwise, so when objects drawn with the same model come into or go out
++        // of view (driving forward or back), one appearing could be paired with one that left hundreds of units
++        // away and fly across the screen in the interpolated frames. Left unpaired, it's drawn where it is.
++        // Nothing in the game moves this far in one frame (shells about 110 units).
++        const float MaxPositionDifference = 256.0f;
++        if (matchResult.positionDifference > MaxPositionDifference) {
++            return matchResult;
++        }
++
+         // Compute the dot product difference between the normalized XYZ vectors of the 3x3 matrices.
+         matchResult.orientationDifference =
+             (1.0f - hlslpp::dot(hlslpp::normalize(curTransform[0].xyz), hlslpp::normalize(prevTransform[0].xyz))) +
