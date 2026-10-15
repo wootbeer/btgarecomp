@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 136)
+## Overview (as of round 137)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -65,6 +65,16 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-15, round 137: controller default: Z on the right trigger, R on the left
+
+Owner's request: the main gun (N64 Z) on the right trigger by default.
+RecompFrontend's defaults put Z on the left trigger and R on the right;
+`src/main/main.cpp` now swaps them at startup through the library's own
+`recompinput::set_default_mapping_for_controller` (must run before the
+defaults are first read, so it's the first thing in `main`). No library
+patch. Players' saved bindings are kept: this applies to a new setup or
+Reset to Defaults. Keyboard defaults unchanged. Builds and starts here.
 
 ## 2026-10-15, round 136: interpolation fixes from the BattleTanx 1 port; regenerate on config changes
 

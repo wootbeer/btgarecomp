@@ -41,6 +41,7 @@
 #include "recompui/config.h"
 #include "util/file.h"
 
+#include "recompinput/input_mapping.h"
 #include "recompinput/input_state.h"
 #include "recompinput/input_events.h"
 #include "recompinput/profiles.h"
@@ -404,6 +405,14 @@ void btga_report_fatal_error(const char* message);
 
 int main(int argc, char** argv) {
     std::set_terminate(report_unhandled_exception_and_abort);
+
+    // Controller defaults: Z (the main gun) on the right trigger and R on the left, the other way
+    // round from the frontend's defaults. Must run before anything reads the defaults; players'
+    // saved bindings are kept, so this applies to new setups and Reset to Defaults.
+    recompinput::set_default_mapping_for_controller(recompinput::GameInput::Z,
+        { recompinput::InputField::controller_analog(SDL_CONTROLLER_AXIS_TRIGGERRIGHT, true) });
+    recompinput::set_default_mapping_for_controller(recompinput::GameInput::R,
+        { recompinput::InputField::controller_analog(SDL_CONTROLLER_AXIS_TRIGGERLEFT, true) });
 
     recomp::Version project_version{};
     if (!recomp::Version::from_string(version_string, project_version)) {
