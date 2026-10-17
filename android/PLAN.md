@@ -553,3 +553,9 @@ groups are back on RT64's defaults (all AUTO), and the frame-base group, which o
 components, is gone. Tanks, decals and other tagged objects keep DecomposedNormal. Owner: "all good
 now" (no explosion flicker, tank jitter still fixed).
 
+PC (owner's Windows build, AMD RX 5700 XT): two local edits in its RecompFrontend working tree, never
+in the repo, forced Vulkan (D3D12 present() crashed in amdxc64.dll) and switched RT64's idle work
+off (its thread crashed in the same driver). `lib-patches/rt64/0017` puts them in RT64's own driver
+workaround table instead: on RDNA1 (RX 5xxx, four digits, so not the RX 550-590), Vulkan when the
+API is automatic, and no idle work. Not yet built on Windows.
+

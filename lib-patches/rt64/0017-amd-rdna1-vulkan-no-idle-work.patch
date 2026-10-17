@@ -1,0 +1,35 @@
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -3,6 +3,8 @@
+ //
+ 
+ #include "rt64_application.h"
++
++#include <cctype>
+ #include "rhi/rt64_render_hooks.h"
+ 
+ #include <cinttypes>
+@@ -232,7 +234,22 @@
+             }
+         }
+         else if (deviceDescription.vendor == RenderDeviceVendor::AMD) {
+-            if (chosenGraphicsAPI == UserConfiguration::GraphicsAPI::D3D12) {
++            // BattleTanx recomp: RDNA1 (RX 5300 to 5700 XT, four digits; RX 550-590 are older GCN cards). On an
++            // RX 5700 XT, D3D12 crashed inside amdxc64.dll in present(), and the idle work thread (busy work that
++            // keeps the GPU out of low power states, which "High Performance State" in RT64's menu turns off) crashed
++            // inside the same driver. So Vulkan when the API is automatic, and no idle work.
++            const size_t rx5 = deviceDescription.name.find("RX 5");
++            const bool isRDNA1 = (rx5 != std::string::npos) && (deviceDescription.name.size() >= rx5 + 7) &&
++                isdigit((unsigned char)deviceDescription.name[rx5 + 4]) && isdigit((unsigned char)deviceDescription.name[rx5 + 5]) &&
++                isdigit((unsigned char)deviceDescription.name[rx5 + 6]);
++            if (isRDNA1) {
++                userConfig.idleWorkActive = false;
++            }
++
++            if (isRDNA1 && automaticGraphicsAPI && (chosenGraphicsAPI == UserConfiguration::GraphicsAPI::D3D12)) {
++                forceVulkanForCompatibility = true;
++            }
++            else if (chosenGraphicsAPI == UserConfiguration::GraphicsAPI::D3D12) {
+                 const uint64_t BrokenAMDDriverD3D12 = 0x1800142B080004; // Jan 2019
+                 const uint64_t BrokenRDNA4DriverD3D12 = 0x200000794103EC; // Aug 2026
+                 const bool isRX90 = deviceDescription.name.find("AMD Radeon RX 90") != std::string::npos;
