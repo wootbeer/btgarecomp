@@ -46,8 +46,10 @@ namespace {
     int current = 0;
 
     // TEMPORARY (explosions flashing a little on PC): the file btga-interp-mode in the working
-    // folder, read every 60 frames, picks what is tagged: 0 nothing (no matrix groups at all, as
-    // before this code), 1 only the tanks (their object IDs, odd), 2 everything (the default).
+    // folder, read every 60 frames, picks what is tagged: 0 nothing (no matrix groups and no
+    // bucket reloads, as before this code), 1 only the tanks (their object IDs, odd), 2 everything
+    // (the default), 3 everything, but only the tanks with always-interpolate components (other
+    // tagged objects get RT64's AUTO ones, which stop at sudden jumps).
     int interp_mode = 2;
     int interp_mode_frames = 0;
 
@@ -107,7 +109,8 @@ namespace {
     uint32_t matrix_group_params(uint32_t id, bool push) {
         constexpr uint32_t kInterpolate = 1, kAuto = 2;
         const bool tagged = (id != kIdAuto);
-        const uint32_t motion = tagged ? kInterpolate : kAuto;
+        const bool always = tagged && ((interp_mode != 3) || ((id & 1) != 0));
+        const uint32_t motion = always ? kInterpolate : kAuto;
         const uint32_t order = tagged ? 0u : 1u; // G_EX_ORDER_LINEAR for IDs, AUTO for the automatic group
         const uint32_t params =
             (push ? 1u : 0u) |       // push
@@ -205,6 +208,9 @@ void btga_interp_new_frame() {
 // Forget the last Mtx here, so each list starts with a load (the same matrix again changes
 // nothing drawn) and an object's loads are the same from frame to frame.
 extern "C" void btga_interp_bucket_start(uint8_t* rdram, recomp_context* ctx) {
+    if (interp_mode == 0) {
+        return;
+    }
     MEM_W(0x3C, ctx->r29) = 0;
 }
 
