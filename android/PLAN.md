@@ -545,3 +545,10 @@ jitter worked around here with matrix IDs, which stay), and main's own copies of
 and ApplyLibPatches.cmake (identical). All RT64 patches 0001-0015 apply in order. Main's automatic
 N64Recomp rerun is skipped when cross-compiling (the N64Recomp it builds is an Android binary).
 
+Explosions flickered between frames at Display rate (gone at Original; "a little" before, worse with
+the shader cache, which lets more in-between frames through). Automatic matching had been given the
+tagged objects' always-interpolate components (while the tanks were untagged, for their jitter); on
+explosion sprites, which change size and shape every frame, that drew in-between states. Untagged
+groups are back on RT64's defaults (all AUTO), and the frame-base group, which only gave them those
+components, is gone. Tanks, decals and other tagged objects keep DecomposedNormal.
+
