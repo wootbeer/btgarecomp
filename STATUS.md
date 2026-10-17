@@ -68,6 +68,8 @@ original 2026-09-18 plan and are long out of date.
 
 ## 2026-10-17, round 138: the game ran at 3/4 speed (osClockRate never scaled)
 
+**Confirmed in game (owner, Windows):** plays well and is much smoother.
+
 Found in the BattleTanx 1 port (same libultra and runtime), confirmed here
 in this ROM:
 - Game timers convert osGetTime() ticks to time by dividing by
