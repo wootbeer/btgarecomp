@@ -1,0 +1,118 @@
+--- a/src/render/rt64_raster_shader_cache.h
++++ b/src/render/rt64_raster_shader_cache.h
+@@ -45,7 +45,13 @@
+         std::unique_ptr<ShaderCompiler> shaderCompiler;
+         RenderMultisampling multisampling;
+         bool usesHDR = false;
++
++        // BattleTanx recomp (Android): the shader descriptions met so far, kept between runs and
++        // compiled again at startup (see loadDescriptionFile()).
++        std::mutex descriptionFileMutex;
++        std::ofstream descriptionFile;
+         
++
+         RasterShaderCache(uint32_t threadCount, uint32_t ubershaderThreadCount);
+         ~RasterShaderCache();
+         void setup(RenderDevice *device, RenderShaderFormat shaderFormat, const ShaderLibrary *shaderLibrary, const RenderMultisampling &multisampling);
+@@ -55,5 +61,6 @@
+         RasterShader *getGPUShader(const ShaderDescription &desc);
+         RasterShaderUber *getGPUShaderUber() const;
+         uint32_t shaderCount();
++        void loadDescriptionFile();
+     };
+ };
+\ No newline at end of file
+--- a/src/render/rt64_raster_shader_cache.cpp
++++ b/src/render/rt64_raster_shader_cache.cpp
+@@ -4,6 +4,10 @@
+ 
+ #include "rt64_raster_shader_cache.h"
+ 
++#include <cstdio>
++#include <cstring>
++#include <vector>
++
+ #include <atomic>
+ #include <chrono>
+ #include <cstdio>
+@@ -123,6 +127,63 @@
+         if (shaderFormat == RenderShaderFormat::SPIRV) {
+             optimizerCacheSPIRV.initialize();
+         }
++
++#   if defined(__ANDROID__)
++        loadDescriptionFile();
++#   endif
++    }
++
++    // BattleTanx recomp (Android): a specialised shader is compiled the first time a draw needs it, and
++    // until it's ready the draw uses the ubershader, which is slow on mobile GPUs: busy scenes stalled for
++    // up to ~180 ms each time a new effect first appeared. So every description met is appended to a
++    // file in the working folder (the app's storage), and at startup those are queued for the compilation
++    // threads before the game draws anything. A file of another layout (header) is started afresh.
++    namespace {
++        const char DescriptionFileName[] = "rt64-shader-descriptions.bin";
++        const char DescriptionFileMagic[8] = { 'B', 'T', 'G', 'A', 'S', 'H', 'D', '1' };
++        const size_t DescriptionFileMaxEntries = 8192;
++    }
++
++    void RasterShaderCache::loadDescriptionFile() {
++        const std::unique_lock<std::mutex> fileLock(descriptionFileMutex);
++        if (descriptionFile.is_open()) {
++            descriptionFile.close();
++        }
++
++        const uint32_t descSize = sizeof(ShaderDescription);
++        std::vector<ShaderDescription> descs;
++        bool valid = false;
++        {
++            std::ifstream in(DescriptionFileName, std::ios::binary);
++            char magic[sizeof(DescriptionFileMagic)] = {};
++            uint32_t fileDescSize = 0;
++            if (in.read(magic, sizeof(magic)) && in.read(reinterpret_cast<char *>(&fileDescSize), sizeof(fileDescSize)) &&
++                (memcmp(magic, DescriptionFileMagic, sizeof(magic)) == 0) && (fileDescSize == descSize))
++            {
++                valid = true;
++                ShaderDescription desc;
++                while ((descs.size() < DescriptionFileMaxEntries) && in.read(reinterpret_cast<char *>(&desc), descSize)) {
++                    descs.push_back(desc);
++                }
++            }
++        }
++
++        // The file isn't open yet, so these aren't written to it again.
++        for (const ShaderDescription &desc : descs) {
++            submit(desc);
++        }
++
++        if (valid) {
++            descriptionFile.open(DescriptionFileName, std::ios::binary | std::ios::app);
++        }
++        else {
++            descriptionFile.open(DescriptionFileName, std::ios::binary | std::ios::trunc);
++            descriptionFile.write(DescriptionFileMagic, sizeof(DescriptionFileMagic));
++            descriptionFile.write(reinterpret_cast<const char *>(&descSize), sizeof(descSize));
++            descriptionFile.flush();
++        }
++
++        fprintf(stderr, "[RT64] %zu shader descriptions from earlier runs queued for compilation\n", descs.size());
+     }
+ 
+     void RasterShaderCache::submit(const ShaderDescription &desc) {
+@@ -139,6 +200,16 @@
+             found = true;
+         }
+ 
++#   if defined(__ANDROID__)
++        {
++            const std::unique_lock<std::mutex> fileLock(descriptionFileMutex, std::try_to_lock);
++            if (fileLock.owns_lock() && descriptionFile.is_open()) {
++                descriptionFile.write(reinterpret_cast<const char *>(&desc), sizeof(ShaderDescription));
++                descriptionFile.flush();
++            }
++        }
++#   endif
++
+         // Push a new shader compilation to the queue.
+         {
+             const std::unique_lock<std::mutex> queueLock(descQueueMutex);
