@@ -566,3 +566,8 @@ objects with AUTO components, both flashed; the current tagging felt smoothest. 
 (round 138) was worse on buildings than this branch. So the debris flashing is not new here; left
 as is for now (likely automatic matching between many similar debris pieces).
 
+Owner: keep PC as it is until the Android-side changes are tried there; the AMD fix (0017) goes into
+the next PC update. So `src/game/interpolation_ids.cpp` (matrix IDs, bucket reloads) and the nuke
+flash's gEXSetRectAspect in `src/game/widescreen.cpp` are Android only for now (RT64 0009 only acts
+on tagged objects, so it's idle on PC too). Merging this branch then leaves PC rendering as on main.
+
