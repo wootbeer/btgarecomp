@@ -550,5 +550,6 @@ the shader cache, which lets more in-between frames through). Automatic matching
 tagged objects' always-interpolate components (while the tanks were untagged, for their jitter); on
 explosion sprites, which change size and shape every frame, that drew in-between states. Untagged
 groups are back on RT64's defaults (all AUTO), and the frame-base group, which only gave them those
-components, is gone. Tanks, decals and other tagged objects keep DecomposedNormal.
+components, is gone. Tanks, decals and other tagged objects keep DecomposedNormal. Owner: "all good
+now" (no explosion flicker, tank jitter still fixed).
 
