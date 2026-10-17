@@ -24,10 +24,11 @@ and leave the game's own behaviour, look and balance alone.
 - **Saves**: Controller Pak emulation, stored as standard `.mpk` files.
 - **Controllers**: keyboard and gamepads through the frontend, rumble, and
   local multiplayer (General tab).
-- **Timing**: the game times motion with the clock; its frame time is
-  snapped to whole VIs, and the few places that truncated the per-frame
-  step to an integer (which hardware's slower ~20 fps hid) are fixed
-  proportionally (`src/game/frame_dt_fix.cpp`).
+- **Timing**: the game's clock rate gets the same 3/4 scaling the game's
+  own `osInitialize` applies on hardware (the runtime skipped it, so the
+  game ran at 3/4 speed until round 138); its frame time is snapped to
+  whole VIs, and the few places that truncate the per-frame step use the
+  real step (`src/game/frame_dt_fix.cpp`).
 - **Crash reports**: `crash_log.txt` gives the exception, the module, any
   C++ error message and the game function that faulted
   (`src/main/crash_handler.cpp`).

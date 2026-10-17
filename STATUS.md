@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 137)
+## Overview (as of round 138)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -65,6 +65,39 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-17, round 138: the game ran at 3/4 speed (osClockRate never scaled)
+
+Found in the BattleTanx 1 port (same libultra and runtime), confirmed here
+in this ROM:
+- Game timers convert osGetTime() ticks to time by dividing by
+  `osClockRate`, a u64 at `0x80126E50` (read in func_800BF80C at
+  0x800BF99C, the frame-rate governor func_80099FE8, and others).
+- It is 62,500,000 in the ROM. The game's own `osInitialize` (0x80105B10)
+  ends with `osClockRate = osClockRate * 3 / 4` (`__ll_mul` by 3 at
+  0x80105CE0, `__ull_div` by 4 at 0x80105CFC, stored at 0x80105D10),
+  giving 46,875,000, the CPU count rate that osGetTime() runs at.
+- The runtime replaces `osInitialize` (N64Recomp's built-in ignored list)
+  and never touches the game's copy, so it stayed at 62.5 MHz: one VI came
+  out as 0.375 units instead of 0.5, and every timer ran at 3/4 speed.
+
+Round 89's note that 0.75 per 30 fps frame "matches hardware" was this
+mistake. It also explains rounds 125-131 and 127: the shield flash, turn
+limit, deadline and score-screen counts used `(int)step`, which is 1 at the
+intended 1.0 per frame and was 0 at 0.75.
+
+**Fix:** a hook in the boot function `func_8009ED9C` right after its
+`osInitialize` call (`before_vram = 0x8009EDB4`) calls
+`btga_init_clock_rate`, which applies the same `* 3 / 4`. The frame-step
+snapping (`kViUnits`) is now 0.5 per VI. Round 131's fractional-step fixes
+and round 127's score-screen guard stay: at a steady 1.0 they match the
+game's own code, and they cover host-clock wobble (a step just under 1.0
+would truncate to 0 for a frame).
+
+Verified: regenerated (by round 136's auto-regeneration), the hook lands
+right after `osInitialize_recomp`, and the Linux build compiles. Not yet
+played: everything in game (driving, turning, firing rate, timers,
+cutscene and intro pacing) should be about 4/3 faster than before.
 
 ## 2026-10-15, round 137: controller default: Z on the right trigger, R on the left
 
