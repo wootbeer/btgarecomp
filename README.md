@@ -12,7 +12,7 @@ with [RT64](https://github.com/rt64/rt64) for rendering.
 Unofficial, and not affiliated with the rights holders. **No game data is
 included.** You need your own dump of the game to build or play this.  
 
-Android build is planned, more to come stay tuned.  
+Early Android build is now posted. Optimized for retro handhelds but will work with touch.
   
 ## Game Files  
 You need your own data files BattleTanx - Global Assault (USA).n64  
