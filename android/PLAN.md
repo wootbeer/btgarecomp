@@ -507,8 +507,8 @@ cause is the float-to-int conversions in the recompiled code (N64Recomp's recomp
 casts, CVT_* lrint), undefined for NaN or out-of-range values, where x86 gives INT32_MIN/INT64_MIN
 (and Windows's 32-bit long makes lrint do so past int32) but ARM64 saturates and gives 0 for NaN.
 `lib-patches/N64Recomp/0001` makes them give the x86 values on ARM64 only (checked against x86 for
-NaN, infinities, out-of-range and ordinary values). FMA contraction was already off. To confirm on
-the device.
+NaN, infinities, out-of-range and ordinary values). FMA contraction was already off. Owner: the
+walls block shots now.
 
 Touch controls hidden for a gamepad came back on a swipe from the top edge (pulling the status bar):
 a touch starting within 48dp of the top or bottom edge no longer brings them back.
@@ -520,8 +520,12 @@ runs), and `lib-patches/rt64/0008` draws every dithered-alpha (smoke) call with 
 Temporary `lib-patches/rt64/0010` logs shader compiles ([RT64 SHADER]) and slow frames with their
 ubershader draws ([RT64 SLOW]).
 
-Also open: the sprite under the player's tank (its shadow?) jitters slightly now and then at Display
-rate; likely a shared matrix still matched automatically.
+The sprite under the player's tank (its shadow) jittered slightly at Display rate: gone after the
+merge of main's RT64 camera interpolation (owner). It still flickers every few seconds, rarely
+("not very bothersome"); not known yet whether at Original too (matching vs. depth).
+
+Owner after the merge: lag spikes "way better" (main's 3/4-speed fix likely; the 0010 log not
+read yet).
 
 Merged main (rounds 135-138) into this branch: the game ran at 3/4 speed everywhere (osClockRate
 step, a new hook: regenerate), the default controller mapping, RT64 0011-0015 from the BattleTanx 1
