@@ -559,3 +559,10 @@ off (its thread crashed in the same driver). `lib-patches/rt64/0017` puts them i
 workaround table instead: on RDNA1 (RX 5xxx, four digits, so not the RX 550-590), Vulkan when the
 API is automatic, and no idle work. Not yet built on Windows.
 
+PC check of this branch (owner's RX 5700 XT, Vulkan via 0017): no crash, speed and controls good.
+Explosions and building debris flash a little at Display rate (fine at Original). A temporary
+switch compared: no tagging at all (as main) jittered and was "just bad"; tanks only, and tagged
+objects with AUTO components, both flashed; the current tagging felt smoothest. Main's own build
+(round 138) was worse on buildings than this branch. So the debris flashing is not new here; left
+as is for now (likely automatic matching between many similar debris pieces).
+

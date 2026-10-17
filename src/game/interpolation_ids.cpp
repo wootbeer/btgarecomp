@@ -23,7 +23,6 @@
 // order (G_EX_ORDER_LINEAR). Anything without a stable owner keeps RT64's
 // automatic matching.
 #include <cstdint>
-#include <cstdio>
 #include <unordered_map>
 
 #include "recomp.h"
@@ -45,36 +44,13 @@ namespace {
     Generation generations[2];
     int current = 0;
 
-    // TEMPORARY (explosions flashing a little on PC): the file btga-interp-mode in the working
-    // folder, read every 60 frames, picks what is tagged: 0 nothing (no matrix groups and no
-    // bucket reloads, as before this code), 1 only the tanks (their object IDs, odd), 2 everything
-    // (the default), 3 everything, but only the tanks with always-interpolate components (other
-    // tagged objects get RT64's AUTO ones, which stop at sudden jumps).
-    int interp_mode = 2;
-    int interp_mode_frames = 0;
-
-    void read_interp_mode() {
-        int mode = 2;
-        if (FILE* f = std::fopen("btga-interp-mode", "r")) {
-            if (std::fscanf(f, "%d", &mode) != 1) {
-                mode = 2;
-            }
-            std::fclose(f);
-        }
-        if (mode != interp_mode) {
-            std::fprintf(stderr, "[BTGA] interpolation tagging mode %d\n", mode);
-        }
-        interp_mode = mode;
-    }
-
     uint32_t id_for(uint32_t mtx) {
         for (int g = 0; g < 2; g++) {
             const Generation& gen = generations[(current + 2 - g) % 2];
             auto it = gen.mtx_source.find(mtx);
             if (it != gen.mtx_source.end()) {
                 auto uses = gen.source_uses.find(it->second);
-                const uint32_t id = (uses != gen.source_uses.end() && uses->second == 1) ? it->second : 0xFFFFFFFFu;
-                return ((interp_mode == 1) && ((id & 1) == 0)) ? 0xFFFFFFFFu : id;
+                return (uses != gen.source_uses.end() && uses->second == 1) ? it->second : 0xFFFFFFFFu;
             }
         }
         return 0xFFFFFFFFu;
@@ -109,8 +85,7 @@ namespace {
     uint32_t matrix_group_params(uint32_t id, bool push) {
         constexpr uint32_t kInterpolate = 1, kAuto = 2;
         const bool tagged = (id != kIdAuto);
-        const bool always = tagged && ((interp_mode != 3) || ((id & 1) != 0));
-        const uint32_t motion = always ? kInterpolate : kAuto;
+        const uint32_t motion = tagged ? kInterpolate : kAuto;
         const uint32_t order = tagged ? 0u : 1u; // G_EX_ORDER_LINEAR for IDs, AUTO for the automatic group
         const uint32_t params =
             (push ? 1u : 0u) |       // push
@@ -189,10 +164,6 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
 
 // From the frame clear (src/game/widescreen.cpp): start a new generation.
 void btga_interp_new_frame() {
-    if (++interp_mode_frames >= 60) {
-        interp_mode_frames = 0;
-        read_interp_mode();
-    }
     current ^= 1;
     generations[current].mtx_source.clear();
     generations[current].source_uses.clear();
@@ -208,18 +179,12 @@ void btga_interp_new_frame() {
 // Forget the last Mtx here, so each list starts with a load (the same matrix again changes
 // nothing drawn) and an object's loads are the same from frame to frame.
 extern "C" void btga_interp_bucket_start(uint8_t* rdram, recomp_context* ctx) {
-    if (interp_mode == 0) {
-        return;
-    }
     MEM_W(0x3C, ctx->r29) = 0;
 }
 
 // func_8007B65C, before 0x8007B7B4 (ahead of the gSPMatrix through func_8007AC34): $v0 is
 // the record's Mtx.
 extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
-    if (interp_mode == 0) {
-        return;
-    }
     const uint32_t mtx = (uint32_t)ctx->r2;
     // The walker stops drawing once the head passes the limit at 0x5C($sp) (buffer base +
     // 0xADE0, 0x100 short of its end). Don't start tagging that close to it; once tagging
