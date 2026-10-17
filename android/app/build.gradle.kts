@@ -17,6 +17,15 @@ val localProperties = Properties().apply {
 val hostToolsDir: String? =
     (findProperty("btga.hostToolsDir") as String?) ?: localProperties.getProperty("btga.hostToolsDir")
 
+// Release signing, as in the owner's other ports: android/keystore.properties (never committed, see
+// keystore.properties.example) names the keystore and its passwords. Without it, assembleRelease
+// makes an unsigned APK.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val hasReleaseKeystore = keystoreProperties.getProperty("storeFile") != null
+
 // Testing aid: btga.vulkanValidation=true (local.properties or -P) packs Khronos' Vulkan validation
 // layer into debug builds, for the Android GPU debug-layer settings to load (see android/README.md).
 val vulkanValidation: Boolean =
@@ -34,8 +43,9 @@ android {
         applicationId = "io.github.wootbeer.btgarecomp"
         minSdk = 28
         targetSdk = 35
+        // The same version name as the PC release it matches.
         versionCode = 1
-        versionName = "0.1.1"
+        versionName = "0.1.2"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -53,6 +63,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Android Studio's Run builds debug. Unoptimised recompiled code is far too slow to
@@ -65,6 +86,9 @@ android {
         }
         release {
             isMinifyEnabled = false
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
@@ -168,8 +192,75 @@ abstract class CheckApkHasNoRom : DefaultTask() {
     }
 }
 
+// The license notices of everything built into the APK, as tools/package-windows.ps1 gathers them
+// for the Windows zip (minus the Windows-only DirectX shader compiler): assets/licenses/ in the APK.
+abstract class CollectLicenses : DefaultTask() {
+    @get:Input
+    abstract val notices: MapProperty<String, String>
+
+    @get:InputFiles
+    abstract val noticeFiles: ConfigurableFileCollection
+
+    @get:Internal
+    abstract val repoRoot: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun collect() {
+        val out = outputDir.get().dir("licenses").asFile
+        out.deleteRecursively()
+        out.mkdirs()
+        for ((name, path) in notices.get()) {
+            val file = repoRoot.get().file(path).asFile
+            if (file.exists()) {
+                file.copyTo(out.resolve("$name.txt"), overwrite = true)
+            } else {
+                throw GradleException("License notice not found: $path")
+            }
+        }
+    }
+}
+
+val licenseNotices = linkedMapOf(
+    "BattleTanxGARecompiled" to "COPYING",
+    "N64ModernRuntime" to "lib/N64ModernRuntime/COPYING",
+    "N64Recomp" to "lib/N64ModernRuntime/N64Recomp/LICENSE",
+    "RT64" to "lib/rt64/LICENSE",
+    "plume" to "lib/rt64/src/contrib/plume/LICENSE",
+    "hlslpp" to "lib/rt64/src/contrib/hlslpp/LICENSE",
+    "imgui" to "lib/rt64/src/contrib/imgui/LICENSE.txt",
+    "implot" to "lib/rt64/src/contrib/implot/LICENSE",
+    "im3d" to "lib/rt64/src/contrib/im3d/LICENSE",
+    "ddspp" to "lib/rt64/src/contrib/ddspp/LICENSE",
+    "nativefiledialog-extended" to "lib/rt64/src/contrib/nativefiledialog-extended/LICENSE",
+    "stb" to "lib/rt64/src/contrib/stb/LICENSE",
+    "xxHash" to "lib/rt64/src/contrib/xxHash/LICENSE",
+    "zstd" to "lib/rt64/src/contrib/zstd/LICENSE",
+    "re-spirv" to "lib/rt64/src/contrib/re-spirv/LICENSE",
+    "miniz" to "lib/N64ModernRuntime/thirdparty/miniz/LICENSE",
+    "o1heap" to "lib/N64ModernRuntime/thirdparty/o1heap/LICENSE",
+    "RmlUi" to "lib/RecompFrontend/recompui/lib/RmlUi/LICENSE.txt",
+    "lunasvg" to "lib/RecompFrontend/recompui/lib/lunasvg/LICENSE",
+    "plutovg" to "lib/RecompFrontend/recompui/lib/lunasvg/plutovg/LICENSE",
+    "FreeType" to "lib/RecompFrontend/recompui/lib/freetype-windows-binaries/LICENSE.TXT",
+    "GamepadMotionHelpers" to "lib/RecompFrontend/lib/GamepadMotionHelpers/LICENSE",
+    "SlotMap" to "lib/SlotMap/README.md",
+    "SDL2" to "licenses/SDL2.txt",
+)
+val collectLicenses = tasks.register<CollectLicenses>("collectLicenses") {
+    val root = rootProject.layout.projectDirectory.dir("..")
+    notices.set(licenseNotices)
+    noticeFiles.from(licenseNotices.values.map { root.file(it) })
+    repoRoot.set(root)
+    outputDir.set(layout.buildDirectory.dir("generated/licenses"))
+}
+
 androidComponents {
     onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(collectLicenses, CollectLicenses::outputDir)
+
         val name = variant.name.replaceFirstChar { it.uppercase() }
         val check = tasks.register<CheckApkHasNoRom>("check${name}ApkHasNoRom") {
             apkDir.set(variant.artifacts.get(SingleArtifact.APK))

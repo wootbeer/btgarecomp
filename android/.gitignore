@@ -5,3 +5,7 @@ build/
 app/.cxx/
 local.properties
 *.iml
+# Release signing (keystore.properties.example)
+keystore.properties
+*.jks
+*.keystore

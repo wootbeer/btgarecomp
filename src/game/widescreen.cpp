@@ -15,8 +15,6 @@
 // so dividing k by RT64's widening factor widens all of them at once.
 #include <atomic>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
 
 #include "recomp.h"
 

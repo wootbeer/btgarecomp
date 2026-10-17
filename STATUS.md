@@ -5183,7 +5183,7 @@ right to disassemble anything correctly. See `syms/rom_info.md` for the
 corrected formula and `tools/splat.yaml` for the fixed segment config.
 
 **How this surfaced**: round 9's n64sym scan (built while checking the
-reference project Matt pointed at) returned matches like `__osDisableInt
+reference project the owner pointed at) returned matches like `__osDisableInt
 = 0x80105DB0` -- the exact vram address round 7 had already probed and
 called "texture-like data, an overlay slot." Rather than trust either
 tool, checked the raw ROM bytes directly:
@@ -5250,9 +5250,9 @@ to really be the game's first substantial function) actually do, and does
 tracing its real call graph (not the wrong-header one) lead anywhere near
 an actual overlay/asset-loading mechanism this time.
 
-## 2026-09-27, round 9: checked a reference project Matt pointed at -- a real methodology gap, and the right splat feature for the overlay slot
+## 2026-09-27, round 9: checked a reference project the owner pointed at -- a real methodology gap, and the right splat feature for the overlay slot
 
-Matt pointed at
+the owner pointed at
 [RevoSucks/BMHeroRecomp](https://github.com/RevoSucks/BMHeroRecomp)
 (Bomberman Hero) as an example of this toolchain done well. That, and the
 question of where function names could come from at all, led somewhere
@@ -5389,13 +5389,13 @@ that VRAM range yet, which is the actual loader.
 
 ## 2026-09-19 (transcribed 2026-09-27): recovered findings from screenshots -- a real overlay/asset table, and a direct link to the "wall" functions
 
-**This entire section was reconstructed from screenshots** Matt uploaded to
+**This entire section was reconstructed from screenshots** the owner uploaded to
 this repo (`memorymap.png`, `scree2/4/5/6.png`, `screenpart.png`, `1.png`,
 `3.png`, `4.png`, `new1/2/3/34/345.png`, and others), not from any file.
 They show a Ghidra session (project `globalrecomp`, imported successfully
 with the N64 loader by Warranty Voider -- MIPS:BE:64:64-32addr, o32,
 Ghidra 12.1.2) and, in the `new*.png` files, a chat with a Claude Code
-session on Matt's own machine driving that Ghidra session interactively,
+session on the owner's own machine driving that Ghidra session interactively,
 timestamped the morning of 2026-09-19 -- i.e. **after** the 2026-09-18
 entry below, and with real progress that entry doesn't mention. That
 session said more than once that it was writing its findings into
@@ -5515,7 +5515,7 @@ obviously part of the loading path.
 
 ## 2026-09-27: splat now runs in a cloud sandbox; the "overlay wall" is probably not overlays
 
-Picked up the prior scaffold and analysis (uploaded by Matt to this repo's
+Picked up the prior scaffold and analysis (uploaded by the owner to this repo's
 `main` branch as archives) and continued from where the 2026-09-18 entry
 left off.
 
@@ -5586,7 +5586,7 @@ back in either; it's genuinely unresolved.
 against `tools/OverlayScan6.java` (the script from 2026-09-18, written for
 exactly this search). Java 21 and network access are both available in
 this sandbox, so it's likely feasible here too, but pulling down a Ghidra
-distribution is a bigger, slower step worth checking with Matt about
+distribution is a bigger, slower step worth checking with the owner about
 before spending the time.
 
 ### Consolidated into the repo this round
@@ -5628,7 +5628,7 @@ branch or tag contains them, and GitHub no longer serves those commits
 
 ### Today's arc: crt0 stub -> confirmed resident code -> the overlay wall
 
-Ran splat for real on Matt's machine (see "Blocked" below for why that
+Ran splat for real on the owner's machine (see "Blocked" below for why that
 couldn't happen in the sandbox that built this scaffold). Getting it
 running took a few config bugs (top-level segments must be `type: code`
 with an explicit `subsegments` entry; splat resolves `base_path` relative
@@ -5698,7 +5698,7 @@ guessing more addresses.
 The cloud sandbox this scaffold was built in has PyPI, npm, and crates.io
 blocked by egress policy (confirmed genuine 403s). splat's real dependency
 chain (`spimdisasm`, `rabbitizer`) couldn't be installed there. All the
-actual disassembly work above happened on Matt's machine instead, driven
+actual disassembly work above happened on the owner's machine instead, driven
 interactively from this session.
 
 (2026-09-27 note: not true in every cloud sandbox -- see above.)
@@ -5711,7 +5711,7 @@ interactively from this session.
    it is what unblocks reading any code beyond the resident block.
    (2026-09-27: `tools/OverlayScan6.java` is a Ghidra script written for
    this; not yet run. Worth trying headless in a cloud sandbox before
-   assuming it needs Matt's machine.)
+   assuming it needs the owner's machine.)
 2. Once the loader is found, figure out its table format (what maps an
    overlay ID/address to a ROM source location) -- that turns "guess a jal
    target and hope" into "look it up properly."

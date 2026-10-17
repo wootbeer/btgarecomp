@@ -440,11 +440,11 @@ game itself. Not an Android port issue.
 Android's own screen recording breaks the game's rendering (owner, Retroid);
 not looked at.
 
-Testing aids kept:
-- `files/ubershaders-only` in the app's storage (`adb shell run-as ... touch`)
-  draws everything with RT64's ubershader (`lib-patches/rt64/0007`). With it
-  the cutscene grain is better (so partly the precompiled SPIR-V
-  specialisations on Adreno); the credits grid and the flash were unchanged.
+Testing aids:
+- `files/ubershaders-only` in the app's storage drew everything with RT64's
+  ubershader (`lib-patches/rt64/0007`, removed before release). With it the
+  cutscene grain was better (so partly the precompiled SPIR-V specialisations
+  on Adreno); the credits grid and the flash were unchanged.
 - `btga.vulkanValidation=true` packs the Khronos validation layer
   (android/README.md). A run through the intro with synchronization
   validation reported nothing but a present-acquire hazard.
@@ -570,4 +570,11 @@ Owner: keep PC as it is until the Android-side changes are tried there; the AMD 
 the next PC update. So `src/game/interpolation_ids.cpp` (matrix IDs, bucket reloads) and the nuke
 flash's gEXSetRectAspect in `src/game/widescreen.cpp` are Android only for now (RT64 0009 only acts
 on tagged objects, so it's idle on PC too). Merging this branch then leaves PC rendering as on main.
+
+Release prep: the version name follows the PC release it matches (0.1.2: 0.1.1 predates rounds
+135-138). Release signing reads android/keystore.properties (gitignored; keystore.properties.example),
+as in the owner's other ports; without it assembleRelease is unsigned. The APK carries the license
+notices of everything built into it under assets/licenses/ (the Windows zip's list minus the DirectX
+shader compiler, plus SDL2). Clean-up: the owner's name out of STATUS.md, unused includes, the
+ubershaders-only switch (RT64 0007) removed.
 
