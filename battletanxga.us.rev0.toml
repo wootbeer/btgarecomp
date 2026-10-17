@@ -1472,9 +1472,22 @@ text = """
 # 1/30-second units, at 0x803A5948; object/camera motion scales by it. The
 # cooperative scheduler wakes the main thread at a slightly different moment
 # each frame, so that value wobbled even with perfectly even presentation,
-# making models jitter. Snap it to whole VIs (0.375 units each; the game's
-# value is 0.75 per 30 fps frame, as on hardware) -- src/game/frame_dt_fix.cpp.
+# making models jitter. Snap it to whole VIs (0.5 units each, 1.0 per 30 fps
+# frame, with round 138's clock-rate fix) -- src/game/frame_dt_fix.cpp.
 # (Round 88 replaced it with a miscounted VI-based 1.5; corrected in round 89.)
+# Round 138 (src/game/frame_dt_fix.cpp): game speed. The game's osInitialize
+# ends with osClockRate = osClockRate * 3 / 4 (62.5 MHz to 46.875 MHz, the
+# CPU count rate; 0x80105CE0-0x80105D10). The runtime replaces osInitialize
+# and skips that, and every game timer divides osGetTime() by osClockRate, so
+# the whole game ran at 3/4 speed. Redo it right after the boot function's
+# call (jal at 0x8009EDAC), before the game's threads start.
+[[patches.hook]]
+func = "func_8009ED9C"
+before_vram = 0x8009EDB4
+text = """
+    { extern void btga_init_clock_rate(uint8_t *rdram); btga_init_clock_rate(rdram); }
+"""
+
 [[patches.hook]]
 func = "func_800BF80C"
 before_vram = 0x800BFAC8
@@ -1650,7 +1663,8 @@ text = """
 """
 
 # Round 131 (src/game/frame_dt_fix.cpp): sites that use only the whole part
-# of the frame step (~0.75 at 30 fps, so 0) use the real fractional step.
+# of the frame step use the real fractional step (it was ~0.75 at 30 fps, so
+# 0, before round 138's clock-rate fix; now ~1.0, kept for host-clock wobble).
 # Shield-hit flash life:
 [[patches.hook]]
 func = "func_800F11D0"

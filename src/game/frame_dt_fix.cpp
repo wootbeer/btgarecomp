@@ -1,19 +1,25 @@
-// Rounds 88-89 (STATUS.md): frame-locked delta time.
+// Game speed and frame-locked delta time.
 //
 // func_800BF80C, the per-frame update, measures elapsed time with
-// osGetTime() since the previous frame, scales it by 30 / 1e6 and stores it
-// as a float at 0x803A5948; object/camera motion multiplies by it. On
-// hardware the CPU reaches that point at the same phase of every video
-// frame, so the value is steady. Here osGetTime() is the host clock and the
-// main thread wakes at slightly different moments, so it wobbles a little.
+// osGetTime() since the previous frame, converts CPU-count ticks to
+// microseconds by dividing by osClockRate (u64 at 0x80126E50), scales by
+// 30 / 1e6 and stores the result as a float at 0x803A5948; object/camera
+// motion multiplies by it. The frame-rate governor (func_80099FE8, the step
+// at 0x80219488) and other game timers divide by osClockRate too.
 //
-// Round 89 correction: round 88 assumed 1.0 per frame and substituted
-// VIs * 0.5 using a VI counter that turned out to tick ~3x per 30 fps frame
-// (func_800A1858 also runs off a non-VI message) -- feeding the game 1.5
-// where it expects 0.75. The game's own value is 0.75 per 30 fps frame on
-// hardware too: it divides CPU-count ticks (46.875 MHz) by the CPU clock
-// rate (62.5 MHz). One VI is therefore 0.375 units. The measured value was
-// already steady (0.72-0.77); snap it to whole VIs instead of replacing it.
+// Round 138: osClockRate starts at 62.5 MHz in the ROM, and the game's own
+// osInitialize (0x80105B10) ends with osClockRate = osClockRate * 3 / 4
+// (0x80105CE0-0x80105D10), giving 46.875 MHz, the CPU count rate. The
+// runtime replaces osInitialize and skipped that step, so every game timer
+// ran at 3/4 speed: a VI came out as 0.375 units instead of 0.5. (Rounds
+// 88-89 took 0.375 to be what hardware does; it wasn't.) btga_init_clock_rate
+// redoes the step right after the game calls osInitialize. Found in the
+// BattleTanx 1 port, which shares this library code.
+//
+// On hardware the CPU reaches the measuring point at the same phase of every
+// video frame, so the value is steady. Here osGetTime() is the host clock
+// and the main thread wakes at slightly different moments, so it wobbles a
+// little; btga_frame_dt snaps it to whole VIs.
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -23,7 +29,17 @@
 
 #include "recomp.h"
 
-static constexpr float kViUnits = 0.375f;
+static constexpr float kViUnits = 0.5f; // one VI in the game's 1/30 s units
+
+// Right after func_8009ED9C (the boot function) calls osInitialize
+// (0x8009EDB4), before the game's threads start: osClockRate *= 3 / 4.
+extern "C" void btga_init_clock_rate(uint8_t* rdram) {
+    constexpr gpr kOsClockRate = (gpr)(int32_t)0x80126E50; // u64
+    uint64_t rate = (uint64_t((uint32_t)MEM_W(0, kOsClockRate)) << 32) | (uint32_t)MEM_W(4, kOsClockRate);
+    rate = rate * 3 / 4;
+    MEM_W(0, kOsClockRate) = (int32_t)(rate >> 32);
+    MEM_W(4, kOsClockRate) = (int32_t)rate;
+}
 
 // Hooked right before `swc1 $f0, 0x5948($at)` in func_800BF80C (0x800BFAC8,
 // gameplay) and func_800BFAEC (0x800BFC80, intro / attract demo / credits).
@@ -38,19 +54,19 @@ extern "C" void btga_frame_dt(uint8_t*, recomp_context* ctx) {
 // The frame step at 0x80219488 (rounds 125, 131).
 //
 // func_80099FE8 (the frame-rate governor) stores the time since the previous
-// frame, measured with osGetTime(): about 0.75 per 30 fps frame (0.63-0.86
-// measured, round 130). A few sites use only its whole part, which is >= 1
-// on hardware, where gameplay ran slower (about 20 fps, step ~1.1), but 0 at
-// our 30 fps -- so they stall:
-//   - the shield-hit flash (update 0x800F11D0) never loses life and piles up
+// frame, measured with osGetTime(): about 1.0 per 30 fps frame with the
+// clock rate fixed (round 138; 0.75 before, which is why these sites
+// stalled). A few sites use only its whole part:
+//   - the shield-hit flash (update 0x800F11D0) loses (int)step of life
 //   - func_80087DF4 turns an angle by at most (int)step * 1024 per frame
 //   - func_80088030 pushes a deadline forward by (int)step per frame
-// Each is fixed below to use the real, fractional step -- proportional to
-// time, as the game intends, and within ~12% of hardware's truncated rate.
+// At a steady 1.0 that is what the game intends, but the host-clock wobble
+// (about +/-15%) would make (int)step drop to 0 on some frames. Each site
+// uses the real, fractional step instead -- the same on average, without
+// the dropped frames.
 //
-// (Round 125 instead snapped the step to whole VIs, assuming it was ~1.0 per
-// frame. At 0.75 that flipped it between 0.5 and 1.0 every other frame and
-// made motion visibly uneven -- reverted in round 131.)
+// (Round 125 snapped the step to whole VIs while it was 0.75, which flipped
+// it between 0.5 and 1.0 every other frame -- reverted in round 131.)
 //
 // Testing switch: BTGA_PACING_LOG=1 prints, every 150 gameplay frames, how
 // many VIs frames took and the host frame interval spread.
@@ -75,7 +91,7 @@ namespace {
 
     void log_pacing(float raw) {
         static PacingStats st;
-        float vis = std::round(raw / 0.375f);
+        float vis = std::round(raw / kViUnits);
         auto now = std::chrono::steady_clock::now();
         if (st.last.time_since_epoch().count() != 0) {
             double ms = std::chrono::duration<double, std::milli>(now - st.last).count();
@@ -144,10 +160,10 @@ extern "C" void btga_deadline_step(uint8_t* rdram, recomp_context* ctx) {
 //
 // func_800CF41C / func_800CF4E4 (Kills, players 1/2) and func_800CF5C8 /
 // func_800CF690 (Tanks Lost) each add (int)dt per frame until they reach the
-// real total. dt is ~0.375 per VI, so at 30 fps (2 VIs) (int)0.75 = 0: the
-// counts never move and the screen shows 0. On hardware the RDP is slower
-// and the screen runs at 3+ VIs per frame, where (int)dt >= 1. Count at
-// least 1 per frame while dt is positive.
+// real total. With the clock rate wrong (before round 138) dt was 0.75 per
+// 30 fps frame, (int)0.75 = 0, and the counts never moved. Now dt is 1.0 and
+// the game's own count works; this stays as a guard (count at least 1 per
+// frame while dt is positive).
 //
 // Hooked at each routine's join label before `addu $v0, $v0, $v1`
 // (0x800CF478, 0x800CF534, 0x800CF624, 0x800CF6E0), with the truncated

@@ -523,3 +523,11 @@ ubershader draws ([RT64 SLOW]).
 Also open: the sprite under the player's tank (its shadow?) jitters slightly now and then at Display
 rate; likely a shared matrix still matched automatically.
 
+Merged main (rounds 135-138) into this branch: the game ran at 3/4 speed everywhere (osClockRate
+step, a new hook: regenerate), the default controller mapping, RT64 0011-0015 from the BattleTanx 1
+port (distance limits on interpolation matching, VI rate from the latest factor, an exact projection
+on in-between frames, the camera interpolated as a camera -- the root of the chase-camera tank
+jitter worked around here with matrix IDs, which stay), and main's own copies of plume 0003/0004
+and ApplyLibPatches.cmake (identical). All RT64 patches 0001-0015 apply in order. Main's automatic
+N64Recomp rerun is skipped when cross-compiling (the N64Recomp it builds is an Android binary).
+

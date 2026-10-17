@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 134)
+## Overview (as of round 138)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -65,6 +65,126 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-17, round 138: the game ran at 3/4 speed (osClockRate never scaled)
+
+**Confirmed in game (owner, Windows):** plays well and is much smoother.
+
+Found in the BattleTanx 1 port (same libultra and runtime), confirmed here
+in this ROM:
+- Game timers convert osGetTime() ticks to time by dividing by
+  `osClockRate`, a u64 at `0x80126E50` (read in func_800BF80C at
+  0x800BF99C, the frame-rate governor func_80099FE8, and others).
+- It is 62,500,000 in the ROM. The game's own `osInitialize` (0x80105B10)
+  ends with `osClockRate = osClockRate * 3 / 4` (`__ll_mul` by 3 at
+  0x80105CE0, `__ull_div` by 4 at 0x80105CFC, stored at 0x80105D10),
+  giving 46,875,000, the CPU count rate that osGetTime() runs at.
+- The runtime replaces `osInitialize` (N64Recomp's built-in ignored list)
+  and never touches the game's copy, so it stayed at 62.5 MHz: one VI came
+  out as 0.375 units instead of 0.5, and every timer ran at 3/4 speed.
+
+Round 89's note that 0.75 per 30 fps frame "matches hardware" was this
+mistake. It also explains rounds 125-131 and 127: the shield flash, turn
+limit, deadline and score-screen counts used `(int)step`, which is 1 at the
+intended 1.0 per frame and was 0 at 0.75.
+
+**Fix:** a hook in the boot function `func_8009ED9C` right after its
+`osInitialize` call (`before_vram = 0x8009EDB4`) calls
+`btga_init_clock_rate`, which applies the same `* 3 / 4`. The frame-step
+snapping (`kViUnits`) is now 0.5 per VI. Round 131's fractional-step fixes
+and round 127's score-screen guard stay: at a steady 1.0 they match the
+game's own code, and they cover host-clock wobble (a step just under 1.0
+would truncate to 0 for a frame).
+
+Verified: regenerated (by round 136's auto-regeneration), the hook lands
+right after `osInitialize_recomp`, and the Linux build compiles. Not yet
+played: everything in game (driving, turning, firing rate, timers,
+cutscene and intro pacing) should be about 4/3 faster than before.
+
+## 2026-10-15, round 137: controller default: Z on the right trigger, R on the left
+
+Owner's request: the main gun (N64 Z) on the right trigger by default.
+RecompFrontend's defaults put Z on the left trigger and R on the right;
+`src/main/main.cpp` now swaps them at startup through the library's own
+`recompinput::set_default_mapping_for_controller` (must run before the
+defaults are first read, so it's the first thing in `main`). No library
+patch. Players' saved bindings are kept: this applies to a new setup or
+Reset to Defaults. Keyboard defaults unchanged. Builds and starts here.
+
+## 2026-10-15, round 136: interpolation fixes from the BattleTanx 1 port; regenerate on config changes
+
+The BattleTanx 1 port (same engine, same RT64 commit `43373749`) wrote up
+fixes that apply here (`docs/GA_PORT_NOTES.md` in wootbeer/btrecomp). Its
+RT64 `0001` is byte-identical to ours.
+
+**RT64 patches** (`lib-patches/rt64/`), all for RT64's frame interpolation
+(Refresh Rate above the game's 30 fps; no effect at Original). Numbered
+0011-0015 so they sort after the Android branch's 0002-0010 and can't
+collide with them on a merge; same relative order as in BT1:
+- `0011-auto-match-max-distance`: automatic matching no longer pairs
+  look-alike objects more than 256 units apart (one entering and one
+  leaving the draw range flew across the screen on in-between frames).
+- `0012-vi-rate-from-latest-factor`: the game's rate comes from the latest
+  VI count, so mixed 2/3-VI frames (loads, busy scenes, the intro) no
+  longer switch interpolation off and on.
+- `0013-id-match-max-distance`: the same 256-unit limit for matching by
+  ID. No effect here yet (no interpolation IDs on this branch); kept so the
+  set matches the one BT1 tested.
+- `0014-exact-projection-for-estimated-view`: in-between frames now use a
+  projection that gives the game's exact view-projection, as round 122's
+  `0001` already does for real frames, so effects drawn against geometry
+  stop failing the depth test between frames (BT1's explosion flashing).
+- `0015-camera-view-interpolation`: the camera is interpolated as a camera
+  (rotation slerped, position lerped) instead of entry by entry, which
+  threw a chase-camera's tank sideways on in-between frames during turns.
+  Falls back to the old blend if the matrix doesn't decompose.
+
+Checked against what was already fixed: `0001` still applies first and its
+real-frame path is unchanged (`0014` only replaces the estimate used on
+in-between frames). Round 131's smoothness fix was in game timing
+(`frame_dt_fix.cpp`), untouched.
+
+**Build:** `CMakeLists.txt` now reruns N64Recomp (target
+`RecompiledFuncsGen`) when `battletanxga.us.rev0.toml` or the symbol file
+changes, once `RecompiledFuncs/` exists and the ROM is in place. The
+regenerated files are BYPRODUCTS, so they recompile in the same build; the
+executable also waits for it, since `register_overlays.cpp` includes
+`recomp_overlays.inl`. The first build after this regenerates once.
+
+Verified: all RT64 patches apply in order, a no-change rebuild does
+nothing, touching the TOML regenerates and relinks, and the Linux build
+compiles. Interpolation not yet checked in game.
+
+Not taken from BT1: its interpolation-ID lessons (they apply to the
+Android branch's `interpolation_ids.cpp`, not on this branch).
+
+## 2026-10-12, round 135: widescreen HUD edges on Vulkan (Linux, Steam Deck)
+
+Found while porting BattleTanx 1 and on the Android branch
+(`claude/modest-ramanujan-s0wyga`): with Vulkan, the parts of the HUD that
+the widescreen anchoring moves past the left edge could vanish. Round 104
+widens the scissor for anchored draws, so some scissor and fill-rectangle
+coordinates start left of the image (negative x). Direct3D 12 (Windows)
+clips such rectangles; Vulkan requires them inside the target, and a
+driver may drop whatever is drawn with them. The Linux / Steam Deck build
+uses Vulkan, so its widescreen HUD was likely broken there.
+
+Fix: the Android branch's two plume patches (plume is RT64's graphics
+layer, a submodule inside rt64), clipping the rectangles the way D3D12
+does:
+- `lib-patches/plume/0003-vulkan-clip-negative-scissors.patch`
+- `lib-patches/plume/0004-vulkan-clip-clear-rects.patch`
+
+Kept under the same names as on the Android branch so a later merge doesn't
+duplicate them. Patching a submodule nested inside another needed the
+Android branch's `cmake/ApplyLibPatches.cmake` (taken as is): it takes the
+submodule folder, records the applied set in a stamp and resets and
+re-applies when that set changes. `CMakeLists.txt` now also applies
+`btga_apply_lib_patches(plume lib/rt64/src/contrib/plume)`.
+
+Verified: both patches apply, a second configure applies nothing, and the
+Linux build compiles. Windows is unaffected (Direct3D 12 by default). Not
+yet checked on a Steam Deck.
 
 ## 2026-10-06, round 134: Proton crash report; better crash logs; Linux package
 
