@@ -78,3 +78,6 @@ assets/unk_*.bin
 build-release/
 dist/
 build-release-linux/
+
+# Extra build folders (e.g. build-pc beside the Android build)
+build-*/
