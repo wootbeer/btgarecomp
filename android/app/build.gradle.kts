@@ -96,7 +96,7 @@ android {
     // copies them to the app's storage on first launch.
     sourceSets {
         getByName("main") {
-            assets.srcDir("../../assets")
+            assets.directories.add("../../assets")
         }
     }
 
@@ -114,7 +114,7 @@ android {
     if (vulkanValidation) {
         sourceSets {
             getByName("debug") {
-                jniLibs.srcDir(validationLayerDir.get().asFile)
+                jniLibs.directories.add(validationLayerDir.get().asFile.path)
             }
         }
         // The GPU debug-layer loader looks for the layer as a file in the app's library folder.
@@ -266,5 +266,18 @@ androidComponents {
             apkDir.set(variant.artifacts.get(SingleArtifact.APK))
         }
         tasks.matching { it.name == "assemble$name" }.configureEach { dependsOn(check) }
+
+        // A release APK is also copied to the repo's dist/ folder, named like the Windows zip
+        // (tools/package-windows.ps1): BattleTanxGARecompiled-<version>-android.apk.
+        if (variant.buildType == "release") {
+            val version = variant.outputs.first().versionName
+            val dist = tasks.register<Copy>("dist$name") {
+                dependsOn(check)
+                from(variant.artifacts.get(SingleArtifact.APK)) { include("*.apk") }
+                into(rootProject.layout.projectDirectory.dir("../dist"))
+                rename { "BattleTanxGARecompiled-${version.get()}-android.apk" }
+            }
+            tasks.matching { it.name == "assemble$name" }.configureEach { finalizedBy(dist) }
+        }
     }
 }
