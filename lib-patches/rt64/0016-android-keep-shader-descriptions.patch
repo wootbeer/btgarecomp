@@ -32,10 +32,10 @@
 +#include <cstring>
 +#include <vector>
 +
- #include <atomic>
- #include <chrono>
- #include <cstdio>
-@@ -123,6 +127,63 @@
+ #include "common/rt64_thread.h"
+ 
+ #define ENABLE_OPTIMIZED_SHADER_GENERATION
+@@ -109,6 +113,63 @@
          if (shaderFormat == RenderShaderFormat::SPIRV) {
              optimizerCacheSPIRV.initialize();
          }
@@ -99,7 +99,7 @@
      }
  
      void RasterShaderCache::submit(const ShaderDescription &desc) {
-@@ -139,6 +200,16 @@
+@@ -125,6 +186,16 @@
              found = true;
          }
  

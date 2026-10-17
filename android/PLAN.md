@@ -517,8 +517,7 @@ Lag spikes in busy scenes (many explosions, buildings hit), the game then skippi
 not every time (owner, Retroid). Suspects: RT64 compiles each new specialised shader in the
 background and draws with the ubershader meanwhile (slow on Adreno; no shader cache kept between
 runs), and `lib-patches/rt64/0008` draws every dithered-alpha (smoke) call with the ubershader.
-Temporary `lib-patches/rt64/0010` logs shader compiles ([RT64 SHADER]) and slow frames with their
-ubershader draws ([RT64 SLOW]).
+A temporary RT64 patch (0010, since removed) logged shader compiles and slow frames.
 
 The sprite under the player's tank (its shadow) jittered slightly at Display rate: gone after the
 merge of main's RT64 camera interpolation (owner). It still flickers every few seconds, rarely
@@ -531,7 +530,12 @@ shader was compiled and the ubershader drew in its place (up to 917 draws in one
 session. `lib-patches/rt64/0016` (Android): every shader description met is appended to
 rt64-shader-descriptions.bin in the app's storage (header: magic + description size; another layout
 starts the file afresh), and at startup those are queued for the compilation threads. The first run
-after install still stutters on first use; later runs shouldn't. To test (with the 0010 log).
+after install still stutters on first use; later runs shouldn't. Owner's two sessions: the second
+loaded 76 descriptions, compiled them all within ~0.5 s of startup, and during play compiled none and
+drew nothing with the ubershader; its only spikes (6, ~160 ms, not shader-related) fell in the first
+seconds (startup), and each session's earlier log had a similar startup cluster. (An earlier read of
+the first log counted every spike as shader-caused, a field mistake: 8 of 11 were.) The temporary
+0010 log is removed.
 
 Merged main (rounds 135-138) into this branch: the game ran at 3/4 speed everywhere (osClockRate
 step, a new hook: regenerate), the default controller mapping, RT64 0011-0015 from the BattleTanx 1
