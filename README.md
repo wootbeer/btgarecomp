@@ -19,16 +19,23 @@ You need your own data files BattleTanx - Global Assault (USA).n64
 SHA-1: 
 08A9037488C47D1E26CE6F709955639E9F0F0BB8  
 Place in an accessible folder onto your device.  
+On Android the app asks for it on first start and keeps its own copy. Use Change ROM on the launcher to pick a different one.  
   
-Add a blank portable.txt in the application's folder to make portable if you want to save settings locally.  
+PC: add a blank portable.txt in the application's folder to make portable if you want to save settings locally.  
+  
+## Android  
+Download the APK from Releases and install it (allow installs from unknown apps).  
+Needs Android 9 or newer, 64-bit, with Vulkan.  
+Touch controls show during a match and hide while a gamepad is in use; touch the screen to bring them back. Change their size, opacity, and joystick or D-pad in Settings > Touch Controls.  
   
 ## Building  
-See [BUILDING.md](BUILDING.md).
+See [BUILDING.md](BUILDING.md). For Android, see [android/README.md](android/README.md).
   
 ## Issues and Limitations
 
 Known:  
 - Super beta status. Tested on Windows 10.  
+- Android: tested on Retroid Pocket 6.  
   
 Else:  
 - Please see the “Issues” section in GitHub.  
@@ -39,6 +46,8 @@ Else:
 - [RT64](https://github.com/rt64/rt64) by Dario and contributors, the renderer
 - [RecompFrontend](https://github.com/N64Recomp/RecompFrontend) by the N64Recomp
   contributors, the launcher and input layer
+- [SDL](https://www.libsdl.org) for the Android app's window and input
+- Descore, my Android shell, for the touch controls
 - [splat](https://github.com/ethteck/splat) and its N64 tooling
   (`spimdisasm`, `rabbitizer`), used for the ROM-splitting work in
   `tools/` and logged in STATUS.md
