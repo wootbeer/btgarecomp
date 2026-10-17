@@ -524,8 +524,12 @@ The sprite under the player's tank (its shadow) jittered slightly at Display rat
 merge of main's RT64 camera interpolation (owner). It still flickers every few seconds, rarely
 ("not very bothersome"); not known yet whether at Original too (matching vs. depth).
 
-Owner after the merge: lag spikes "way better" (main's 3/4-speed fix likely; the 0010 log not
-read yet).
+Owner after the merge: lag spikes "way better" (main's 3/4-speed fix likely). The 0010 log over
+~70 s of play: frames a steady ~33 ms; 11 spikes of 60-176 ms, every one while a new specialised
+shader was compiled and the ubershader drew in its place (up to 917 draws in one frame); none from
+0008's dithered draws; 75 compiles of ~24 ms (41 max). So the rest is first use of an effect in a
+session. A fix would be an RT64 patch that remembers the shader descriptions seen and compiles them
+in the background at startup (RT64 here keeps no shader cache); offered, not started.
 
 Merged main (rounds 135-138) into this branch: the game ran at 3/4 speed everywhere (osClockRate
 step, a new hook: regenerate), the default controller mapping, RT64 0011-0015 from the BattleTanx 1
