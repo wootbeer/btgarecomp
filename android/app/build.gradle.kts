@@ -267,17 +267,18 @@ androidComponents {
         }
         tasks.matching { it.name == "assemble$name" }.configureEach { dependsOn(check) }
 
-        // A release APK is also copied to the repo's dist/ folder, named like the Windows zip
-        // (tools/package-windows.ps1): BattleTanxGARecompiled-<version>-android.apk.
-        if (variant.buildType == "release") {
-            val version = variant.outputs.first().versionName
-            val dist = tasks.register<Copy>("dist$name") {
-                dependsOn(check)
-                from(variant.artifacts.get(SingleArtifact.APK)) { include("*.apk") }
-                into(rootProject.layout.projectDirectory.dir("../dist"))
-                rename { "BattleTanxGARecompiled-${version.get()}-android.apk" }
+        // The APK is named like the Windows zip (tools/package-windows.ps1):
+        // BattleTanxGARecompiled-<version>-android.apk (debug builds: -android-debug.apk), wherever it
+        // is built from (Android Studio or gradlew). VariantOutputImpl is AGP's own output type; the
+        // public API has no file name.
+        variant.outputs.forEach { output ->
+            val suffix = if (variant.buildType == "release") "" else "-${variant.buildType}"
+            val impl = output as? com.android.build.api.variant.impl.VariantOutputImpl
+            if (impl != null) {
+                impl.outputFileName.set(output.versionName.map { "BattleTanxGARecompiled-$it-android$suffix.apk" })
+            } else {
+                logger.warn("APK file name left as AGP's default: its output type changed (${output.javaClass.name})")
             }
-            tasks.matching { it.name == "assemble$name" }.configureEach { finalizedBy(dist) }
         }
     }
 }
