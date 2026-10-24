@@ -9,22 +9,7 @@
  #include "rt64_workload_queue.h"
  
  #include "xxHash/xxh3.h"
-@@ -262,7 +264,14 @@
-         return matchResult;
-     }
- 
-+    // BattleTanx recomp: draw pairs checked and look-alike groups left unmatched by the last match()
-+    // (read by the testing log, BTGA_RT64_PERF_LOG).
-+    uint64_t btgaMatchPairs = 0;
-+    uint64_t btgaMatchGroupsSkipped = 0;
-+
-     void GameFrame::match(RenderWorker *worker, WorkloadQueue &workloadQueue, const GameFrame &prevFrame, BufferUploader *velocityUploader, bool &velocityUploaderUsed, bool &tileInterpolationUsed, bool &lookAtInterpolationUsed) {
-+        btgaMatchPairs = 0;
-+        btgaMatchGroupsSkipped = 0;
-         tileInterpolationUsed = false;
-         lookAtInterpolationUsed = false;
-         matched = true;
-@@ -541,8 +550,42 @@
+@@ -541,8 +543,38 @@
          lookAtCheckSet.clear();
  
          // Traverse the map and fill the set with all the combinations of transforms to check.
@@ -51,12 +36,8 @@
 +                const size_t prevCount = size_t(std::distance(prevRange.first, prevRange.second));
 +                const size_t groupPairs = curCount * prevCount;
 +                skipGroup = (groupPairs > MaxGroupPairs) || ((scenePairs + groupPairs) > MaxScenePairs);
-+                if (skipGroup) {
-+                    btgaMatchGroupsSkipped++;
-+                }
-+                else {
++                if (!skipGroup) {
 +                    scenePairs += groupPairs;
-+                    btgaMatchPairs += groupPairs;
 +                }
 +            }
 +

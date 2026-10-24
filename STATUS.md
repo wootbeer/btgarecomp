@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 147)
+## Overview (as of round 148)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,17 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 148: round 147 confirmed; testing log removed
+
+**Round 147 confirmed (owner, Windows, the intro three times):** no more
+slowdown. The log never shows the game waiting for a workload slot (0 ms
+throughout); the worst setup+matching is 15 ms (was 40-47 ms), with up to
+30 look-alike groups a second left unmatched in the battle (explosion
+sprites, now at the game's own rate) and at most about 4,600 pairs checked.
+
+Cleanup: the testing log patch (`0022-perf-log.patch`) is removed, and so
+are the counters it read in `0021`. `BTGA_PACING_LOG` stays.
 
 ## 2026-10-24, round 147: limit RT64's matching work in heavy scenes
 
