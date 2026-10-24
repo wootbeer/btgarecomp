@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 141)
+## Overview (as of round 142)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -41,7 +41,8 @@ and higher framerates. A first beta (0.1.0) is public.
 - **Rendering** (rounds 94, 97-108, 122). The game's off-by-one screen-edge
   scissor, widescreen culling, HUD anchoring and cutscene letterboxing, the
   cutscene camera's zero far plane, and distant flicker in Expand fixed in
-  RT64 itself (`lib-patches/rt64/`). Rounds 109-121 are investigations that
+  RT64 itself (`lib-patches/rt64/`). Optional screen filters and bloom
+  (round 142). Rounds 109-121 are investigations that
   were reverted (fog, draw pools, display-list buffer), kept for the record.
 - **Frame timing** (rounds 87-89, 106, 125, 127, 130-131). The game times
   motion with the clock; its frame time is snapped to whole VIs. The
@@ -68,6 +69,30 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 142: Screen Filter and Bloom (from the Sin and Punishment port)
+
+Owner's request: the Screen Filter (CRT, Scanlines, LCD) and Bloom options
+from snprecomp, also in the Turok Rage Wars port.
+
+- `lib-patches/rt64/0018-screen-filters.patch` and `0019-bloom.patch`,
+  copied unchanged from snprecomp (the Turok copies are identical). Same
+  RT64 commit as ours, and they apply on top of our 0001 and 0011-0015
+  (snprecomp's 0016/0017 aren't needed). The CRT filter is based on Timothy
+  Lottes' CRT shader and the LCD filter on LCD3x by Gigaherz, both public
+  domain.
+- Screen Filter and Bloom at the end of the Graphics tab
+  (`btga::config::add_graphics_options`, src/main/game_config.cpp). Off by
+  default, to keep the game's look unless chosen. They're passed to
+  `RT64::setScreenFilter` / `setBloom` from the options' change callbacks
+  (which also run when the settings load, and when an unapplied change on
+  the Graphics tab is cancelled).
+- `cmake/ApplyLibPatches.cmake` now also runs `git clean -fdq` after the
+  reset, as snprecomp's does: the bloom patch adds new files, and on the
+  next reapply they would block `git apply` ("already exists").
+
+Verified here: both options show and save; CRT and Bloom High show in game
+(shadow mask and scanlines on the title screen, glow on the bright parts).
 
 ## 2026-10-24, round 141: GameShark and Action Replay codes on their own tab
 

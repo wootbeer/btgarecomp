@@ -1,8 +1,10 @@
 // Game-specific options on the General tab: which pak each controller holds,
-// and local multiplayer. See include/btga_config.h.
+// and local multiplayer; and the screen filter and bloom on the Graphics tab.
+// See include/btga_config.h.
 #include "btga_config.h"
 
 #include "recompui/config.h"
+#include "rt64_screen_filter.h"
 
 namespace {
     using Accessory = btga::config::Accessory;
@@ -56,6 +58,46 @@ void btga::config::add_general_options(recomp::config::Config& general) {
         "<b>Assign players</b> to choose each player's controller or keyboard.",
         false
     );
+}
+
+void btga::config::add_graphics_options(recomp::config::Config& graphics) {
+    const std::vector<recomp::config::ConfigOptionEnumOption> screen_filter_options = {
+        {RT64::ScreenFilter::None, "None", "None"},
+        {RT64::ScreenFilter::CRT, "CRT", "CRT"},
+        {RT64::ScreenFilter::Scanlines, "Scanlines", "Scanlines"},
+        {RT64::ScreenFilter::LCD, "LCD", "LCD"},
+    };
+    const std::vector<recomp::config::ConfigOptionEnumOption> bloom_options = {
+        {RT64::Bloom::Off, "Off", "Off"},
+        {RT64::Bloom::Low, "Low", "Low"},
+        {RT64::Bloom::High, "High", "High"},
+    };
+
+    graphics.add_enum_option(
+        "screen_filter",
+        "Screen Filter",
+        "Makes the picture look like it does on a screen of the time: "
+        "<b>CRT</b> a TV, <b>Scanlines</b> just the TV's lines, <b>LCD</b> a handheld's pixel grid.",
+        screen_filter_options,
+        RT64::ScreenFilter::None
+    );
+    graphics.add_enum_option(
+        "bloom",
+        "Bloom",
+        "A glow around bright, strongly coloured parts of the picture, like fire, explosions and energy shots.",
+        bloom_options,
+        RT64::Bloom::Off
+    );
+
+    // Also called when the saved settings load.
+    graphics.add_option_change_callback("screen_filter",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            RT64::setScreenFilter(static_cast<RT64::ScreenFilter>(std::get<uint32_t>(value)));
+        });
+    graphics.add_option_change_callback("bloom",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            RT64::setBloom(static_cast<RT64::Bloom>(std::get<uint32_t>(value)));
+        });
 }
 
 btga::config::Accessory btga::config::get_accessory(int port) {

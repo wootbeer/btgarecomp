@@ -69,6 +69,14 @@ function(btga_apply_lib_patches submodule)
     if (NOT result EQUAL 0)
         message(FATAL_ERROR "Couldn't reset ${dir} to apply its patches:\n${error}")
     endif()
+    # Files the patches added are untracked; remove them, or they can't be added again.
+    execute_process(
+        COMMAND ${git} clean -fdq
+        WORKING_DIRECTORY "${dir}"
+        RESULT_VARIABLE result ERROR_VARIABLE error)
+    if (NOT result EQUAL 0)
+        message(FATAL_ERROR "Couldn't clean ${dir} to apply its patches:\n${error}")
+    endif()
     foreach(patch IN LISTS patches)
         execute_process(
             COMMAND ${git} apply --ignore-whitespace "${patch}"

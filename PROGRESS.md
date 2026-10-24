@@ -17,7 +17,8 @@ and leave the game's own behaviour, look and balance alone.
   hand wherever a merged or mis-sized function turned up.
 - **Graphics** through RT64: higher resolutions, MSAA, higher framerates
   (interpolated) and widescreen (Expand) with the gameplay HUD anchored to
-  the screen edges and letterboxed cutscenes. Includes a fix in RT64 itself
+  the screen edges and letterboxed cutscenes. Optional screen filters (CRT,
+  Scanlines, LCD) and bloom. Includes a fix in RT64 itself
   for distant flicker in Expand (`lib-patches/rt64/`).
 - **Audio**: the game's RSP audio microcode, recompiled from the ROM
   (`n_aspMain.us.rev0.toml`), with the volume setting and a latency cap.
