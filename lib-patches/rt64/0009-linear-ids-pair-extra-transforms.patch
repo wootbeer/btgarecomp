@@ -1,0 +1,28 @@
+--- a/src/hle/rt64_game_frame.cpp
++++ b/src/hle/rt64_game_frame.cpp
+@@ -309,9 +309,22 @@
+                     prevIt++;
+                 }
+                 else {
+-                    matchTransform(curWorkload, prevWorkload, curWorkloadMap, prevWorkloadMap, curIt->second, prevIt->second, modifiedBuffers);
+-                    curIt++;
+-                    prevIt++;
++                    // BattleTanx recomp: when an ID has more transforms than last frame, pair the extra ones
++                    // with the ID's last transform from last frame instead of none. An ID's transforms are
++                    // one object's, and an unpaired one snaps to the new frame while the rest interpolate
++                    // (a tank's decal, which shares the hull's matrix, flashed when another of the tank's
++                    // draws came back).
++                    const uint32_t id = curIt->first;
++                    uint32_t lastPrevIndex = prevIt->second;
++                    while ((curIt != curWorkload.transformIdMap.end()) && (curIt->first == id)) {
++                        if ((prevIt != prevWorkload.transformIdMap.end()) && (prevIt->first == id)) {
++                            lastPrevIndex = prevIt->second;
++                            prevIt++;
++                        }
++
++                        matchTransform(curWorkload, prevWorkload, curWorkloadMap, prevWorkloadMap, curIt->second, lastPrevIndex, modifiedBuffers);
++                        curIt++;
++                    }
+                 }
+             }
+ 

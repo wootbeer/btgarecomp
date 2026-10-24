@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 144)
+## Overview (as of round 145)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,46 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 145: interpolation IDs from the Android branch, now on PC
+
+**Round 144 results (owner, Windows):** at Framerate Original everything is
+fine, so it's RT64's interpolation. None of the switches fixed it:
+`NO_MATCH_LIMIT` made the jitter much worse, on models too, with a lot of
+slowdown; `NO_CAMERA_LERP` and `NO_EXACT_PROJ` no change (maybe slightly
+less slowdown); `NO_LATEST_FACTOR` no fix, maybe worse models. So round
+136's patches help rather than cause it, and turning the distance limit off
+showing more wrong pairs says the problem is RT64's automatic matching
+itself: with no IDs it pairs each matrix with one from last frame by
+position and orientation, among draws that hash alike (combiner, other
+mode, geometry mode, triangle count), and the tanks and their decals all
+look alike.
+
+The Android branch already solved this for the same game
+(`src/game/interpolation_ids.cpp`, Android-only there because it hadn't
+shown on PC; BT1 got the same approach from it): each queued model's Mtx is
+traced to the float matrix or object it came from, and the queue walker puts
+a gEXMatrixGroup with that address as ID (decomposed, always interpolated,
+linear ordering) ahead of every matrix load, popped at its exit. Tanks,
+built in two shared scratch matrices by `func_800AE184`, get their tank
+object's address. Each bucket's list starts with a matrix load
+(`btga_interp_bucket_start`), so the player tank's decal (its own bucket,
+the hull's Mtx) loads the same way every frame, and RT64 patch `0009` pairs
+an ID's extra transforms with its last one, so the decal never goes
+unpaired. Both of those are written for exactly this decal flash.
+
+Ported as is and enabled on PC: the file (the `__ANDROID__` switch
+removed), the four hooks in the toml, the frame-clear call in
+`widescreen.cpp`, and `lib-patches/rt64/0009-linear-ids-pair-extra-transforms.patch`
+(the same file name and contents as on the Android branch, so a merge
+doesn't conflict). Not ported: the Android branch's intro nuke-flash rect
+aspect change (Android-only there too). Round 144's switches patch
+(`0020`) is removed.
+
+Verified here: builds, all four hooks land, RT64 applies `0009` with our
+other patches; the intro, a story cutscene and mission 1 run, and in 16
+frames of driving and turning the decal stays on. The sandbox runs at about
+11 fps with software Vulkan, so the owner's test decides.
 
 ## 2026-10-24, round 144: round 143 reverted; switches to find the decal flicker
 
