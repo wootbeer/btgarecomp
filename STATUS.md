@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 143)
+## Overview (as of round 142)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -44,7 +44,7 @@ and higher framerates. A first beta (0.1.0) is public.
   RT64 itself (`lib-patches/rt64/`). Optional screen filters and bloom
   (round 142). Rounds 109-121 are investigations that
   were reverted (fog, draw pools, display-list buffer), kept for the record.
-- **Frame timing** (rounds 87-89, 106, 125, 127, 130-131, 138, 143). The game times
+- **Frame timing** (rounds 87-89, 106, 125, 127, 130-131). The game times
   motion with the clock; its frame time is snapped to whole VIs. The
   per-frame step is about 0.75 at 30 fps, where hardware ran about 20 fps
   (step ~1.1), so code that truncates it to an integer got 0. Those sites
@@ -69,41 +69,6 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
-
-## 2026-10-24, round 143: snap the frame step too (model jitter, tank logo decal flicker)
-
-Owner report with a clip: the logo decal on the back of the player's tank
-flashes, and models jitter slightly, "again recently". In the clip (60 fps
-capture) the decal is missing in 8 of 24 consecutive frames while driving,
-including runs of 6 frames, so it isn't just interpolated frames; the tank
-body around it is drawn every frame. RT64 draws a ZMODE_DEC pixel only if
-its depth is within a small tolerance of the depth already there
-(RasterPS.hlsl), so the decal and the body are ending up at different
-depths.
-
-The game has two per-frame time values: the delta time at 0x803A5948
-(snapped to whole VIs since round 89, the round that first cured this
-flicker) and the frame-rate governor's step at 0x80219488, left as
-measured since round 131. About 50 functions move things by the step
-(tank physics in func_8008C5D8, shots and effects in 0x800D-0x800F), 20
-read the delta time (camera, cutscenes, menus). The owner's pacing logs
-show the step varying by about +/-12% from frame to frame at a steady
-30 fps (0.63-0.84 before round 138, so about 0.88-1.12 now), from the host
-clock. Objects therefore move unevenly while frames are shown at an even
-2 VIs (jitter), and things placed with the two values drift apart.
-
-Fix: `btga_frame_step` snaps the step to whole VIs, the same as
-`btga_frame_dt`. Round 125 did this and round 131 reverted it, because at
-the wrong clock rate a frame was 0.75 with a VI taken as 0.5, so the
-snapped value flipped between 0.5 and 1.0. Since round 138 a 30 fps frame
-is exactly 1.0, as on the N64. The pacing log still reports the raw step.
-Round 131's fractional-step fixes now always see whole steps and do what
-the game's own code would.
-
-Verified here: builds and the hook lands right after the store. Can't be
-judged in this sandbox (software Vulkan runs at about 11 fps). For the
-owner: whether the decal flicker and jitter are gone; `BTGA_PACING_LOG=1`
-shows the raw step if not.
 
 ## 2026-10-24, round 142: Screen Filter and Bloom (from the Sin and Punishment port)
 
