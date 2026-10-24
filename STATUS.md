@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 150)
+## Overview (as of round 151)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.4).
+and higher framerates. Betas are public (0.1.0 to 0.1.5).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,11 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 151: 0.1.5
+
+Version 0.1.5, with round 150's bigger heap (the crash at the end of
+missions with All Tanks All Levels on). Nothing else changed since 0.1.4.
 
 ## 2026-10-24, round 150: a bigger heap (crash after missions with All Tanks)
 

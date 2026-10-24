@@ -75,7 +75,7 @@ namespace btga {
 
 static const std::string program_name = "BattleTanx: Global Assault Recompiled";
 static const std::u8string program_id = u8"btgarecomp";
-static const std::string version_string = "0.1.4";
+static const std::string version_string = "0.1.5";
 
 template <typename... Ts>
 [[noreturn]] static void exit_error(const char* fmt, Ts... args) {
