@@ -1,4 +1,4 @@
-// What the Cheats tab does in the game (include/btga_cheats.h).
+// What the Cheats and Hacks tabs do in the game (include/btga_cheats.h).
 //
 // Stock codes are the game's own: the code screen (func_800D0070 matches the
 // text against the table at 0x80121C3C) flips a flag, and the toggle sets the

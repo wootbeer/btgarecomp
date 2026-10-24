@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 140)
+## Overview (as of round 141)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -50,9 +50,9 @@ and higher framerates. A first beta (0.1.0) is public.
   are fixed proportionally (`src/game/frame_dt_fix.cpp`,
   `tools/scan_frame_time_truncation.py`). Round 125's step snap was wrong
   and was reverted in round 131.
-- **Cheats** (round 139). A Cheats tab with the game's own codes as
-  toggles and the community GameShark / Action Replay codes; the ones that
-  change code are hooks (`src/game/cheats.cpp`).
+- **Cheats** (rounds 139-141). A Cheats tab with the game's own codes as
+  toggles, and a Hacks tab with the community GameShark / Action Replay
+  codes; the ones that change code are hooks (`src/game/cheats.cpp`).
 - **Crash reporting and release** (rounds 126, 128, 133). `crash_log.txt`,
   and Windows packaging (`tools/package-windows.ps1`) with license notices
   and no build-machine paths.
@@ -68,6 +68,15 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 141: GameShark and Action Replay codes on their own tab
+
+Owner: better after round 140 but still a little slow. The stock codes stay
+on the Cheats tab (14 options, now without a heading) and the GameShark and
+Action Replay codes move to a new Hacks tab (51 options, with the two
+headings), so each tab is shorter to lay out. The Hacks settings are saved
+in hacks.json; GameShark/AR choices made in round 139-140 builds (saved in
+cheats.json) don't carry over.
 
 ## 2026-10-24, round 140: the Cheats tab was laggy
 

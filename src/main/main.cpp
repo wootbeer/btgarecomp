@@ -461,7 +461,7 @@ int main(int argc, char** argv) {
     recompui::config::create_graphics_tab();
     recompui::config::create_controls_tab();
     recompui::config::create_sound_tab();
-    btga::cheats::add_cheats_tab();
+    btga::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
     recompui::config::finalize();
 

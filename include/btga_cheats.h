@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-// The Cheats tab (src/main/cheats_config.cpp) and what each cheat does in the
-// game (src/game/cheats.cpp).
+// The Cheats and Hacks tabs (src/main/cheats_config.cpp) and what each cheat
+// does in the game (src/game/cheats.cpp).
 namespace btga::cheats {
     enum class Section {
         Stock,       // the game's own codes
@@ -36,9 +36,9 @@ namespace btga::cheats {
     // otherwise. Applied on the game's next frame.
     void set_value(size_t index, uint32_t value);
 
-    // Adds the Cheats tab. Call between the other create_*_tab() calls and
-    // recompui::config::finalize().
-    void add_cheats_tab();
+    // Adds the Cheats and Hacks tabs. Call between the other create_*_tab()
+    // calls and recompui::config::finalize().
+    void add_cheats_tabs();
 }
 
 #endif
