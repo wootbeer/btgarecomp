@@ -16,7 +16,8 @@ and leave the game's own behaviour, look and balance alone.
   (`BattleTanxGASyms/battletanxga.us.rev0.syms.toml`) has been corrected by
   hand wherever a merged or mis-sized function turned up.
 - **Graphics** through RT64: higher resolutions, MSAA, higher framerates
-  (interpolated) and widescreen (Expand) with the gameplay HUD anchored to
+  (interpolated, with matrix IDs so RT64 pairs the right models between
+  frames) and widescreen (Expand) with the gameplay HUD anchored to
   the screen edges and letterboxed cutscenes. Optional screen filters (CRT,
   Scanlines, LCD) and bloom. Includes a fix in RT64 itself
   for distant flicker in Expand (`lib-patches/rt64/`).
