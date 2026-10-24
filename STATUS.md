@@ -72,6 +72,10 @@ original 2026-09-18 plan and are long out of date.
 
 ## 2026-10-24, round 150: a bigger heap (crash after missions with All Tanks)
 
+**Cause confirmed (player, Discord, 0.1.4):** with All Tanks off, both
+missions that crashed finished without problems. The fix itself still
+needs a run through those missions with All Tanks on.
+
 **Report (Discord, 0.1.4):** with All Tanks All Levels, infinite ammo and
 the Edge at maximum range, the game crashed after finishing the White
 House mission, and again after the Brandenburg Gate convoy mission:
