@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 139)
+## Overview (as of round 140)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,35 @@ original 2026-09-18 plan and are long out of date.
 
 # Log
 
+## 2026-10-24, round 140: the Cheats tab was laggy
+
+Owner report: the Cheats menu is very laggy. Measured with a timer around
+RmlUi's Update() (temporary, removed): on the Cheats tab, hovering gave
+frames of up to 33 ms (average 3-6 ms) here, against under 1 ms on the
+other tabs.
+
+Cause: hovering an option shows its description, and setting the text
+replaces the description element's children, which makes RmlUi 6.0 lay out
+the whole document again (Element::DirtyLayout always dirties the
+document). That's cheap on a short tab; the Cheats tab has 65 options, and
+the seven 20-choice pickup pickers alone were 140 wrapping radio buttons
+(33 ms with them, 10 ms without). Hover events also fire for each child the
+mouse crosses, so one movement set the same text several times. With the
+description update skipped the worst frame was under 1 ms, which confirmed
+it.
+
+Fixes (RecompFrontend patches):
+- 0012 (replaces round 139's radio-wrap patch): enums with more than 8
+  choices are a dropdown (the library's Select) instead of a radio row.
+  Select gets a focus callback so the description still follows controller
+  focus.
+- 0013: the description is only set when its text changes.
+
+Result here: average 0.4 ms while moving over the list, and one frame of
+about 7 ms (this sandbox's CPU, shared with software Vulkan) per new
+option hovered. Dropdown picks save and reload. Block layout for the option
+rows was tried (12 -> 8 ms) and left out: it would change every tab.
+
 ## 2026-10-24, round 139: Cheats tab (stock codes, GameShark and Action Replay)
 
 Owner's request: a Cheats tab like the Turok Rage Wars and snprecomp ports,
@@ -118,7 +147,7 @@ version) and Levitate (needs the GameShark's button).
 
 **Menu.** Headings with a note line (lib-patches/RecompFrontend/0011, new
 `add_option_heading`), and radio rows that wrap (0012) for the 20-choice
-pickup pickers. RecompFrontend patches start at 0011 so they don't clash
+pickup pickers (replaced by dropdowns in round 140). RecompFrontend patches start at 0011 so they don't clash
 with the Android branch's 0001-0005.
 
 Verified here (Linux, lavapipe under Xvfb): the tab, headings and wrapping
