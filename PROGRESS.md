@@ -27,8 +27,8 @@ and leave the game's own behaviour, look and balance alone.
   local multiplayer (General tab).
 - **Timing**: the game's clock rate gets the same 3/4 scaling the game's
   own `osInitialize` applies on hardware (the runtime skipped it, so the
-  game ran at 3/4 speed until round 138); its frame time is snapped to
-  whole VIs, and the few places that truncate the per-frame step use the
+  game ran at 3/4 speed until round 138); its frame time and frame step
+  are snapped to whole VIs, and the few places that truncate the per-frame step use the
   real step (`src/game/frame_dt_fix.cpp`).
 - **Cheats**: a Cheats tab with the game's own codes as toggles, and a
   Hacks tab with the GameShark and Action Replay codes

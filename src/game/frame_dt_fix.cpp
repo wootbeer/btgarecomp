@@ -62,11 +62,16 @@ extern "C" void btga_frame_dt(uint8_t*, recomp_context* ctx) {
 //   - func_80088030 pushes a deadline forward by (int)step per frame
 // At a steady 1.0 that is what the game intends, but the host-clock wobble
 // (about +/-15%) would make (int)step drop to 0 on some frames. Each site
-// uses the real, fractional step instead -- the same on average, without
-// the dropped frames.
+// uses the real, fractional step instead (round 131).
 //
-// (Round 125 snapped the step to whole VIs while it was 0.75, which flipped
-// it between 0.5 and 1.0 every other frame -- reverted in round 131.)
+// Round 143: the step is now snapped to whole VIs like the delta time
+// above. Most of gameplay moves by it (tanks, shots, effects: about 50
+// functions read it), so the wobble made objects move unevenly from frame to
+// frame while frames are shown at an even 2 VIs: model jitter, and the
+// player tank's logo decal failing RT64's coplanar test. Round 125's snap
+// went wrong only because the clock rate was still off (0.75 per frame, a
+// VI taken as 0.5, so it flipped between 0.5 and 1.0); with round 138's fix
+// a 30 fps frame is exactly 1.0. The fractional-step fixes stay, as a guard.
 //
 // Testing switch: BTGA_PACING_LOG=1 prints, every 150 gameplay frames, how
 // many VIs frames took and the host frame interval spread.
@@ -121,11 +126,15 @@ namespace {
 }
 
 // Hooked right before `swc1 $f0, -0x6B78($at)` in func_80099FE8 (0x8009A398).
-// The step is left as measured.
 extern "C" void btga_frame_step(uint8_t*, recomp_context* ctx) {
     static const bool pacing_log = env_flag("BTGA_PACING_LOG");
+    float raw = ctx->f0.fl;
     if (pacing_log) {
-        log_pacing(ctx->f0.fl);
+        log_pacing(raw);
+    }
+    float snapped = std::round(raw / kViUnits) * kViUnits;
+    if (snapped >= kViUnits) { // keep tiny/zero first-frame values as measured
+        ctx->f0.fl = snapped;
     }
 }
 

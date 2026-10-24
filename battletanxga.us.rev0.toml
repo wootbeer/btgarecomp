@@ -1508,7 +1508,8 @@ text = """
 """
 
 # Rounds 125/131 (src/game/frame_dt_fix.cpp): func_80099FE8's frame step (at
-# 0x80219488) -- left as measured; optional pacing log (BTGA_PACING_LOG=1).
+# 0x80219488) -- snapped to whole VIs (round 143); optional pacing log
+# (BTGA_PACING_LOG=1).
 [[patches.hook]]
 func = "func_80099FE8"
 before_vram = 0x8009A398
