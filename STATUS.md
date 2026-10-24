@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 146)
+## Overview (as of round 147)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,34 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 147: limit RT64's matching work in heavy scenes
+
+**Round 146 log (owner, Windows, the intro's battle):** in the lagging
+stretch, setup+matching took **40-47 ms** per game frame (0-4 ms the rest
+of the time), so RT64 had no time for in-between frames (0 of 115 drawn in
+one second) and the game waited up to 25-33 ms at a time, 180-420 ms a
+second, for a free workload slot. That's the slowdown. (A later stretch
+with presentation waits of 90-160 ms and no game waits was around closing
+the window.)
+
+**Cause:** in `GameFrame::matchScene` every draw is paired for checking
+with every draw of the same hash (combiner, other mode, geometry mode,
+triangle count) in the last frame, so a group of look-alike draws costs
+the product of the two counts, then a `std::set` insert, a match score and
+a sort for each pair. Since round 145 tanks are matched by ID and skip
+this; explosion sprites and debris have no owner and remain. In the
+sandbox's attract intro (which loops through the battle) the worst group
+reached 17,687 pairs.
+
+**Fix:** `lib-patches/rt64/0021-auto-match-group-limit.patch`: a group of
+look-alike draws with more than 4,096 pairs, or one that would take the
+scene past 16,384, isn't matched. Its draws are shown where they are, at
+the game's own rate, as at Original, instead of holding up every frame.
+Sandbox, same intro: 186 groups skipped, worst match 9 ms (10 ms without the
+limit; the sandbox's counts are lower than the owner's must have been).
+The testing log is now `0022-perf-log.patch` and also reports the worst
+pair count and the groups skipped.
 
 ## 2026-10-24, round 146: timing log for the slowdown in heavy scenes
 
