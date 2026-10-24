@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 145)
+## Overview (as of round 146)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,37 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 146: timing log for the slowdown in heavy scenes
+
+**Round 145 confirmed (owner, Windows):** the decal flashing and the
+decals coming loose in the intro are fixed.
+
+**Still open:** heavy scenes (explosions) slow down, only above Original
+framerate (with resolution, MSAA and the rest turned down it still
+happens), and round 145 made no difference. The pacing log showed game
+frames of 3-4 VIs (66-92 ms) in those stretches, so the game is waiting
+on something.
+
+How RT64 can hold the game up: its workload thread renders a game frame
+and then the in-between frames up to the next one, and the game's
+graphics thread, when it submits its next frame and RT64's ring of
+workloads is full, spins in `WorkloadQueue::advanceToNextWorkload` until
+the workload thread frees a slot. RT64 already cuts in-between frames
+when it runs late (per-frame time budget, and stops when a new workload
+is waiting), so something in a heavy frame takes longer than that budget
+allows for.
+
+Ruled out here: transform matching. A timer around `GameFrame::match`
+(temporary, removed) showed at most 3.6 ms and ~800 candidate pairs while
+firing and blowing up a truck at 120 fps in the sandbox.
+
+**Test build:** `lib-patches/rt64/0020-perf-log.patch` (temporary):
+`BTGA_RT64_PERF_LOG=1` prints once a second the worst game frame's setup
+and matching time, first draw, all draws, time waiting for presentation,
+in-between frames drawn of those planned, and how long the game waited
+for a free slot. The sandbox can't judge it (software Vulkan: every
+frame is cut short); the owner's log during an explosion decides.
 
 ## 2026-10-24, round 145: interpolation IDs from the Android branch, now on PC
 
