@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 142)
+## Overview (as of round 144)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,45 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 144: round 143 reverted; switches to find the decal flicker
+
+**Round 143 result (owner, Windows):** worse. The tank logo decal still
+flashes in game, the decals coming loose and jittering off the tanks in the
+intro cutscene are back, and heavy sequences lag. Reverted (the step is
+left as measured again). The pacing log with it:
+- steady stretches: 150 frames at 2 VIs, frame interval 26-42 ms, raw step
+  0.79-1.25 (wider than the 0.63-0.84 before round 138, scaled: about
+  +/-25% now);
+- busy stretches: 27-29 fps, some 3-4 VI frames, intervals up to 66-92 ms.
+
+So a steady stream of 2-VI frames comes with a step that varies a lot, and
+snapping it makes things worse, as round 130/131's A/B already showed.
+
+**What the clip shows** (owner's 60 fps capture of gameplay): driving, the
+decal is missing in 8 of 24 consecutive frames, in runs of up to 6, while
+the tank body is drawn every frame. RT64 draws a ZMODE_DEC pixel only
+within a small depth tolerance of what's there (RasterPS.hlsl), so the
+decal and the body are at different depths when it's missing. Decals
+coming loose in the intro is the same thing seen from further away.
+
+**Not round 142:** the screen filter and bloom patches only change the VI
+(final picture) pass; nothing in the 3D or the interpolation.
+
+**Suspects:** round 136's interpolation patches from BT1 (only in effect
+above Original framerate), whose effect could have grown with round 138
+(4/3 more motion per frame): 0011/0013 refuse to pair transforms more than
+256 units apart (so a decal can stay uninterpolated while its tank is
+interpolated), 0012 takes the rate from the latest VI factor, 0014 replaces
+the projection estimate on in-between frames, 0015 interpolates the camera
+as a camera.
+
+**Test build:** `lib-patches/rt64/0020-interpolation-ab-switches.patch`
+(temporary) turns each off with an environment variable:
+`BTGA_RT64_NO_MATCH_LIMIT` (0011 and 0013), `BTGA_RT64_NO_LATEST_FACTOR`
+(0012), `BTGA_RT64_NO_EXACT_PROJ` (0014), `BTGA_RT64_NO_CAMERA_LERP`
+(0015). First check for the owner: Framerate Original (no interpolation at
+all). Builds here; to be tested on Windows.
 
 ## 2026-10-24, round 142: Screen Filter and Bloom (from the Sin and Punishment port)
 

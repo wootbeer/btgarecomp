@@ -1,0 +1,140 @@
+--- a/src/hle/rt64_game_frame.cpp
++++ b/src/hle/rt64_game_frame.cpp
+@@ -1,3 +1,4 @@
++#include <cstdlib>
+ //
+ // RT64
+ //
+@@ -10,6 +11,13 @@
+ #include "xxHash/xxh3.h"
+ 
+ namespace RT64 {
++
++// BattleTanx recomp, testing only: BTGA_RT64_NO_* environment switches turn
++// the BattleTanx interpolation patches off one at a time (round 144).
++static bool btgaSwitch(const char *name) {
++    const char *v = getenv(name);
++    return (v != nullptr) && (v[0] != '\0') && (v[0] != '0');
++}
+     // GameFrame
+     
+     bool GameFrame::areFramebufferPairsCompatible(const WorkloadQueue &workloadQueue, const GameIndices::FramebufferPair &first, const GameIndices::FramebufferPair &second) {
+@@ -241,7 +249,8 @@
+         // away and fly across the screen in the interpolated frames. Left unpaired, it's drawn where it is.
+         // Nothing in the game moves this far in one frame (shells about 110 units).
+         const float MaxPositionDifference = 256.0f;
+-        if (matchResult.positionDifference > MaxPositionDifference) {
++        static const bool noMatchLimit = btgaSwitch("BTGA_RT64_NO_MATCH_LIMIT");
++        if (!noMatchLimit && (matchResult.positionDifference > MaxPositionDifference)) {
+             return matchResult;
+         }
+ 
+@@ -726,7 +735,8 @@
+         const hlslpp::float3 curPosition = hlslpp::float4x4(curWorkload.drawData.worldTransforms[curTransformIndex])[3].xyz;
+         const hlslpp::float3 prevPosition = hlslpp::float4x4(prevWorkload.drawData.worldTransforms[prevTransformIndex])[3].xyz;
+         const float positionDifference = hlslpp::length(curPosition - prevPosition);
+-        if (positionDifference > MaxPositionDifference) {
++        static const bool noIdMatchLimit = btgaSwitch("BTGA_RT64_NO_MATCH_LIMIT");
++        if (!noIdMatchLimit && (positionDifference > MaxPositionDifference)) {
+             return;
+         }
+ 
+--- a/src/hle/rt64_vi.cpp
++++ b/src/hle/rt64_vi.cpp
+@@ -1,3 +1,4 @@
++#include <cstdlib>
+ //
+ // RT64
+ //
+@@ -13,6 +14,13 @@
+ #include "rt64_vi.h"
+ 
+ namespace RT64 {
++
++// BattleTanx recomp, testing only: BTGA_RT64_NO_* environment switches turn
++// the BattleTanx interpolation patches off one at a time (round 144).
++static bool btgaSwitch(const char *name) {
++    const char *v = getenv(name);
++    return (v != nullptr) && (v[0] != '\0') && (v[0] != '0');
++}
+     // VI
+     
+     hlslpp::float4 VI::viewRectangle() const {
+@@ -167,6 +175,14 @@
+         // mixed factors switched frame interpolation off and on from one frame to the next, and its timing reset
+         // each time: motion was uneven at the display rate. The latest factor is how long the previous frame was
+         // shown, the time the frame being interpolated covers.
++        static const bool noLatestFactor = btgaSwitch("BTGA_RT64_NO_LATEST_FACTOR");
++        if (noLatestFactor) {
++            if ((factors[0] != 0) && std::all_of(factors.begin(), factors.end(), [&](uint32_t factor) { return factor == factors[0]; })) {
++                const uint32_t FullRate = 60;
++                return FullRate / factors[0];
++            }
++            return 0;
++        }
+         const uint32_t latest = factors[factorCursor];
+         if (latest != 0) {
+             const uint32_t FullRate = 60; // TODO: PAL support.
+--- a/src/common/rt64_math.cpp
++++ b/src/common/rt64_math.cpp
+@@ -1,3 +1,4 @@
++#include <cstdlib>
+ //
+ // RT64
+ //
+@@ -9,6 +10,13 @@
+ #include <memory>
+ 
+ namespace RT64 {
++
++// BattleTanx recomp, testing only: BTGA_RT64_NO_* environment switches turn
++// the BattleTanx interpolation patches off one at a time (round 144).
++static bool btgaSwitch(const char *name) {
++    const char *v = getenv(name);
++    return (v != nullptr) && (v[0] != '\0') && (v[0] != '0');
++}
+     float sqr(float x) {
+         return x * x;
+     }
+@@ -76,8 +84,9 @@
+         // render with it (real frames use the game's matrix): the world's depth shifted by several units between the
+         // two, so sprites drawn with the game's own projection right against geometry (explosions) passed the depth
+         // test on real frames and failed in between. The w column (0, 0, -1, 0) is already exact by construction.
++        static const bool noExactProj = btgaSwitch("BTGA_RT64_NO_EXACT_PROJ");
+         const hlslpp::float4x4 exactProj = hlslpp::mul(hlslpp::inverse(v), vp);
+-        for (int i = 0; i < 4; i++) {
++        for (int i = 0; i < (noExactProj ? 0 : 4); i++) {
+             for (int j = 0; j < 3; j++) {
+                 p[i][j] = float(exactProj[i][j]);
+             }
+--- a/src/render/rt64_projection_processor.cpp
++++ b/src/render/rt64_projection_processor.cpp
+@@ -1,3 +1,4 @@
++#include <cstdlib>
+ //
+ // RT64
+ //
+@@ -8,6 +9,13 @@
+ #include "hle/rt64_workload_queue.h"
+ 
+ namespace RT64 {
++
++// BattleTanx recomp, testing only: BTGA_RT64_NO_* environment switches turn
++// the BattleTanx interpolation patches off one at a time (round 144).
++static bool btgaSwitch(const char *name) {
++    const char *v = getenv(name);
++    return (v != nullptr) && (v[0] != '\0') && (v[0] != '0');
++}
+     inline void adjustProjectionMatrix(interop::float4x4 &matrix, const float aspectRatioScale) {
+         matrix[0][0] *= aspectRatioScale;
+         matrix[1][0] *= aspectRatioScale;
+@@ -151,7 +159,8 @@
+                 const interop::float4x4 curProjTransform = projMatrix;
+                 interop::float4x4 adjustedPrevProj = *prevProjMatrix;
+                 adjustProjectionMatrix(adjustedPrevProj, projRatioScale);
+-                if (rigidBody->lerpTranslation && rigidBody->lerpRotation) {
++                static const bool noCameraLerp = btgaSwitch("BTGA_RT64_NO_CAMERA_LERP");
++                if (!noCameraLerp && rigidBody->lerpTranslation && rigidBody->lerpRotation) {
+                     viewMatrix = lerpCameraView(*prevViewMatrix, curViewTransform, p.curFrameWeight);
+                     prevViewTransform = lerpCameraView(*prevViewMatrix, curViewTransform, p.prevFrameWeight);
+                 }
