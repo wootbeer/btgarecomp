@@ -1,0 +1,93 @@
+diff --git a/recompui/include/recompui/config.h b/recompui/include/recompui/config.h
+index 38b84f5..6879ceb 100644
+--- a/recompui/include/recompui/config.h
++++ b/recompui/include/recompui/config.h
+@@ -126,6 +126,17 @@ namespace recompui {
+         recomp::config::Config &create_sound_tab(const std::string &name = config::sound::tab_name);
+         void create_mods_tab(const std::string &name = config::mods::tab_name);
+ 
++        // A heading above an option on a tab made with create_config_tab(), to
++        // divide a long tab into sections, with an optional line of text under it.
++        struct OptionHeading {
++            std::string title;
++            std::string note;
++        };
++        // Call before the menu first opens.
++        void add_option_heading(const std::string &tab_id, const std::string &option_id, const std::string &title, const std::string &note = "");
++        // The heading above an option, or nullptr if it has none.
++        const OptionHeading *get_option_heading(const std::string &tab_id, const std::string &option_id);
++
+         // Must be called after all tabs have been created.
+         // This loads all of the user's config files from disk.
+         void finalize();
+diff --git a/recompui/src/config/ui_config.cpp b/recompui/src/config/ui_config.cpp
+index 6c84c05..f7ec937 100644
+--- a/recompui/src/config/ui_config.cpp
++++ b/recompui/src/config/ui_config.cpp
+@@ -1,3 +1,4 @@
++#include <unordered_map>
+ #include "recompui/config.h"
+ #include "elements/ui_modal.h"
+ #include "elements/ui_icon_button.h"
+@@ -16,6 +17,8 @@ struct PendingTab {
+ };
+ static std::vector<PendingTab> pending_tabs;
+ static bool loaded_configs = false;
++// tab id -> option id -> heading text (add_option_heading).
++static std::unordered_map<std::string, std::unordered_map<std::string, recompui::config::OptionHeading>> option_headings;
+ 
+ namespace recompui {
+     static recompui::TabbedModal *config_modal = nullptr;
+@@ -121,6 +124,19 @@ namespace recompui {
+         loaded_configs = true;
+     }
+ 
++    void config::add_option_heading(const std::string &tab_id, const std::string &option_id, const std::string &title, const std::string &note) {
++        option_headings[tab_id][option_id] = { title, note };
++    }
++
++    const config::OptionHeading *config::get_option_heading(const std::string &tab_id, const std::string &option_id) {
++        auto tab = option_headings.find(tab_id);
++        if (tab == option_headings.end()) {
++            return nullptr;
++        }
++        auto heading = tab->second.find(option_id);
++        return heading == tab->second.end() ? nullptr : &heading->second;
++    }
++
+     void config::set_tab_visible(const std::string &id, bool is_visible) {
+         if (config_modal == nullptr) {
+             for (auto &tab : pending_tabs) {
+diff --git a/recompui/src/config/ui_config_page_options_menu.cpp b/recompui/src/config/ui_config_page_options_menu.cpp
+index 6ba64e2..730c69f 100644
+--- a/recompui/src/config/ui_config_page_options_menu.cpp
++++ b/recompui/src/config/ui_config_page_options_menu.cpp
+@@ -1,4 +1,6 @@
+ #include "ui_config_page_options_menu.h"
++#include "recompui/config.h"
++#include "elements/ui_label.h"
+ 
+ 
+ namespace recompui {
+@@ -184,6 +186,21 @@ void ConfigPageOptionsMenu::render_config_options() {
+         for (size_t i = 0; i < schema.options.size(); i++) {
+             auto &config_option = schema.options[i];
+             ConfigOptionElement *element = nullptr;
++            if (const config::OptionHeading *heading = config::get_option_heading(config->id, config_option.id)) {
++                Label *heading_label = context.create_element<Label>(body_left_scroll, heading->title, theme::Typography::Header3);
++                heading_label->set_display(Display::Block);
++                heading_label->set_padding_left(12.0f);
++                heading_label->set_margin_top(i == 0 ? 0.0f : 24.0f);
++                heading_label->set_margin_bottom(8.0f);
++                if (!heading->note.empty()) {
++                    Label *note_label = context.create_element<Label>(body_left_scroll, heading->note, theme::Typography::Body);
++                    note_label->set_display(Display::Block);
++                    note_label->set_padding_left(12.0f);
++                    note_label->set_padding_right(12.0f);
++                    note_label->set_margin_bottom(8.0f);
++                    note_label->set_color(theme::color::TextDim);
++                }
++            }
+             switch (config_option.type) {
+                 case recomp::config::ConfigOptionType::Enum: {
+                     element = context.create_element<ConfigOptionEnum>(

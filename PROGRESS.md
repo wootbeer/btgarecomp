@@ -29,6 +29,9 @@ and leave the game's own behaviour, look and balance alone.
   game ran at 3/4 speed until round 138); its frame time is snapped to
   whole VIs, and the few places that truncate the per-frame step use the
   real step (`src/game/frame_dt_fix.cpp`).
+- **Cheats**: a Cheats tab with the game's own codes as toggles, and the
+  GameShark and Action Replay codes under their own headings
+  (`src/game/cheats.cpp`).
 - **Crash reports**: `crash_log.txt` gives the exception, the module, any
   C++ error message and the game function that faulted
   (`src/main/crash_handler.cpp`).

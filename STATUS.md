@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 138)
+## Overview (as of round 139)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -50,6 +50,9 @@ and higher framerates. A first beta (0.1.0) is public.
   are fixed proportionally (`src/game/frame_dt_fix.cpp`,
   `tools/scan_frame_time_truncation.py`). Round 125's step snap was wrong
   and was reverted in round 131.
+- **Cheats** (round 139). A Cheats tab with the game's own codes as
+  toggles and the community GameShark / Action Replay codes; the ones that
+  change code are hooks (`src/game/cheats.cpp`).
 - **Crash reporting and release** (rounds 126, 128, 133). `crash_log.txt`,
   and Windows packaging (`tools/package-windows.ps1`) with license notices
   and no build-machine paths.
@@ -65,6 +68,67 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 139: Cheats tab (stock codes, GameShark and Action Replay)
+
+Owner's request: a Cheats tab like the Turok Rage Wars and snprecomp ports,
+with toggles instead of typing codes, split into the game's own codes and
+cheat-device codes so players know what to expect.
+
+**Which codes are this game's.** The owner's list mixed in BattleTanx 1
+material. The code screen (func_800D0070) compares the text with a table of
+33 strings at 0x80121C3C and switches on the match; the 14 retail codes are
+there (TRDDYBRRKS, 80DYS, HPPYHPPY, RCKTSRDGLR, WRDRB, PRSSTNCFTM, BRNCSSTS,
+DRMWVR, NNKNHCKS, DR1NKM3, SHR1MP, T0MTHMB, M1N1M3, PYGMY), plus "?"
+placeholders and DCPTC* cinematic-test codes. The rest of the list (THRTN,
+SRTHMB, DPPCKTS, ...) is not in the table, and the 40 ten-letter stage
+passwords didn't come up either (10-letter entries go to the password check,
+func_800E944C, not checked further). So: 14 stock toggles. Each sets the
+flag its code flips: 0x80125AB0-0x80125ABC (bytes), level select at
+0x80117F48 and custom gangs at 0x80121CC0 (halfwords). On, the flag is kept
+set; off clears it once, so typing a code still works with the toggle off.
+
+**GameShark and Action Replay codes** are this ROM's: every code address
+lines up (the AR "2400" codes land on the stores of the ammo/counter fields,
+the tank-size float at 0x800718F4 is 1.0, the boss name at 0x80075008 reads
+"TANK..."). Two kinds:
+- Memory writes (types 80, 81, D0-D3, 50), applied by `btga_cheats_frame`
+  each pass of the controller thread's loop (func_800988E8, 0x80098A08,
+  which runs on the menus too). Codes on the game's fixed tables put the
+  original bytes back when turned off. 81 writes go in as two bytes (some
+  of the player-weapon codes use odd addresses). Addresses past the first
+  MB (Tank Bucks 0x80236A9F, player weapons 0x801AD...) are in the game's
+  bss (0x80127E30-0x803B17B0, cleared by the entry point), so they're the
+  same as on the N64.
+- Writes to code (most AR codes, 11 GS codes). The recompiled code doesn't
+  read instructions from RDRAM, so each is a hook in the toml: the changed
+  instruction becomes a nop plus a hook that runs the original or the
+  cheat's version (`btga_cheat(n)`), and the two branch nops (0x80082854,
+  0x8009C624) are hooks that jump where the nop'd code would. The jump
+  table codes (Jam Radar, the pickup modifiers) rewrite table entries,
+  which the recompiled switch ignores (it switches on the index), so their
+  hooks change `jr_addend_*` before the switch. Hook placement checked in
+  N64Recomp: hooks are emitted after labels and inside both copies of a
+  delay slot, so the nop+hook pairs in delay slots are right. Regenerated:
+  the only differences are the hooked instructions.
+
+Left out: the GS codes that set the stock flags (same as the toggles), the
+duplicate "All Tanks All Campaigns" list (the same writes as the repeater
+version) and Levitate (needs the GameShark's button).
+
+**Menu.** Headings with a note line (lib-patches/RecompFrontend/0011, new
+`add_option_heading`), and radio rows that wrap (0012) for the 20-choice
+pickup pickers. RecompFrontend patches start at 0011 so they don't clash
+with the Android branch's 0001-0005.
+
+Verified here (Linux, lavapipe under Xvfb): the tab, headings and wrapping
+render; Level Select from the toggle gives the campaign map's level choice;
+Invincibility holds under fire; Tank Bullets Infinite Ammo keeps the
+counter at 100 while firing (95 after five shots without it). Tank Size
+takes effect on the next tank made (func_8008AE04 copies the float into
+the tank at 0x4C0). An offline test of the memory-code engine (toggles,
+restore, repeat, conditional, odd addresses, pickup mapping) passes. The
+other code-changing cheats are compiled and placed as above but not played.
 
 ## 2026-10-17, round 138: the game ran at 3/4 speed (osClockRate never scaled)
 

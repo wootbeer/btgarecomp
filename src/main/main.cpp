@@ -51,6 +51,7 @@
 #include "librecomp/helpers.hpp"
 
 #include "btga_config.h"
+#include "btga_cheats.h"
 
 #if defined(BTGA_HAS_APP_ICON)
 #include "icon_bytes.h"
@@ -460,6 +461,7 @@ int main(int argc, char** argv) {
     recompui::config::create_graphics_tab();
     recompui::config::create_controls_tab();
     recompui::config::create_sound_tab();
+    btga::cheats::add_cheats_tab();
     recompui::config::create_mods_tab();
     recompui::config::finalize();
 

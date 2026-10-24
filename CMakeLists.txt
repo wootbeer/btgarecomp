@@ -83,6 +83,8 @@ include(${CMAKE_SOURCE_DIR}/cmake/ApplyLibPatches.cmake)
 btga_apply_lib_patches(rt64)
 # plume (RT64's rendering layer) is a submodule inside rt64.
 btga_apply_lib_patches(plume lib/rt64/src/contrib/plume)
+# The menu (headings on the Cheats tab).
+btga_apply_lib_patches(RecompFrontend)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/rt64 ${CMAKE_BINARY_DIR}/rt64)
 
