@@ -2146,3 +2146,18 @@ text = """
     { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X1F6, ctx->r3) = ctx->r2; } }
 """
 
+# A bigger heap for level data, moved to the upper 4 MB the game never uses
+# (src/game/heap_relocate.cpp): right after each heap setup and clear.
+[[patches.hook]]
+func = "func_800ACE70"
+before_vram = 0x800ACEA4
+text = """
+    { extern void btga_heap_setup(uint8_t *rdram); btga_heap_setup(rdram); }
+"""
+
+[[patches.hook]]
+func = "func_800AF43C"
+before_vram = 0x800AF488
+text = """
+    { extern void btga_heap_setup(uint8_t *rdram); btga_heap_setup(rdram); }
+"""

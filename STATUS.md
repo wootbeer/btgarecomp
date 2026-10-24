@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 149)
+## Overview (as of round 150)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,48 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 150: a bigger heap (crash after missions with All Tanks)
+
+**Report (Discord, 0.1.4):** with All Tanks All Levels, infinite ammo and
+the Edge at maximum range, the game crashed after finishing the White
+House mission, and again after the Brandenburg Gate convoy mission:
+access violation in `func_800A0750` writing N64 address 0x00000003, under
+`func_8009ED00`, `func_800BA6C0`, `func_8007BCF0`.
+
+- `func_800A0750` is the game's LZSS decompressor, writing to the
+  destination buffer it was given; `func_8009ED00` reads from the
+  cartridge (PI DMA); `func_8007BCF0` gets the buffer from
+  `func_800ACEB4`, a bump allocator (free bytes at 0x8023A064, next address
+  at 0x8023A068) that returns 0 when a request doesn't fit. Nothing checks,
+  so a full heap became a write through a null pointer.
+- The heap is 0x15D5D8 bytes (1.4 MB) from 0x8023A070, set up and cleared
+  by `func_800ACE70` (boot) and `func_800AF43C` (each level load). Logged
+  in the sandbox: mission 1 leaves 621 KB free; with All Tanks 461 KB.
+- All Tanks writes two halfwords per level record (19 records, 0x70 apart
+  from 0x80124B90). The first (+0x46) is the player's tank list, which
+  grows through the campaign (1, 3, 0x103 ...) and costs no memory. The
+  second (+0x4A) is the level's tank-type mask (0x010F, 0x0983, up to
+  0x7FFF) and is all of the 160 KB: every level then loads every tank
+  type, so bigger levels run out at the next load. The same would happen on
+  the N64.
+
+**Fix** (`src/game/heap_relocate.cpp`): the game never uses the upper 4 MB
+of its 8 MB (checked: all zero through boot, the intro and a level load;
+osMemSize is only kept for the debug-port routines). Right after each
+setup (hooks at 0x800ACEA4 and 0x800AF488, after the bzero) the heap is
+moved to 0x80400000 with 4 MB. All other code reads the two variables,
+including the game's own save-and-restore of them. Mission 1 with All
+Tanks then uses about 970 KB of it, leaving 3.2 MB.
+
+First tried and dropped: serving only requests that don't fit from the
+upper 4 MB. The game frees by restoring the allocator to a saved mark,
+which an overflow area can't see, so it filled up, and a forced test
+crashed elsewhere on a null pointer.
+
+Verified here: intro, menus and mission 1 run with All Tanks on, with the
+heap in its new place. The missions from the report can't be finished in
+the sandbox.
 
 ## 2026-10-24, round 149: 0.1.4
 
