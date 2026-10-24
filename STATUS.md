@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 148)
+## Overview (as of round 149)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. A first beta (0.1.0) is public.
+and higher framerates. Betas are public (0.1.0 to 0.1.4).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,22 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 149: 0.1.4
+
+Version 0.1.4 (`version_string` in `src/main/main.cpp`; the launcher had
+still said 0.1.0). Release scan: no testing switches or debug prints left
+from rounds 143-148 (`BTGA_PACING_LOG` stays as a documented switch), no ROM
+or ROM-derived files tracked, no build-machine or personal paths; lib
+patches are RecompFrontend 0011-0013, plume 0003-0004 and RT64 0001, 0009,
+0011-0015, 0018, 0019, 0021. The screen filters' shaders (in RT64 patch
+0018) are based on public-domain code: Timothy Lottes' CRT shader and
+LCD3x by Gigaherz.
+
+New since 0.1.3: the Cheats tab (rounds 139-141), Screen Filter and Bloom
+(round 142), interpolation IDs fixing the tank decals (round 145), and the
+limit on RT64's matching work fixing the slowdown in heavy scenes above
+Original framerate (round 147).
 
 ## 2026-10-24, round 148: round 147 confirmed; testing log removed
 
