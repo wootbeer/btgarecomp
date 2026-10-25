@@ -3,9 +3,11 @@
 // Without IDs RT64 pairs each model with one in the previous frame by comparing
 // position, orientation and screen position, and picks wrongly between similar
 // models often enough to show: tanks driving straight jitter back and forth, and
-// a tank or its gryphon decal flashes now and then. It showed on Android
-// (Retroid Pocket 6) and not on the owner's PC; the other recomp ports avoid
-// the guess by tagging their objects, as done here.
+// a tank or its gryphon decal flashes now and then (and comes loose from the
+// tanks in the intro). It showed first on Android (Retroid Pocket 6), and on PC
+// too once the game ran at full speed (round 138); the other recomp ports avoid
+// the guess by tagging their objects, as done here. Ported from the Android
+// branch in round 145.
 //
 // The game draws models in two steps:
 // - func_8007B1F0 queues a draw. When given a float matrix ($s1, the caller's
@@ -28,14 +30,6 @@
 #include "recomp.h"
 
 namespace {
-    // Android only so far (owner): the PC build keeps RT64's own matching, as before this file,
-    // until the tagging has been tried there. On PC the hooks below return straight away.
-#if defined(__ANDROID__)
-    constexpr bool kEnabled = true;
-#else
-    constexpr bool kEnabled = false;
-#endif
-
     constexpr uint32_t kGfxContextPtr = 0x80114500; // -> struct with the main DL head at +0xC8
     constexpr uint32_t kIdAuto = 0xFFFFFFFFu;        // G_EX_ID_AUTO
 
@@ -128,9 +122,6 @@ namespace {
 // queued thousands of times. Their address is the object's ID. Only those in the per-frame
 // matrix pools (0x801298C0, 2 x 0xC000) say nothing about the object; they stay automatic.
 extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
-    if (!kEnabled) {
-        return;
-    }
     const uint32_t mtx = (uint32_t)ctx->r21;
     const uint32_t float_source = (uint32_t)ctx->r17;
     const bool in_pool = (mtx >= 0x801298C0u) && (mtx < 0x801298C0u + 2 * 0xC000u);
@@ -190,18 +181,12 @@ void btga_interp_new_frame() {
 // Forget the last Mtx here, so each list starts with a load (the same matrix again changes
 // nothing drawn) and an object's loads are the same from frame to frame.
 extern "C" void btga_interp_bucket_start(uint8_t* rdram, recomp_context* ctx) {
-    if (!kEnabled) {
-        return;
-    }
     MEM_W(0x3C, ctx->r29) = 0;
 }
 
 // func_8007B65C, before 0x8007B7B4 (ahead of the gSPMatrix through func_8007AC34): $v0 is
 // the record's Mtx.
 extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
-    if (!kEnabled) {
-        return;
-    }
     const uint32_t mtx = (uint32_t)ctx->r2;
     // The walker stops drawing once the head passes the limit at 0x5C($sp) (buffer base +
     // 0xADE0, 0x100 short of its end). Don't start tagging that close to it; once tagging
@@ -226,9 +211,6 @@ extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
 // func_8007B65C's epilogue (0x8007B8B8): back to automatic matching for whatever is
 // drawn next.
 extern "C" void btga_interp_queue_end(uint8_t* rdram, recomp_context*) {
-    if (!kEnabled) {
-        return;
-    }
     if (group_pushed) {
         write_cmd(rdram, 0x6400000Du, 1u); // gEXPopMatrixGroup(G_MTX_MODELVIEW)
         group_pushed = false;

@@ -1,0 +1,27 @@
+diff --git a/recompui/src/config/ui_config_page_options_menu.h b/recompui/src/config/ui_config_page_options_menu.h
+index 49e05db..466abff 100644
+--- a/recompui/src/config/ui_config_page_options_menu.h
++++ b/recompui/src/config/ui_config_page_options_menu.h
+@@ -16,6 +16,7 @@ namespace recompui {
+         std::vector<ConfigOptionElement*> config_option_elements;
+         Element *description_container = nullptr;
+         std::string description_option_id = "";
++        std::string description_text = "";
+         Button *apply_button = nullptr;
+ 
+         virtual void process_event(const Event &e) override;
+--- a/recompui/src/config/ui_config_page_options_menu.cpp
++++ b/recompui/src/config/ui_config_page_options_menu.cpp
+@@ -31,6 +31,12 @@
+ }
+ 
+ void ConfigPageOptionsMenu::set_description_text(const std::string &text) {
++    // Setting the text replaces the element's children, which lays out the
++    // whole menu again: slow on a long tab, and hovering sends it many times.
++    if (text == description_text) {
++        return;
++    }
++    description_text = text;
+     if (description_container) {
+         if (is_internal) {
+             description_container->set_text_unsafe(text);

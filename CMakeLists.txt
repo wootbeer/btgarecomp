@@ -90,6 +90,8 @@ btga_apply_lib_patches(rt64)
 btga_apply_lib_patches(plume lib/rt64/src/contrib/plume)
 # N64Recomp's recomp.h (the recompiled code's helpers) is a submodule inside N64ModernRuntime.
 btga_apply_lib_patches(N64Recomp lib/N64ModernRuntime/N64Recomp)
+# The menu (headings on the Cheats tab; on Android, the hidden Open Mods Folder button and others).
+btga_apply_lib_patches(RecompFrontend)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/rt64 ${CMAKE_BINARY_DIR}/rt64)
 
@@ -513,8 +515,6 @@ endif()
 set(RECOMP_FRONTEND_N64MODERNRUNTIME_PATH ${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime)
 set(RECOMP_FRONTEND_RT64_PATH ${CMAKE_SOURCE_DIR}/lib/rt64)
 
-# Local RecompFrontend fixes (lib-patches/RecompFrontend/), applied like the RT64 ones.
-btga_apply_lib_patches(RecompFrontend)
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/RecompFrontend)
 
 # Upstream RmlUi 6.0 uses uint32_t and friends without including <cstdint>, which clang with a

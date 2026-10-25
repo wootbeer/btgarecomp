@@ -53,6 +53,7 @@
 #include "librecomp/helpers.hpp"
 
 #include "btga_config.h"
+#include "btga_cheats.h"
 
 #if defined(BTGA_HAS_APP_ICON)
 #include "icon_bytes.h"
@@ -76,7 +77,7 @@ namespace btga {
 
 static const std::string program_name = "BattleTanx: Global Assault Recompiled";
 static const std::u8string program_id = u8"btgarecomp";
-static const std::string version_string = "0.1.0";
+static const std::string version_string = "0.1.5";
 
 template <typename... Ts>
 [[noreturn]] static void exit_error(const char* fmt, Ts... args) {
@@ -486,12 +487,13 @@ int main(int argc, char** argv) {
     // created and finalized here, before recomp::start().
     recompui::config::GeneralTabOptions general_tab_options{};
     btga::config::add_general_options(recompui::config::create_general_tab(general_tab_options));
-    recompui::config::create_graphics_tab();
+    btga::config::add_graphics_options(recompui::config::create_graphics_tab());
     recompui::config::create_controls_tab();
 #if defined(__ANDROID__)
     btga::config::add_touch_options(recompui::config::create_config_tab("Touch Controls", "touch_controls", false));
 #endif
     recompui::config::create_sound_tab();
+    btga::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
     recompui::config::finalize();
 

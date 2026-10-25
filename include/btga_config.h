@@ -5,7 +5,8 @@
 
 #include "librecomp/config.hpp"
 
-// Game-specific options, shown on the General tab (src/main/game_config.cpp).
+// Game-specific options, shown on the General and Graphics tabs
+// (src/main/game_config.cpp).
 namespace btga::config {
     // What's plugged into a controller's accessory slot. Like on the N64, one
     // controller holds one pak at a time.
@@ -24,6 +25,10 @@ namespace btga::config {
     // opacity. Call on the tab's Config before recompui::config::finalize().
     void add_touch_options(recomp::config::Config& touch);
 #endif
+    // Screen Filter and Bloom at the end of the Graphics tab, passed straight
+    // to RT64 (lib-patches/rt64/0018, 0019). Call between
+    // recompui::config::create_graphics_tab() and recompui::config::finalize().
+    void add_graphics_options(recomp::config::Config& graphics);
 
     Accessory get_accessory(int port);
     bool get_local_multiplayer();

@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 138)
+## Overview (as of round 151)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. A first beta (0.1.0) is public.
+and higher framerates. Betas are public (0.1.0 to 0.1.5).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -41,7 +41,8 @@ and higher framerates. A first beta (0.1.0) is public.
 - **Rendering** (rounds 94, 97-108, 122). The game's off-by-one screen-edge
   scissor, widescreen culling, HUD anchoring and cutscene letterboxing, the
   cutscene camera's zero far plane, and distant flicker in Expand fixed in
-  RT64 itself (`lib-patches/rt64/`). Rounds 109-121 are investigations that
+  RT64 itself (`lib-patches/rt64/`). Optional screen filters and bloom
+  (round 142). Rounds 109-121 are investigations that
   were reverted (fog, draw pools, display-list buffer), kept for the record.
 - **Frame timing** (rounds 87-89, 106, 125, 127, 130-131). The game times
   motion with the clock; its frame time is snapped to whole VIs. The
@@ -50,6 +51,9 @@ and higher framerates. A first beta (0.1.0) is public.
   are fixed proportionally (`src/game/frame_dt_fix.cpp`,
   `tools/scan_frame_time_truncation.py`). Round 125's step snap was wrong
   and was reverted in round 131.
+- **Cheats** (rounds 139-141). A Cheats tab with the game's own codes as
+  toggles, and a Hacks tab with the community GameShark / Action Replay
+  codes; the ones that change code are hooks (`src/game/cheats.cpp`).
 - **Crash reporting and release** (rounds 126, 128, 133). `crash_log.txt`,
   and Windows packaging (`tools/package-windows.ps1`) with license notices
   and no build-machine paths.
@@ -65,6 +69,345 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-10-24, round 151: 0.1.5
+
+Version 0.1.5, with round 150's bigger heap (the crash at the end of
+missions with All Tanks All Levels on). Nothing else changed since 0.1.4.
+
+## 2026-10-24, round 150: a bigger heap (crash after missions with All Tanks)
+
+**Cause confirmed (player, Discord, 0.1.4):** with All Tanks off, both
+missions that crashed finished without problems. The fix itself still
+needs a run through those missions with All Tanks on.
+
+**Report (Discord, 0.1.4):** with All Tanks All Levels, infinite ammo and
+the Edge at maximum range, the game crashed after finishing the White
+House mission, and again after the Brandenburg Gate convoy mission:
+access violation in `func_800A0750` writing N64 address 0x00000003, under
+`func_8009ED00`, `func_800BA6C0`, `func_8007BCF0`.
+
+- `func_800A0750` is the game's LZSS decompressor, writing to the
+  destination buffer it was given; `func_8009ED00` reads from the
+  cartridge (PI DMA); `func_8007BCF0` gets the buffer from
+  `func_800ACEB4`, a bump allocator (free bytes at 0x8023A064, next address
+  at 0x8023A068) that returns 0 when a request doesn't fit. Nothing checks,
+  so a full heap became a write through a null pointer.
+- The heap is 0x15D5D8 bytes (1.4 MB) from 0x8023A070, set up and cleared
+  by `func_800ACE70` (boot) and `func_800AF43C` (each level load). Logged
+  in the sandbox: mission 1 leaves 621 KB free; with All Tanks 461 KB.
+- All Tanks writes two halfwords per level record (19 records, 0x70 apart
+  from 0x80124B90). The first (+0x46) is the player's tank list, which
+  grows through the campaign (1, 3, 0x103 ...) and costs no memory. The
+  second (+0x4A) is the level's tank-type mask (0x010F, 0x0983, up to
+  0x7FFF) and is all of the 160 KB: every level then loads every tank
+  type, so bigger levels run out at the next load. The same would happen on
+  the N64.
+
+**Fix** (`src/game/heap_relocate.cpp`): the game never uses the upper 4 MB
+of its 8 MB (checked: all zero through boot, the intro and a level load;
+osMemSize is only kept for the debug-port routines). Right after each
+setup (hooks at 0x800ACEA4 and 0x800AF488, after the bzero) the heap is
+moved to 0x80400000 with 4 MB. All other code reads the two variables,
+including the game's own save-and-restore of them. Mission 1 with All
+Tanks then uses about 970 KB of it, leaving 3.2 MB.
+
+First tried and dropped: serving only requests that don't fit from the
+upper 4 MB. The game frees by restoring the allocator to a saved mark,
+which an overflow area can't see, so it filled up, and a forced test
+crashed elsewhere on a null pointer.
+
+Verified here: intro, menus and mission 1 run with All Tanks on, with the
+heap in its new place. The missions from the report can't be finished in
+the sandbox.
+
+## 2026-10-24, round 149: 0.1.4
+
+Version 0.1.4 (`version_string` in `src/main/main.cpp`; the launcher had
+still said 0.1.0). Release scan: no testing switches or debug prints left
+from rounds 143-148 (`BTGA_PACING_LOG` stays as a documented switch), no ROM
+or ROM-derived files tracked, no build-machine or personal paths; lib
+patches are RecompFrontend 0011-0013, plume 0003-0004 and RT64 0001, 0009,
+0011-0015, 0018, 0019, 0021. The screen filters' shaders (in RT64 patch
+0018) are based on public-domain code: Timothy Lottes' CRT shader and
+LCD3x by Gigaherz.
+
+New since 0.1.3: the Cheats tab (rounds 139-141), Screen Filter and Bloom
+(round 142), interpolation IDs fixing the tank decals (round 145), and the
+limit on RT64's matching work fixing the slowdown in heavy scenes above
+Original framerate (round 147).
+
+## 2026-10-24, round 148: round 147 confirmed; testing log removed
+
+**Round 147 confirmed (owner, Windows, the intro three times):** no more
+slowdown. The log never shows the game waiting for a workload slot (0 ms
+throughout); the worst setup+matching is 15 ms (was 40-47 ms), with up to
+30 look-alike groups a second left unmatched in the battle (explosion
+sprites, now at the game's own rate) and at most about 4,600 pairs checked.
+
+Cleanup: the testing log patch (`0022-perf-log.patch`) is removed, and so
+are the counters it read in `0021`. `BTGA_PACING_LOG` stays.
+
+## 2026-10-24, round 147: limit RT64's matching work in heavy scenes
+
+**Round 146 log (owner, Windows, the intro's battle):** in the lagging
+stretch, setup+matching took **40-47 ms** per game frame (0-4 ms the rest
+of the time), so RT64 had no time for in-between frames (0 of 115 drawn in
+one second) and the game waited up to 25-33 ms at a time, 180-420 ms a
+second, for a free workload slot. That's the slowdown. (A later stretch
+with presentation waits of 90-160 ms and no game waits was around closing
+the window.)
+
+**Cause:** in `GameFrame::matchScene` every draw is paired for checking
+with every draw of the same hash (combiner, other mode, geometry mode,
+triangle count) in the last frame, so a group of look-alike draws costs
+the product of the two counts, then a `std::set` insert, a match score and
+a sort for each pair. Since round 145 tanks are matched by ID and skip
+this; explosion sprites and debris have no owner and remain. In the
+sandbox's attract intro (which loops through the battle) the worst group
+reached 17,687 pairs.
+
+**Fix:** `lib-patches/rt64/0021-auto-match-group-limit.patch`: a group of
+look-alike draws with more than 4,096 pairs, or one that would take the
+scene past 16,384, isn't matched. Its draws are shown where they are, at
+the game's own rate, as at Original, instead of holding up every frame.
+Sandbox, same intro: 186 groups skipped, worst match 9 ms (10 ms without the
+limit; the sandbox's counts are lower than the owner's must have been).
+The testing log is now `0022-perf-log.patch` and also reports the worst
+pair count and the groups skipped.
+
+## 2026-10-24, round 146: timing log for the slowdown in heavy scenes
+
+**Round 145 confirmed (owner, Windows):** the decal flashing and the
+decals coming loose in the intro are fixed.
+
+**Still open:** heavy scenes (explosions) slow down, only above Original
+framerate (with resolution, MSAA and the rest turned down it still
+happens), and round 145 made no difference. The pacing log showed game
+frames of 3-4 VIs (66-92 ms) in those stretches, so the game is waiting
+on something.
+
+How RT64 can hold the game up: its workload thread renders a game frame
+and then the in-between frames up to the next one, and the game's
+graphics thread, when it submits its next frame and RT64's ring of
+workloads is full, spins in `WorkloadQueue::advanceToNextWorkload` until
+the workload thread frees a slot. RT64 already cuts in-between frames
+when it runs late (per-frame time budget, and stops when a new workload
+is waiting), so something in a heavy frame takes longer than that budget
+allows for.
+
+Ruled out here: transform matching. A timer around `GameFrame::match`
+(temporary, removed) showed at most 3.6 ms and ~800 candidate pairs while
+firing and blowing up a truck at 120 fps in the sandbox.
+
+**Test build:** `lib-patches/rt64/0020-perf-log.patch` (temporary):
+`BTGA_RT64_PERF_LOG=1` prints once a second the worst game frame's setup
+and matching time, first draw, all draws, time waiting for presentation,
+in-between frames drawn of those planned, and how long the game waited
+for a free slot. The sandbox can't judge it (software Vulkan: every
+frame is cut short); the owner's log during an explosion decides.
+
+## 2026-10-24, round 145: interpolation IDs from the Android branch, now on PC
+
+**Round 144 results (owner, Windows):** at Framerate Original everything is
+fine, so it's RT64's interpolation. None of the switches fixed it:
+`NO_MATCH_LIMIT` made the jitter much worse, on models too, with a lot of
+slowdown; `NO_CAMERA_LERP` and `NO_EXACT_PROJ` no change (maybe slightly
+less slowdown); `NO_LATEST_FACTOR` no fix, maybe worse models. So round
+136's patches help rather than cause it, and turning the distance limit off
+showing more wrong pairs says the problem is RT64's automatic matching
+itself: with no IDs it pairs each matrix with one from last frame by
+position and orientation, among draws that hash alike (combiner, other
+mode, geometry mode, triangle count), and the tanks and their decals all
+look alike.
+
+The Android branch already solved this for the same game
+(`src/game/interpolation_ids.cpp`, Android-only there because it hadn't
+shown on PC; BT1 got the same approach from it): each queued model's Mtx is
+traced to the float matrix or object it came from, and the queue walker puts
+a gEXMatrixGroup with that address as ID (decomposed, always interpolated,
+linear ordering) ahead of every matrix load, popped at its exit. Tanks,
+built in two shared scratch matrices by `func_800AE184`, get their tank
+object's address. Each bucket's list starts with a matrix load
+(`btga_interp_bucket_start`), so the player tank's decal (its own bucket,
+the hull's Mtx) loads the same way every frame, and RT64 patch `0009` pairs
+an ID's extra transforms with its last one, so the decal never goes
+unpaired. Both of those are written for exactly this decal flash.
+
+Ported as is and enabled on PC: the file (the `__ANDROID__` switch
+removed), the four hooks in the toml, the frame-clear call in
+`widescreen.cpp`, and `lib-patches/rt64/0009-linear-ids-pair-extra-transforms.patch`
+(the same file name and contents as on the Android branch, so a merge
+doesn't conflict). Not ported: the Android branch's intro nuke-flash rect
+aspect change (Android-only there too). Round 144's switches patch
+(`0020`) is removed.
+
+Verified here: builds, all four hooks land, RT64 applies `0009` with our
+other patches; the intro, a story cutscene and mission 1 run, and in 16
+frames of driving and turning the decal stays on. The sandbox runs at about
+11 fps with software Vulkan, so the owner's test decides.
+
+## 2026-10-24, round 144: round 143 reverted; switches to find the decal flicker
+
+**Round 143 result (owner, Windows):** worse. The tank logo decal still
+flashes in game, the decals coming loose and jittering off the tanks in the
+intro cutscene are back, and heavy sequences lag. Reverted (the step is
+left as measured again). The pacing log with it:
+- steady stretches: 150 frames at 2 VIs, frame interval 26-42 ms, raw step
+  0.79-1.25 (wider than the 0.63-0.84 before round 138, scaled: about
+  +/-25% now);
+- busy stretches: 27-29 fps, some 3-4 VI frames, intervals up to 66-92 ms.
+
+So a steady stream of 2-VI frames comes with a step that varies a lot, and
+snapping it makes things worse, as round 130/131's A/B already showed.
+
+**What the clip shows** (owner's 60 fps capture of gameplay): driving, the
+decal is missing in 8 of 24 consecutive frames, in runs of up to 6, while
+the tank body is drawn every frame. RT64 draws a ZMODE_DEC pixel only
+within a small depth tolerance of what's there (RasterPS.hlsl), so the
+decal and the body are at different depths when it's missing. Decals
+coming loose in the intro is the same thing seen from further away.
+
+**Not round 142:** the screen filter and bloom patches only change the VI
+(final picture) pass; nothing in the 3D or the interpolation.
+
+**Suspects:** round 136's interpolation patches from BT1 (only in effect
+above Original framerate), whose effect could have grown with round 138
+(4/3 more motion per frame): 0011/0013 refuse to pair transforms more than
+256 units apart (so a decal can stay uninterpolated while its tank is
+interpolated), 0012 takes the rate from the latest VI factor, 0014 replaces
+the projection estimate on in-between frames, 0015 interpolates the camera
+as a camera.
+
+**Test build:** `lib-patches/rt64/0020-interpolation-ab-switches.patch`
+(temporary) turns each off with an environment variable:
+`BTGA_RT64_NO_MATCH_LIMIT` (0011 and 0013), `BTGA_RT64_NO_LATEST_FACTOR`
+(0012), `BTGA_RT64_NO_EXACT_PROJ` (0014), `BTGA_RT64_NO_CAMERA_LERP`
+(0015). First check for the owner: Framerate Original (no interpolation at
+all). Builds here; to be tested on Windows.
+
+## 2026-10-24, round 142: Screen Filter and Bloom (from the Sin and Punishment port)
+
+Owner's request: the Screen Filter (CRT, Scanlines, LCD) and Bloom options
+from snprecomp, also in the Turok Rage Wars port.
+
+- `lib-patches/rt64/0018-screen-filters.patch` and `0019-bloom.patch`,
+  copied unchanged from snprecomp (the Turok copies are identical). Same
+  RT64 commit as ours, and they apply on top of our 0001 and 0011-0015
+  (snprecomp's 0016/0017 aren't needed). The CRT filter is based on Timothy
+  Lottes' CRT shader and the LCD filter on LCD3x by Gigaherz, both public
+  domain.
+- Screen Filter and Bloom at the end of the Graphics tab
+  (`btga::config::add_graphics_options`, src/main/game_config.cpp). Off by
+  default, to keep the game's look unless chosen. They're passed to
+  `RT64::setScreenFilter` / `setBloom` from the options' change callbacks
+  (which also run when the settings load, and when an unapplied change on
+  the Graphics tab is cancelled).
+- `cmake/ApplyLibPatches.cmake` now also runs `git clean -fdq` after the
+  reset, as snprecomp's does: the bloom patch adds new files, and on the
+  next reapply they would block `git apply` ("already exists").
+
+Verified here: both options show and save; CRT and Bloom High show in game
+(shadow mask and scanlines on the title screen, glow on the bright parts).
+
+## 2026-10-24, round 141: GameShark and Action Replay codes on their own tab
+
+Owner: better after round 140 but still a little slow. The stock codes stay
+on the Cheats tab (14 options, now without a heading) and the GameShark and
+Action Replay codes move to a new Hacks tab (51 options, with the two
+headings), so each tab is shorter to lay out. The Hacks settings are saved
+in hacks.json; GameShark/AR choices made in round 139-140 builds (saved in
+cheats.json) don't carry over.
+
+## 2026-10-24, round 140: the Cheats tab was laggy
+
+Owner report: the Cheats menu is very laggy. Measured with a timer around
+RmlUi's Update() (temporary, removed): on the Cheats tab, hovering gave
+frames of up to 33 ms (average 3-6 ms) here, against under 1 ms on the
+other tabs.
+
+Cause: hovering an option shows its description, and setting the text
+replaces the description element's children, which makes RmlUi 6.0 lay out
+the whole document again (Element::DirtyLayout always dirties the
+document). That's cheap on a short tab; the Cheats tab has 65 options, and
+the seven 20-choice pickup pickers alone were 140 wrapping radio buttons
+(33 ms with them, 10 ms without). Hover events also fire for each child the
+mouse crosses, so one movement set the same text several times. With the
+description update skipped the worst frame was under 1 ms, which confirmed
+it.
+
+Fixes (RecompFrontend patches):
+- 0012 (replaces round 139's radio-wrap patch): enums with more than 8
+  choices are a dropdown (the library's Select) instead of a radio row.
+  Select gets a focus callback so the description still follows controller
+  focus.
+- 0013: the description is only set when its text changes.
+
+Result here: average 0.4 ms while moving over the list, and one frame of
+about 7 ms (this sandbox's CPU, shared with software Vulkan) per new
+option hovered. Dropdown picks save and reload. Block layout for the option
+rows was tried (12 -> 8 ms) and left out: it would change every tab.
+
+## 2026-10-24, round 139: Cheats tab (stock codes, GameShark and Action Replay)
+
+Owner's request: a Cheats tab like the Turok Rage Wars and snprecomp ports,
+with toggles instead of typing codes, split into the game's own codes and
+cheat-device codes so players know what to expect.
+
+**Which codes are this game's.** The owner's list mixed in BattleTanx 1
+material. The code screen (func_800D0070) compares the text with a table of
+33 strings at 0x80121C3C and switches on the match; the 14 retail codes are
+there (TRDDYBRRKS, 80DYS, HPPYHPPY, RCKTSRDGLR, WRDRB, PRSSTNCFTM, BRNCSSTS,
+DRMWVR, NNKNHCKS, DR1NKM3, SHR1MP, T0MTHMB, M1N1M3, PYGMY), plus "?"
+placeholders and DCPTC* cinematic-test codes. The rest of the list (THRTN,
+SRTHMB, DPPCKTS, ...) is not in the table, and the 40 ten-letter stage
+passwords didn't come up either (10-letter entries go to the password check,
+func_800E944C, not checked further). So: 14 stock toggles. Each sets the
+flag its code flips: 0x80125AB0-0x80125ABC (bytes), level select at
+0x80117F48 and custom gangs at 0x80121CC0 (halfwords). On, the flag is kept
+set; off clears it once, so typing a code still works with the toggle off.
+
+**GameShark and Action Replay codes** are this ROM's: every code address
+lines up (the AR "2400" codes land on the stores of the ammo/counter fields,
+the tank-size float at 0x800718F4 is 1.0, the boss name at 0x80075008 reads
+"TANK..."). Two kinds:
+- Memory writes (types 80, 81, D0-D3, 50), applied by `btga_cheats_frame`
+  each pass of the controller thread's loop (func_800988E8, 0x80098A08,
+  which runs on the menus too). Codes on the game's fixed tables put the
+  original bytes back when turned off. 81 writes go in as two bytes (some
+  of the player-weapon codes use odd addresses). Addresses past the first
+  MB (Tank Bucks 0x80236A9F, player weapons 0x801AD...) are in the game's
+  bss (0x80127E30-0x803B17B0, cleared by the entry point), so they're the
+  same as on the N64.
+- Writes to code (most AR codes, 11 GS codes). The recompiled code doesn't
+  read instructions from RDRAM, so each is a hook in the toml: the changed
+  instruction becomes a nop plus a hook that runs the original or the
+  cheat's version (`btga_cheat(n)`), and the two branch nops (0x80082854,
+  0x8009C624) are hooks that jump where the nop'd code would. The jump
+  table codes (Jam Radar, the pickup modifiers) rewrite table entries,
+  which the recompiled switch ignores (it switches on the index), so their
+  hooks change `jr_addend_*` before the switch. Hook placement checked in
+  N64Recomp: hooks are emitted after labels and inside both copies of a
+  delay slot, so the nop+hook pairs in delay slots are right. Regenerated:
+  the only differences are the hooked instructions.
+
+Left out: the GS codes that set the stock flags (same as the toggles), the
+duplicate "All Tanks All Campaigns" list (the same writes as the repeater
+version) and Levitate (needs the GameShark's button).
+
+**Menu.** Headings with a note line (lib-patches/RecompFrontend/0011, new
+`add_option_heading`), and radio rows that wrap (0012) for the 20-choice
+pickup pickers (replaced by dropdowns in round 140). RecompFrontend patches start at 0011 so they don't clash
+with the Android branch's 0001-0005.
+
+Verified here (Linux, lavapipe under Xvfb): the tab, headings and wrapping
+render; Level Select from the toggle gives the campaign map's level choice;
+Invincibility holds under fire; Tank Bullets Infinite Ammo keeps the
+counter at 100 while firing (95 after five shots without it). Tank Size
+takes effect on the next tank made (func_8008AE04 copies the float into
+the tank at 0x4C0). An offline test of the memory-code engine (toggles,
+restore, repeat, conditional, odd addresses, pickup mapping) passes. The
+other code-changing cheats are compiled and placed as above but not played.
 
 ## 2026-10-17, round 138: the game ran at 3/4 speed (osClockRate never scaled)
 

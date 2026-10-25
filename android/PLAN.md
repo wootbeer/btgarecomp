@@ -571,10 +571,17 @@ the next PC update. So `src/game/interpolation_ids.cpp` (matrix IDs, bucket relo
 flash's gEXSetRectAspect in `src/game/widescreen.cpp` are Android only for now (RT64 0009 only acts
 on tagged objects, so it's idle on PC too). Merging this branch then leaves PC rendering as on main.
 
-Release prep: the version name follows the PC release it matches (0.1.2: 0.1.1 predates rounds
-135-138). Release signing reads android/keystore.properties (gitignored; keystore.properties.example),
+Release prep: the version name follows the PC release it matches. Release signing reads android/keystore.properties (gitignored; keystore.properties.example),
 as in the owner's other ports; without it assembleRelease is unsigned. The APK carries the license
 notices of everything built into it under assets/licenses/ (the Windows zip's list minus the DirectX
 shader compiler, plus SDL2). Clean-up: the owner's name out of STATUS.md, unused includes, the
 ubershaders-only switch (RT64 0007) removed.
 
+Merged main up to 0.1.5 (rounds 139-150): Cheats and Hacks tabs, Screen Filter and Bloom on the
+Graphics tab (RT64 0018, 0019; both off by default), the bigger heap for level data, and RT64 0021,
+which stops matching groups of hundreds of look-alike draws (explosions) when they would take longer
+than a frame -- the cause of the PC slowdown above Original framerate, and likely some of Android's
+explosion lag too. Round 145 took this branch's matrix IDs onto PC, so `interpolation_ids.cpp` is now
+main's file and no longer Android only; the nuke flash's gEXSetRectAspect still is. The shared RT64
+patches (0001, 0009, 0011-0015) were already the same on both sides. Version name now 0.1.5. The TOML
+has main's new hooks, so the recompiled code has to be regenerated with N64Recomp before building.

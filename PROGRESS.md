@@ -16,8 +16,10 @@ and leave the game's own behaviour, look and balance alone.
   (`BattleTanxGASyms/battletanxga.us.rev0.syms.toml`) has been corrected by
   hand wherever a merged or mis-sized function turned up.
 - **Graphics** through RT64: higher resolutions, MSAA, higher framerates
-  (interpolated) and widescreen (Expand) with the gameplay HUD anchored to
-  the screen edges and letterboxed cutscenes. Includes a fix in RT64 itself
+  (interpolated, with matrix IDs so RT64 pairs the right models between
+  frames) and widescreen (Expand) with the gameplay HUD anchored to
+  the screen edges and letterboxed cutscenes. Optional screen filters (CRT,
+  Scanlines, LCD) and bloom. Includes a fix in RT64 itself
   for distant flicker in Expand (`lib-patches/rt64/`).
 - **Audio**: the game's RSP audio microcode, recompiled from the ROM
   (`n_aspMain.us.rev0.toml`), with the volume setting and a latency cap.
@@ -29,6 +31,9 @@ and leave the game's own behaviour, look and balance alone.
   game ran at 3/4 speed until round 138); its frame time is snapped to
   whole VIs, and the few places that truncate the per-frame step use the
   real step (`src/game/frame_dt_fix.cpp`).
+- **Cheats**: a Cheats tab with the game's own codes as toggles, and a
+  Hacks tab with the GameShark and Action Replay codes
+  (`src/game/cheats.cpp`).
 - **Crash reports**: `crash_log.txt` gives the exception, the module, any
   C++ error message and the game function that faulted
   (`src/main/crash_handler.cpp`).

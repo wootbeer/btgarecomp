@@ -1724,3 +1724,440 @@ before_vram = 0x8007B738
 text = """
     { extern void btga_interp_bucket_start(uint8_t *rdram, recomp_context *ctx); btga_interp_bucket_start(rdram, ctx); }
 """
+
+# Cheats and Hacks tabs (src/game/cheats.cpp). btga_cheats_frame applies the
+# stock codes' flags and the memory codes; it runs each pass of the
+# controller thread's loop (func_800988E8), which runs on the menus as well
+# as in game.
+[[patches.hook]]
+func = "func_800988E8"
+before_vram = 0x80098A08
+text = """
+    { extern void btga_cheats_frame(uint8_t *rdram); btga_cheats_frame(rdram); }
+"""
+
+# GameShark and Action Replay codes that change the game's code. Writing to
+# the code does nothing here (the recompiled code doesn't read it), so each
+# changed instruction is either replaced by a nop plus a hook that runs the
+# original or the cheat's version (btga_cheat(n) says which; the numbers are
+# the Hook enum in src/game/cheats.cpp), or, for branches and jump tables,
+# a hook that jumps where the changed code would.
+#
+# All Weapon Types Change: addiu $a1, $a1, -0x1 became li $t1, -0x1.
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008C5E8
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008C5E8
+text = """
+    { extern int btga_cheat(int hook); if (btga_cheat(1)) { ctx->r9 = ADD32(0, -0X1); } else { ctx->r5 = ADD32(ctx->r5, -0X1); } }
+"""
+
+# Enemies On Turntable: addu $v1, $s2, $zero became addu $a0, $s2, $zero.
+[[patches.instruction]]
+func = "func_8009D75C"
+vram = 0x8009D7AC
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8009D75C"
+before_vram = 0x8009D7AC
+text = """
+    { extern int btga_cheat(int hook); if (btga_cheat(9)) { ctx->r4 = ADD32(ctx->r18, 0); } else { ctx->r3 = ADD32(ctx->r18, 0); } }
+"""
+
+# Max Time Limit For Tank Wars: li $v0, 0x1518 became li $v0, 0x7FFF.
+[[patches.instruction]]
+func = "func_8009A95C"
+vram = 0x8009A9C4
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8009A95C"
+before_vram = 0x8009A9C4
+text = """
+    { extern int btga_cheat(int hook); ctx->r2 = ADD32(0, btga_cheat(24) ? 0X7FFF : 0X1518); }
+"""
+
+# Enemies Can't Move: the bne at 0x80082854 became a nop, so the function
+# always returns 0 from there.
+[[patches.hook]]
+func = "func_80082834"
+before_vram = 0x80082854
+text = """
+    { extern int btga_cheat(int hook); if (btga_cheat(8)) { ctx->r2 = 0; goto L_80082860; } }
+"""
+
+# Move After Beating A Level: the beq at 0x8009C624 became a nop, so its
+# delay slot runs and the code goes on at 0x8009C62C.
+[[patches.hook]]
+func = "func_8009C524"
+before_vram = 0x8009C624
+text = """
+    { extern int btga_cheat(int hook); if (btga_cheat(6)) { ctx->r2 = ctx->r4 < 0X7 ? 1 : 0; goto L_btga_8009C62C; } }
+"""
+
+[[patches.hook]]
+func = "func_8009C524"
+before_vram = 0x8009C62C
+text = """
+    L_btga_8009C62C:;
+"""
+
+# Jam Radar: the code points every entry of the jump tables at 0x80073D08 and
+# 0x80073D20 at 0x800C7BEC. The recompiled switches pick their case from the
+# index (jr_addend), not the table, so the hooks change the index.
+[[patches.hook]]
+func = "func_800C7AA0"
+before_vram = 0x800C7B00
+text = """
+    { extern int btga_cheat(int hook); if (btga_cheat(10)) { jr_addend_800C7B00 = 4 << 2; } }
+"""
+
+[[patches.hook]]
+func = "func_800C7AA0"
+before_vram = 0x800C7BCC
+text = """
+    { extern int btga_cheat(int hook); if (btga_cheat(10)) { jr_addend_800C7BCC = 1 << 2; } }
+"""
+
+# Pickup modifiers: the codes rewrite entries of the pickup jump table at
+# 0x80071D38 (one case per item type); btga_cheat_pickup picks the case.
+[[patches.hook]]
+func = "func_8008ECB4"
+before_vram = 0x8008ECF0
+text = """
+    { extern int btga_cheat_pickup(int index); jr_addend_8008ECF0 = (gpr)btga_cheat_pickup((int)(jr_addend_8008ECF0 >> 2)) << 2; }
+"""
+
+# The rest turn one load or store into a nop.
+# Everybody Is Invisible.
+# sw          $zero, 0x0($v0)
+[[patches.instruction]]
+func = "func_80096424"
+vram = 0x80096554
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_80096424"
+before_vram = 0x80096554
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(0)) { MEM_W(0X0, ctx->r2) = 0; } }
+"""
+
+# Tank Shells Do Less Damage.
+# lwc1        $f0, 0x1A0C($at)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008C808
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008C808
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(2)) { ctx->f0.u32l = MEM_W(ctx->r1, 0X1A0C); } }
+"""
+
+# Gun Fire At Ground Level.
+# lwc1        $f2, 0x4C0($s1)
+[[patches.instruction]]
+func = "func_8008C3B4"
+vram = 0x8008C544
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C3B4"
+before_vram = 0x8008C544
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(3)) { ctx->f2.u32l = MEM_W(ctx->r17, 0X4C0); } }
+"""
+
+# Rapid Fire.
+# lw          $v0, 0x224($v0)
+[[patches.instruction]]
+func = "func_8008E780"
+vram = 0x8008E7F0
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008E780"
+before_vram = 0x8008E7F0
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(4)) { ctx->r2 = MEM_W(ctx->r2, 0X224); } }
+"""
+
+# Stinger Weapons.
+# lw          $s3, 0x24($sp)
+[[patches.instruction]]
+func = "func_8008BF5C"
+vram = 0x8008C394
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008BF5C"
+before_vram = 0x8008C394
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(5)) { ctx->r19 = MEM_W(ctx->r29, 0X24); } }
+"""
+
+# Chain Reaction Pumps.
+# lw          $v1, 0x10($s0)
+[[patches.instruction]]
+func = "func_800A5744"
+vram = 0x800A5774
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_800A5744"
+before_vram = 0x800A5774
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(7)) { ctx->r3 = MEM_W(ctx->r16, 0X10); } }
+"""
+
+# Enemies Killed Counter Doesn't Increase.
+# sh          $v0, 0x0($v1)
+[[patches.instruction]]
+func = "func_800A89B0"
+vram = 0x800A89F8
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_800A89B0"
+before_vram = 0x800A89F8
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(18)) { MEM_H(0X0, ctx->r3) = ctx->r2; } }
+"""
+
+# Guided Missiles Fly Forever.
+# sh          $v0, 0x22($s0)
+[[patches.instruction]]
+func = "func_800DB850"
+vram = 0x800DB8C4
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_800DB850"
+before_vram = 0x800DB8C4
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(19)) { MEM_H(0X22, ctx->r16) = ctx->r2; } }
+"""
+
+# Gun Buddies Are Invulnerable.
+# sw          $v0, 0x3C($a3)
+[[patches.instruction]]
+func = "func_800E4530"
+vram = 0x800E459C
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_800E4530"
+before_vram = 0x800E459C
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(20)) { MEM_W(0X3C, ctx->r7) = ctx->r2; } }
+"""
+
+# Tank Bullets Infinite Ammo.
+# sh          $v0, 0x1F6($v1)
+[[patches.instruction]]
+func = "func_8008E780"
+vram = 0x8008E97C
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008E780"
+before_vram = 0x8008E97C
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(21)) { MEM_H(0X1F6, ctx->r3) = ctx->r2; } }
+"""
+
+# Infinite Tank Bucks (Action Replay).
+# sw          $v1, 0xC($a0)
+[[patches.instruction]]
+func = "func_800D6EEC"
+vram = 0x800D7420
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_800D6EEC"
+before_vram = 0x800D7420
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(22)) { MEM_W(0XC, ctx->r4) = ctx->r3; } }
+"""
+
+# Unlimited Laser Shots.
+# sb          $v0, 0xA($s0)
+[[patches.instruction]]
+func = "func_800DB850"
+vram = 0x800DC14C
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_800DB850"
+before_vram = 0x800DC14C
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(23)) { MEM_B(0XA, ctx->r16) = ctx->r2; } }
+"""
+
+# Infinite Ammo For Special Weapons.
+# sh          $v0, 0x206($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008D230
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008D230
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X206, ctx->r21) = ctx->r2; } }
+"""
+
+# sh          $v0, 0x1FE($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008D990
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008D990
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X1FE, ctx->r21) = ctx->r2; } }
+"""
+
+# sh          $v0, 0x1FC($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008DB20
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008DB20
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X1FC, ctx->r21) = ctx->r2; } }
+"""
+
+# sh          $v0, 0x212($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008DD00
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008DD00
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X212, ctx->r21) = ctx->r2; } }
+"""
+
+# sh          $v0, 0x210($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008DE24
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008DE24
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X210, ctx->r21) = ctx->r2; } }
+"""
+
+# sh          $v0, 0x202($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008DEF8
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008DEF8
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X202, ctx->r21) = ctx->r2; } }
+"""
+
+# sh          $v0, 0x216($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008E174
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008E174
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X216, ctx->r21) = ctx->r2; } }
+"""
+
+# sh          $v1, 0x20E($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008E3E0
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008E3E0
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X20E, ctx->r21) = ctx->r3; } }
+"""
+
+# sh          $v0, 0x20E($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008E4C0
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008E4C0
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X20E, ctx->r21) = ctx->r2; } }
+"""
+
+# sh          $v0, 0x20E($s5)
+[[patches.instruction]]
+func = "func_8008C5D8"
+vram = 0x8008E518
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008C5D8"
+before_vram = 0x8008E518
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X20E, ctx->r21) = ctx->r2; } }
+"""
+
+# sh          $v0, 0x1F6($v1)
+[[patches.instruction]]
+func = "func_8008E780"
+vram = 0x8008EA84
+value = 0x00000000
+
+[[patches.hook]]
+func = "func_8008E780"
+before_vram = 0x8008EA84
+text = """
+    { extern int btga_cheat(int hook); if (!btga_cheat(25)) { MEM_H(0X1F6, ctx->r3) = ctx->r2; } }
+"""
+
+# A bigger heap for level data, moved to the upper 4 MB the game never uses
+# (src/game/heap_relocate.cpp): right after each heap setup and clear.
+[[patches.hook]]
+func = "func_800ACE70"
+before_vram = 0x800ACEA4
+text = """
+    { extern void btga_heap_setup(uint8_t *rdram); btga_heap_setup(rdram); }
+"""
+
+[[patches.hook]]
+func = "func_800AF43C"
+before_vram = 0x800AF488
+text = """
+    { extern void btga_heap_setup(uint8_t *rdram); btga_heap_setup(rdram); }
+"""
