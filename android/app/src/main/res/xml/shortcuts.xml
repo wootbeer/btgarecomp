@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app icon's long-press menu (AndroidManifest.xml). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="share_log"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/share_log">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="io.github.wootbeer.btgarecomp"
+            android:targetClass="io.github.wootbeer.btgarecomp.ShareLogActivity" />
+    </shortcut>
+</shortcuts>

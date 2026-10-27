@@ -1,5 +1,7 @@
 #include "btga_android.h"
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <thread>
@@ -10,24 +12,35 @@
 #include <unistd.h>
 
 #include <filesystem>
+#include <string>
 #include <system_error>
 
 #include "SDL2/SDL_events.h"
 #include "SDL2/SDL_gamecontroller.h"
+#include "SDL2/SDL_hints.h"
 #include "SDL2/SDL_messagebox.h"
 #include "SDL2/SDL_system.h"
 
 #include "librecomp/game.hpp"
 #include "plume/plume_render_interface_types.h"
 
+// Set by the runtime's ultramodern::quit() (librecomp/src/recomp.cpp) as soon as quitting starts.
+extern std::atomic_bool exited;
+
 namespace {
+    // log.txt stops growing past this; what's wrong usually shows early, or ends in a crash
+    // report (crash_log.txt).
+    constexpr long max_log_bytes = 8 * 1024 * 1024;
+
     // Android discards a native process's stdout and stderr; the game reports its problems
-    // there, so forward both to logcat line by line.
-    void forward_output_to_logcat() {
+    // there, so forward both to logcat line by line, and to log_path (log.txt in the app's
+    // storage), which players can share (BattleTanxActivity, LogFiles.java).
+    void forward_output(const std::string& log_path) {
         int pipe_fds[2];
         if (pipe(pipe_fds) != 0) {
             return;
         }
+        FILE* log = log_path.empty() ? nullptr : fopen(log_path.c_str(), "w");
 
         setvbuf(stdout, nullptr, _IOLBF, 0);
         setvbuf(stderr, nullptr, _IONBF, 0);
@@ -35,7 +48,18 @@ namespace {
         dup2(pipe_fds[1], STDERR_FILENO);
         close(pipe_fds[1]);
 
-        std::thread([read_fd = pipe_fds[0]]() {
+        std::thread([read_fd = pipe_fds[0], log]() {
+            long logged = 0;
+            auto write_line = [&](const char* line) {
+                __android_log_write(ANDROID_LOG_INFO, "BTGA", line);
+                if (log != nullptr && logged < max_log_bytes) {
+                    // Flushed every line: what was written survives a crash.
+                    fputs(line, log);
+                    fputc('\n', log);
+                    fflush(log);
+                    logged += long(strlen(line)) + 1;
+                }
+            };
             char buf[1024];
             size_t used = 0;
             ssize_t got;
@@ -45,14 +69,14 @@ namespace {
                 for (size_t i = 0; i < used; i++) {
                     if (buf[i] == '\n') {
                         buf[i] = '\0';
-                        __android_log_write(ANDROID_LOG_INFO, "BTGA", buf + start);
+                        write_line(buf + start);
                         start = i + 1;
                     }
                 }
                 // Keep a partial line for the next read, or flush it if the buffer is full.
                 if (start == 0 && used == sizeof(buf) - 1) {
                     buf[used] = '\0';
-                    __android_log_write(ANDROID_LOG_INFO, "BTGA", buf);
+                    write_line(buf);
                     used = 0;
                 }
                 else {
@@ -149,13 +173,29 @@ namespace {
 }
 
 void btga::android::startup() {
-    forward_output_to_logcat();
+    const char* internal_path = SDL_AndroidGetInternalStoragePath();
+    forward_output(internal_path != nullptr ? std::string(internal_path) + "/log.txt" : std::string());
     SDL_AddEventWatch(log_input_devices, nullptr);
     install_window_provider();
 
-    const char* internal_path = SDL_AndroidGetInternalStoragePath();
+    // Landscape only, either way up. Without the hint SDL lets a resizable window take any
+    // orientation, overriding the manifest's sensorLandscape, so the launcher could open in portrait.
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+
     if (internal_path == nullptr || chdir(internal_path) != 0) {
         fprintf(stderr, "Couldn't change to the app storage folder: %s\n", SDL_GetError());
+    }
+
+    // A quit, not a crash: no "closed unexpectedly" at the next start (LogFiles.java). The
+    // marker goes as soon as quitting starts, as the game's threads aren't always joined after.
+    if (internal_path != nullptr) {
+        std::thread([marker = std::string(internal_path) + "/running"]() {
+            // Polled: quit() stores the flag without notifying waiters.
+            while (!exited.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            std::remove(marker.c_str());
+        }).detach();
     }
 }
 

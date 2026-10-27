@@ -585,3 +585,25 @@ explosion lag too. Round 145 took this branch's matrix IDs onto PC, so `interpol
 main's file and no longer Android only; the nuke flash's gEXSetRectAspect still is. The shared RT64
 patches (0001, 0009, 0011-0015) were already the same on both sides. Version name now 0.1.5. The TOML
 has main's new hooks, so the recompiled code has to be regenerated with N64Recomp before building.
+
+Ported from Sin and Punishment Recompiled (wootbeer/snprecomp, which reuses this port: same RT64
+commit 4337374 and shader set), for device crashes BTGA very likely shares:
+- Adreno 619 (driver 512.530): all 8 ubershader pipelines fail to link, plume leaves the handles null
+  and the first draw falling back to the ubershader crashes in vkCmdBindPipeline (SnP 14caffe,
+  confirmed on a Motorola). plume 0006: pipelines report isValid(); an invalid one isn't bound.
+  rt64 0022 (SnP's 0023): the ubershader gives no pipeline when it failed (logged once); a draw then
+  uses its own shader if valid, else is skipped until it is (0008's dithered draws too).
+- Galaxy S24 Ultra (Adreno 750, driver 512.762): three compute pipelines fail and the dispatch still
+  reached the driver (SnP 23cfa03, not on SnP's main yet, untested on an S24). plume 0007: the
+  command list skips dispatches and draws while its bound pipeline is invalid. rt64 0023 (SnP's
+  0024): each of the shader library's 37 pipelines (Bloom's included) is named in the log if it fails.
+  Where every pipeline compiles (the Retroid, PC) none of this changes anything; isValid() is true.
+- Landscape only: SDL_HINT_ORIENTATIONS, as SDL otherwise asks for any orientation for a resizable
+  window, overriding the manifest.
+- Share log (SnP 6b260b2): the game's output also goes to log.txt (flushed per line, 8 MB cap);
+  LogFiles.java keeps the previous run's logs. A "running" marker exists while BattleTanxActivity is
+  resumed; android_startup.cpp removes it once ultramodern::quit() sets `exited` (BTGA has no quit
+  watchdog), so finding it at start means a crash: a dialog offers Share / Not now, holding the game
+  back (mHasFocus = false). The icon's long-press Share log shortcut (on RomPickerActivity, the
+  launcher activity here) does the same without starting the game; LogProvider is read-only, by grant.
+- crash_handler.cpp reads pc/sp on aarch64 too, so a crash report names the library.

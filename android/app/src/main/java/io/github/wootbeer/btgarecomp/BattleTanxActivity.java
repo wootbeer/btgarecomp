@@ -1,5 +1,6 @@
 package io.github.wootbeer.btgarecomp;
 
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Context;
@@ -41,8 +42,16 @@ public class BattleTanxActivity extends SDLActivity implements InputManager.Inpu
 
     private TouchControlsView touchControls;
 
+    /** The game runs once per process; its logs are rotated once, at its start. */
+    private static boolean runStarted;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        boolean lastRunCrashed = false;
+        if (!runStarted) {
+            runStarted = true;
+            lastRunCrashed = LogFiles.startRun(this);
+        }
         installAssets();
         super.onCreate(savedInstanceState);
 
@@ -59,6 +68,48 @@ public class BattleTanxActivity extends SDLActivity implements InputManager.Inpu
             }
             touchControls.setGamepadInUse(anyGamepadConnected());
         }
+
+        if (lastRunCrashed && !mBrokenLibraries) {
+            offerLogAfterCrash();
+        }
+    }
+
+    /**
+     * Asks whether to share the log of the run that crashed, before the game starts again: SDL
+     * starts the game once the activity's window has focus, which the dialog holds until it's
+     * closed. So a game that crashes at once still lets the player share its log.
+     */
+    private void offerLogAfterCrash() {
+        mHasFocus = false;
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("The game closed unexpectedly")
+                .setMessage("Share its log to help fix the problem? It has your device's model, its "
+                        + "graphics driver and the game's messages, nothing personal.\n\n"
+                        + "You can share it later too: long-press the app icon, then Share log.")
+                .setPositiveButton("Share", (dialog, which) -> {
+                    Intent share = LogFiles.shareIntent(this);
+                    if (share != null) {
+                        try {
+                            startActivity(share);
+                        } catch (ActivityNotFoundException e) {
+                            Log.e(TAG, "Nothing to share the log with", e);
+                        }
+                    }
+                })
+                .setNegativeButton("Not now", null)
+                .show();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        LogFiles.markRunning(this);
+    }
+
+    @Override
+    protected void onPause() {
+        LogFiles.markNotRunning(this);
+        super.onPause();
     }
 
     // SDL hides the system bars once, when the game's window goes fullscreen (mFullscreenModeActive).

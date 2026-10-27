@@ -312,6 +312,9 @@ namespace {
 #if defined(__x86_64__)
         uintptr_t pc = (uintptr_t)uctx->uc_mcontext.gregs[REG_RIP];
         uintptr_t sp = (uintptr_t)uctx->uc_mcontext.gregs[REG_RSP];
+#elif defined(__aarch64__)
+        uintptr_t pc = (uintptr_t)uctx->uc_mcontext.pc;
+        uintptr_t sp = (uintptr_t)uctx->uc_mcontext.sp;
 #else
         uintptr_t pc = 0, sp = (uintptr_t)&uctx;
 #endif
