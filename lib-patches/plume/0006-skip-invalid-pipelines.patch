@@ -1,0 +1,44 @@
+--- a/plume_render_interface.h
++++ b/plume_render_interface.h
+@@ -59,6 +59,9 @@ namespace plume {
+         virtual ~RenderPipeline() { }
+         virtual void setName(const std::string &name) = 0;
+         virtual RenderPipelineProgram getProgram(const std::string &name) const = 0;
++
++        // False if the driver failed to create the pipeline (e.g. its shaders didn't link).
++        virtual bool isValid() const { return true; }
+     };
+ 
+     struct RenderPipelineLayout {
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -3014,6 +3014,11 @@ namespace plume {
+     void VulkanCommandList::setPipeline(const RenderPipeline *pipeline) {
+         assert(pipeline != nullptr);
+ 
++        // A pipeline the driver failed to create has no handle; binding it crashes some drivers.
++        if (!pipeline->isValid()) {
++            return;
++        }
++
+         const VulkanPipeline *interfacePipeline = static_cast<const VulkanPipeline *>(pipeline);
+         switch (interfacePipeline->type) {
+         case VulkanPipeline::Type::Compute: {
+--- a/plume_vulkan.h
++++ b/plume_vulkan.h
+@@ -180,6 +180,7 @@ namespace plume {
+         ~VulkanComputePipeline() override;
+         void setName(const std::string &name) override;
+         RenderPipelineProgram getProgram(const std::string &name) const override;
++        bool isValid() const override { return vk != VK_NULL_HANDLE; }
+     };
+ 
+     struct VulkanGraphicsPipeline : VulkanPipeline {
+@@ -190,6 +191,7 @@ namespace plume {
+         ~VulkanGraphicsPipeline() override;
+         void setName(const std::string &name) override;
+         RenderPipelineProgram getProgram(const std::string &name) const override;
++        bool isValid() const override { return vk != VK_NULL_HANDLE; }
+         static VkRenderPass createRenderPass(VulkanDevice *device, const VkFormat *renderTargetFormat, uint32_t renderTargetCount, VkFormat depthTargetFormat, VkSampleCountFlagBits sampleCount);
+     };
+ 

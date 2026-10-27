@@ -1,0 +1,78 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -2876,6 +2876,9 @@ namespace plume {
+             fprintf(stderr, "vkBeginCommandBuffer failed with error code 0x%X.\n", res);
+             return;
+         }
++
++        activeComputePipelineValid = true;
++        activeGraphicsPipelineValid = true;
+     }
+ 
+     void VulkanCommandList::end() {
+@@ -2960,6 +2963,10 @@ namespace plume {
+     void VulkanCommandList::dispatch(uint32_t threadGroupCountX, uint32_t threadGroupCountY, uint32_t threadGroupCountZ) {
+         assert(activeComputePipelineLayout != nullptr);
+ 
++        if (!activeComputePipelineValid) {
++            return;
++        }
++
+         vkCmdDispatch(vk, threadGroupCountX, threadGroupCountY, threadGroupCountZ);
+     }
+ 
+@@ -3001,6 +3008,10 @@ namespace plume {
+         assert(activeGraphicsPipelineLayout != nullptr);
+         checkActiveRenderPass();
+ 
++        if (!activeGraphicsPipelineValid) {
++            return;
++        }
++
+         vkCmdDraw(vk, vertexCountPerInstance, instanceCount, startVertexLocation, startInstanceLocation);
+     }
+     
+@@ -3008,6 +3019,10 @@ namespace plume {
+         assert(activeGraphicsPipelineLayout != nullptr);
+         checkActiveRenderPass();
+ 
++        if (!activeGraphicsPipelineValid) {
++            return;
++        }
++
+         vkCmdDrawIndexed(vk, indexCountPerInstance, instanceCount, startIndexLocation, baseVertexLocation, startInstanceLocation);
+     }
+ 
+@@ -3015,11 +3030,18 @@ namespace plume {
+         assert(pipeline != nullptr);
+ 
+         // A pipeline the driver failed to create has no handle; binding it crashes some drivers.
++        const VulkanPipeline *interfacePipeline = static_cast<const VulkanPipeline *>(pipeline);
++        if (interfacePipeline->type == VulkanPipeline::Type::Compute) {
++            activeComputePipelineValid = pipeline->isValid();
++        }
++        else if (interfacePipeline->type == VulkanPipeline::Type::Graphics) {
++            activeGraphicsPipelineValid = pipeline->isValid();
++        }
++
+         if (!pipeline->isValid()) {
+             return;
+         }
+ 
+-        const VulkanPipeline *interfacePipeline = static_cast<const VulkanPipeline *>(pipeline);
+         switch (interfacePipeline->type) {
+         case VulkanPipeline::Type::Compute: {
+             const VulkanComputePipeline *computePipeline = static_cast<const VulkanComputePipeline *>(interfacePipeline);
+--- a/plume_vulkan.h
++++ b/plume_vulkan.h
+@@ -304,6 +304,10 @@ namespace plume {
+         const VulkanPipelineLayout *activeGraphicsPipelineLayout = nullptr;
+         const VulkanPipelineLayout *activeRaytracingPipelineLayout = nullptr;
+         VkRenderPass activeRenderPass = VK_NULL_HANDLE;
++        // False after a pipeline the driver failed to create was set: its dispatches or draws
++        // are skipped, as some drivers crash on them with no pipeline bound.
++        bool activeComputePipelineValid = true;
++        bool activeGraphicsPipelineValid = true;
+ 
+         VulkanCommandList(VulkanCommandQueue *queue);
+         ~VulkanCommandList() override;

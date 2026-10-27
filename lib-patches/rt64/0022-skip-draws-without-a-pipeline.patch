@@ -1,0 +1,85 @@
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -543,7 +543,12 @@ namespace RT64 {
+                 }
+ 
+                 const auto &triangles = drawCall.triangles;
+-                assert(triangles.pipeline != nullptr);
++
++                // No usable pipeline yet: the ubershader failed to compile on this driver and the draw's
++                // own shader isn't ready. Skip it; it appears once its shader is compiled.
++                if (triangles.pipeline == nullptr) {
++                    continue;
++                }
+ 
+                 // Draw calls can sometimes end up with empty scissors and cause validation errors. We just skip them.
+                 if (triangles.scissor.isEmpty()) {
+@@ -579,7 +584,9 @@ namespace RT64 {
+                 drawCallTriangles(drawCall);
+ 
+                 // Simulate dither noise.
+-                if (triangles.postBlendDitherNoise) {
++                const bool postBlendPipelinesValid = postBlendDitherNoiseAddPipeline->isValid() &&
++                    postBlendDitherNoiseSubPipeline->isValid() && postBlendDitherNoiseSubNegativePipeline->isValid();
++                if (triangles.postBlendDitherNoise && postBlendPipelinesValid) {
+                     if (triangles.postBlendDitherNoiseNegative) {
+                         worker->commandList->setPipeline(postBlendDitherNoiseSubNegativePipeline);
+                     }
+@@ -1614,16 +1621,21 @@ namespace RT64 {
+                         // with the ubershader.
+                         useUbershader = useUbershader || (call.shaderDesc.otherMode.alphaCompare() == G_AC_DITHER);
+ #                   endif
+-                        RasterShader *gpuShader = useUbershader ? nullptr : p.rasterShaderCache->getGPUShader(call.shaderDesc);
+-                        if (gpuShader != nullptr) {
++                        // The ubershader's pipeline for this draw; null if the driver failed to compile it.
++                        const bool copyMode = (call.shaderDesc.otherMode.cycleType() == G_CYC_COPY);
++                        const RenderPipeline *uberPipeline = rasterShaderUber->getPipeline(
++                            !copyMode && call.shaderDesc.otherMode.zCmp() && (call.shaderDesc.otherMode.zMode() != ZMODE_DEC),
++                            !copyMode && call.shaderDesc.otherMode.zUpd(),
++                            (call.shaderDesc.otherMode.cvgDst() == CVG_DST_WRAP) || (call.shaderDesc.otherMode.cvgDst() == CVG_DST_SAVE));
++
++                        // The draw's own shader, unless the ubershader is wanted and usable. Null (the draw is
++                        // skipped) if neither is usable yet.
++                        RasterShader *gpuShader = (useUbershader && (uberPipeline != nullptr)) ? nullptr : p.rasterShaderCache->getGPUShader(call.shaderDesc);
++                        if ((gpuShader != nullptr) && (gpuShader->pipeline != nullptr) && gpuShader->pipeline->isValid()) {
+                             triangles.pipeline = gpuShader->pipeline.get();
+                         }
+                         else {
+-                            const bool copyMode = (call.shaderDesc.otherMode.cycleType() == G_CYC_COPY);
+-                            triangles.pipeline = rasterShaderUber->getPipeline(
+-                                !copyMode && call.shaderDesc.otherMode.zCmp() && (call.shaderDesc.otherMode.zMode() != ZMODE_DEC),
+-                                !copyMode && call.shaderDesc.otherMode.zUpd(),
+-                                (call.shaderDesc.otherMode.cvgDst() == CVG_DST_WRAP) || (call.shaderDesc.otherMode.cvgDst() == CVG_DST_SAVE));
++                            triangles.pipeline = uberPipeline;
+                         }
+                         
+                         triangles.faceCount = call.callDesc.triangleCount;
+--- a/src/render/rt64_raster_shader.cpp
++++ b/src/render/rt64_raster_shader.cpp
+@@ -595,6 +595,16 @@ namespace RT64 {
+             vertexShader.reset();
+             pixelShader.reset();
+             pipelinesCreated = true;
++
++            uint32_t failedCount = 0;
++            for (const std::unique_ptr<RenderPipeline> &pipeline : pipelines) {
++                failedCount += (pipeline == nullptr) || !pipeline->isValid();
++            }
++
++            if (failedCount > 0) {
++                fprintf(stderr, "[RT64] %u of %u ubershader pipelines failed to compile; draws wait for their own shaders instead.\n",
++                    failedCount, uint32_t(std::size(pipelines)));
++            }
+         }
+     }
+ 
+@@ -606,6 +616,8 @@ namespace RT64 {
+     }
+ 
+     const RenderPipeline *RasterShaderUber::getPipeline(bool zCmp, bool zUpd, bool cvgAdd) const {
+-        return pipelines[pipelineStateIndex(zCmp, zUpd, cvgAdd)].get();
++        // Some drivers fail to compile the ubershader (Adreno 6xx); give no pipeline rather than an invalid one.
++        const RenderPipeline *pipeline = pipelines[pipelineStateIndex(zCmp, zUpd, cvgAdd)].get();
++        return ((pipeline != nullptr) && pipeline->isValid()) ? pipeline : nullptr;
+     }
+ };
