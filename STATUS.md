@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 152)
+## Overview (as of round 153)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,46 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-04, round 153: radar arrows interpolated at higher refresh rates
+
+**Report (user, round 152's build):** the arrows now sit on their tanks,
+but above 30 fps they jitter: they step at the game's rate while the tanks
+move smoothly.
+
+- RT64 interpolates perspective and orthographic draws by pairing their
+  matrices between frames (`GameFrame::set` only builds scenes from those
+  two projection types); rectangles are never interpolated. The arrows
+  are texture rectangles.
+
+**Fix** (`src/game/marker_interp.cpp`, new): when `func_800C8484`'s HUD
+element is done, each arrow rectangle in what it wrote (`G_TEXRECT`,
+`G_RDPHALF_1`, `G_RDPHALF_2`) becomes `gSPDisplayList` and two no-ops. The
+called list draws the same texels as two triangles: full-screen viewport,
+an orthographic projection (pushed and popped with RT64's extended
+commands, as are geometry mode and other mode), and a modelview matrix
+that moves the quad into place inside `gEXMatrixGroup` with position
+interpolation. Each arrow keeps its ID by pairing with the nearest arrow
+(within 24 pixels) of the same widget call in the previous frame.
+
+- The texture load, colour and combiner the game set for the rectangle
+  stay in place; the list only adds what triangles need.
+- Found along the way: the HUD draws with `G_TP_NONE`, and RT64 halves
+  triangle (not rectangle) texture coordinates in that mode, so the list
+  sets `G_TP_PERSP`. A rectangle samples pixel i at s + i * dsdx and a
+  triangle at the pixel centre, so the quad's coordinates start half a
+  step earlier. It also uses point filtering: the rectangles always landed
+  on texel centres, so the HUD's bilinear filter never showed, but at the
+  in-between positions it blurred the pixel art.
+- The lists, matrices and vertices go in the last 128 KB of RDRAM
+  (0x807E0000), now kept out of round 150's heap (still nearly 4 MB), in
+  eight rotating 16 KB slots, one per widget call.
+
+Checked in the sandbox (Tank Wars, radar flag forced on for the test):
+the arrows match the rectangles' shape, colours and positions, including
+past the 4:3 edge, and nothing changes without the radar. The sandbox
+can't render above the game's frame rate, so the smoothing itself still
+needs checking on real hardware.
 
 ## 2026-11-04, round 152: radar arrows stay on their tanks in widescreen
 

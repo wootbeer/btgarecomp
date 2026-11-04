@@ -19,6 +19,7 @@
 #include "recomp.h"
 
 #include "btga_config.h"
+#include "btga_markers.h"
 
 namespace {
     std::atomic<float> widescreen_scale{ 1.0f };
@@ -247,14 +248,22 @@ extern "C" void btga_hud_script_begin(uint8_t* rdram, recomp_context* ctx) {
 
 // Interpreter dispatch, current element in $fp.
 extern "C" void btga_hud_element(uint8_t* rdram, recomp_context* ctx) {
+    btga::markers::widget_end(rdram);
     reset(rdram);
     element_align = kAlignNone;
-    if (!hud_script || !anchoring_active(rdram)) {
+    if (!hud_script) {
         return;
     }
     gpr element = ctx->r30;
     uint8_t op = MEM_BU(0, element);
-    if (op == kOpWidget && (uint32_t)MEM_W(8, element) == kTankMarkerWidget) {
+    const bool markers = op == kOpWidget && (uint32_t)MEM_W(8, element) == kTankMarkerWidget;
+    if (markers) {
+        btga::markers::widget_begin(rdram);
+    }
+    if (!anchoring_active(rdram)) {
+        return;
+    }
+    if (markers) {
         element_align = kAlignWideView;
     } else if (is_anchorable_hud_op(op)) {
         element_align = hud_align_for_x(MEM_H(2, element));
@@ -263,6 +272,7 @@ extern "C" void btga_hud_element(uint8_t* rdram, recomp_context* ctx) {
 
 // End of the script.
 extern "C" void btga_hud_script_end(uint8_t* rdram, recomp_context*) {
+    btga::markers::widget_end(rdram);
     element_align = kAlignNone;
     hud_script = false;
     reset(rdram);
@@ -365,6 +375,7 @@ void btga_interp_new_frame(); // src/game/interpolation_ids.cpp
 
 extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
     btga_interp_new_frame();
+    btga::markers::new_frame();
     frame_counter++;
     if (letterbox_building.bars >= 2) {
         letterbox_last = letterbox_building;
