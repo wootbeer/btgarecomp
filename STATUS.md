@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 151)
+## Overview (as of round 152)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,34 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-04, round 152: radar arrows stay on their tanks in widescreen
+
+**Report (Discord, 0.1.5):** in Expand with HUD Placement 16:9, the radar
+markers (the arrows over the other tanks) sit to the left of the tanks.
+
+- The arrows come with the radar pickup (the tank's flag 0x200 at +0x1E0)
+  and only show outside the campaign modes. `func_800C8B74` (called from
+  `func_80091768`) runs `func_800C877C` for each tank, which projects it to
+  the screen through the same cull record round 98 widened
+  (`func_800ACCB4`) and stores x - 4, y - 7 at 0x803A5990 + player * 0x100,
+  8 bytes each (count at 0x8011F210 + player).
+- They are drawn by `func_800C8484`, a HUD script widget (op 23) whose
+  element sits at x 0, so round 102's anchoring put it on the left with the
+  rest of the left HUD: about 210 window pixels off at 16:9 (the 4:3 area's
+  left margin plus the 16-pixel TV-safe shift). The map is a different
+  call (`func_800C7C10`) and was right.
+
+**Fix** (`src/game/widescreen.cpp`): that widget is never anchored, so the
+arrows stay where the 3D view puts them. Its rects still get the widened
+scissor (`kAlignWideView`), as the game projects tanks out to about x -40
+to 380 in the wider view and RT64 would cut those off at the 4:3 edge.
+
+Checked in the sandbox (Tank Wars, 1 player, radar flag forced on for the
+test, 16:9): before, every arrow was about 210 pixels left of its tank;
+after, each is over its tank, including one at the right edge past the
+4:3 area, and the rest of the HUD is anchored as before. Not checked in
+2-player split screen.
 
 ## 2026-10-24, round 151: 0.1.5
 

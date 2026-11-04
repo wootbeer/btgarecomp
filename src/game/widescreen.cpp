@@ -75,6 +75,11 @@ extern "C" void btga_widen_cull(uint8_t* rdram, recomp_context* ctx) {
 //   out, as the original layout leaves a TV-safe margin.
 // - Map: drawn by func_800C7C10 through its own object table, anchored left
 //   for its whole call.
+// - Tank markers (the radar pickup's arrows over the other tanks): drawn by
+//   a widget at script x 0, so they used to be anchored left with the left
+//   HUD and float off their tanks. They are at the tanks' projected screen
+//   positions, so they are left unanchored, only with the scissor widened
+//   so markers over tanks in the wider view aren't cut off.
 // - Letterbox bars: fill rects that touch the left or right screen edge get
 //   only that edge anchored, so cutscene bars reach the window edge instead
 //   of showing the stretched sky clear beside them -- both in the
@@ -88,6 +93,9 @@ namespace {
     constexpr uint32_t kPlayerCount = 0x802194A5;
 
     constexpr uint32_t kKillCounterWidget = 0x800C9A3C;
+    // func_800C8484: draws the markers func_800C877C projects into
+    // 0x803A5990 (8 bytes each, x and y first, per player).
+    constexpr uint32_t kTankMarkerWidget = 0x800C8484;
     constexpr uint8_t kOpWidget = 23;
     constexpr int kHudMarginShift = 16 * 4; // 10.2 fixed point
     // RT64 adds the framebuffer width to right-anchored coordinates
@@ -98,11 +106,14 @@ namespace {
     struct Align {
         uint16_t left = kOriginNone, right = kOriginNone;
         int16_t left_offset = 0, right_offset = 0;
+        // Only set on unanchored aligns: still widen the scissor.
+        bool wide_scissor = false;
         bool operator==(const Align&) const = default;
     };
     constexpr Align kAlignNone{};
     constexpr Align kAlignHudLeft{ kOriginLeft, kOriginLeft, -kHudMarginShift, -kHudMarginShift };
     constexpr Align kAlignHudRight{ kOriginRight, kOriginRight, kRightOriginShift + kHudMarginShift, kRightOriginShift + kHudMarginShift };
+    constexpr Align kAlignWideView{ kOriginNone, kOriginNone, 0, 0, true };
 
     bool hud_script = false;
     bool in_map = false;
@@ -131,8 +142,9 @@ namespace {
     //
     // RT64 clips every rect to the current scissor, which (unanchored) is
     // squeezed into the centred 4:3 area, so anchored rects past it were
-    // cut off (round 104). While anything is anchored, the scissor is
-    // pushed and widened to the whole window, then popped on reset.
+    // cut off (round 104). While anything is anchored (or kAlignWideView),
+    // the scissor is pushed and widened to the whole window, then popped on
+    // reset.
     struct DlWriter {
         uint8_t* rdram;
         gpr head;
@@ -151,8 +163,8 @@ namespace {
         }
         DlWriter dl{ rdram, kseg0((uint32_t)MEM_W(0, head_ptr)) };
         dl.cmd(0xE0525464, 0x10000064); // gEXEnable (G_SPNOOP + RT64 magic, opcode 0x64)
-        bool anchored = !(align == kAlignNone);
-        if (anchored && !scissor_pushed) {
+        bool widen = !(align == kAlignNone);
+        if (widen && !scissor_pushed) {
             dl.cmd(0x64000017, 0);      // gEXPushScissor
             // gEXSetScissor(G_SC_NON_INTERLACE, LEFT, RIGHT, 0, 0, 0, 240):
             // the whole window.
@@ -162,7 +174,7 @@ namespace {
         }
         dl.cmd(0x64000006, (align.left & 0xFFF) | ((align.right & 0xFFF) << 12)); // gEXSetRectAlign
         dl.cmd((uint32_t)(uint16_t)align.left_offset << 16, (uint32_t)(uint16_t)align.right_offset << 16);
-        if (!anchored && scissor_pushed) {
+        if (!widen && scissor_pushed) {
             dl.cmd(0x64000018, 0);      // gEXPopScissor
             scissor_pushed = false;
         }
@@ -241,7 +253,10 @@ extern "C" void btga_hud_element(uint8_t* rdram, recomp_context* ctx) {
         return;
     }
     gpr element = ctx->r30;
-    if (is_anchorable_hud_op(MEM_BU(0, element))) {
+    uint8_t op = MEM_BU(0, element);
+    if (op == kOpWidget && (uint32_t)MEM_W(8, element) == kTankMarkerWidget) {
+        element_align = kAlignWideView;
+    } else if (is_anchorable_hud_op(op)) {
         element_align = hud_align_for_x(MEM_H(2, element));
     }
 }
