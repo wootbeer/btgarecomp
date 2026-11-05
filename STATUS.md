@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 155)
+## Overview (as of round 156)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,43 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-05, round 156: flying wreckage and other objects keep their IDs
+
+**Report (user, round 155):** explosions not really fixed, and the flying
+wreckage jitters more.
+
+Found by hiding one draw path at a time in the sandbox (temporary):
+
+- The wreckage isn't a sprite. Each piece is an object drawn by
+  `func_800DA340` (from the object loop, below), which builds its matrix
+  in its own stack frame (sp+0x20) and draws through `func_800AE7F0`,
+  `func_800AE4D0` or `func_800AE710`. Every piece names the same scratch
+  matrix, so they were on automatic matching; before round 155 their
+  groups were mostly over round 147's limit and stepped at the game's
+  rate, and with the sprites out of the automatic pool they were matched,
+  often with the wrong piece: more jitter. Dozens of other object types
+  draw the same way, `func_800AE4D0` with a stack matrix.
+- Round 155 also stopped interpolating the sprites' angle (the first
+  game's fireballs get a new one every frame), and spinning flat pieces
+  then turned at 30 fps.
+
+**Fix** (`src/game/interpolation_ids.cpp`):
+
+- `func_800A1FDC` draws every object through its type's draw function
+  (table at 0x80224B60, records 0x44 bytes from 0x80224EF0). Hooks around
+  that call (0x800A20F8, 0x800A2100) note the object being drawn. A
+  matrix queued from a float matrix in the caller's stack while an object
+  is drawn gets an ID from the object's record and the part's order in
+  that draw, but only for an object that drew the same number of parts in
+  the two frames before, as the first game's port does for its debris.
+  Tanks keep round 145's IDs.
+- Sprites: the angle is interpolated again when it changed by less than
+  45 degrees since the last frame.
+
+Sandbox (Tank Wars, explosions): 80-95% of the parts drawn from stack
+matrices get an object ID; the picture is unchanged at the game's rate.
+Smoothness above 30 fps still needs checking on a real PC.
 
 ## 2026-11-05, round 155: effect sprites keep their IDs (explosions)
 

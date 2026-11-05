@@ -24,6 +24,7 @@
 // model drawn more than once per frame repeats its ID, and RT64 pairs repeats in
 // order (G_EX_ORDER_LINEAR). Anything without a stable owner keeps RT64's
 // automatic matching.
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -62,6 +63,39 @@ namespace {
     }
 
     bool group_pushed = false;
+
+    // The object func_800A1FDC's draw loop is drawing (its 0x44-byte record),
+    // the Mtx it has queued so far in this draw, and how many parts each
+    // object drew in the last three frames.
+    uint32_t draw_object = 0;
+    std::vector<uint32_t> draw_parts;
+    std::unordered_map<uint32_t, uint32_t> object_parts[3];
+    int object_parts_current = 0;
+
+    // An ID for the draw object's part with this Mtx, or 0 to leave it to
+    // automatic matching. Only for an object that drew the same number of
+    // parts in the two frames before (as the first game's port does for its
+    // debris): parts are told apart by their order, which means nothing
+    // while the count changes.
+    uint32_t object_part_id(uint32_t mtx) {
+        size_t part = 0;
+        while (part < draw_parts.size() && draw_parts[part] != mtx) {
+            part++;
+        }
+        if (part == draw_parts.size()) {
+            draw_parts.push_back(mtx);
+        }
+        uint32_t& count = object_parts[object_parts_current][draw_object];
+        count = std::max(count, (uint32_t)part + 1);
+        const auto& last = object_parts[(object_parts_current + 2) % 3];
+        const auto& before = object_parts[(object_parts_current + 1) % 3];
+        const auto a = last.find(draw_object), b = before.find(draw_object);
+        if (part >= 16 || a == last.end() || b == before.end() || a->second != b->second || part >= a->second) {
+            return 0;
+        }
+        // Even (the tank IDs are odd), below the RDRAM addresses used as IDs.
+        return 0x10000000u | ((draw_object & 0x7FFFFFu) << 5) | ((uint32_t)part << 1);
+    }
 
     gpr kseg0(uint32_t address) {
         return (gpr)(int32_t)address;
@@ -145,6 +179,17 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
             }
         }
     }
+    // Other objects drawn from the object loop (round 156): a matrix built in
+    // the draw function's own stack frame is scratch shared by every object
+    // of its kind (flying wreckage: func_800DA340's at sp+0x20), so the object
+    // the loop is drawing names it, with the part's order within that draw.
+    if ((draw_object != 0) && (source == float_source) && (float_source > (uint32_t)ctx->r29) &&
+        (float_source < (uint32_t)ctx->r29 + 0x1000)) {
+        const uint32_t object_id = object_part_id(mtx);
+        if (object_id != 0) {
+            source = object_id;
+        }
+    }
     Generation& gen = generations[current];
     auto it = gen.mtx_source.find(mtx);
     if (it != gen.mtx_source.end()) {
@@ -172,9 +217,22 @@ void btga_interp_sprites_new_frame();
 
 void btga_interp_new_frame() {
     btga_interp_sprites_new_frame();
+    object_parts_current = (object_parts_current + 1) % 3;
+    object_parts[object_parts_current].clear();
     current ^= 1;
     generations[current].mtx_source.clear();
     generations[current].source_uses.clear();
+}
+
+// func_800A1FDC, around each object's draw call (0x800A20F8 and after it): the
+// object record in $a0.
+extern "C" void btga_interp_draw_object_begin(uint8_t* rdram, recomp_context* ctx) {
+    draw_object = (uint32_t)ctx->r4;
+    draw_parts.clear();
+}
+
+extern "C" void btga_interp_draw_object_end(uint8_t* rdram, recomp_context*) {
+    draw_object = 0;
 }
 
 // func_8007B65C, at L_8007B738: the start of one bucket's record list (the walker goes
@@ -239,9 +297,9 @@ extern "C" void btga_interp_queue_end(uint8_t* rdram, recomp_context*) {
 // with the previous frame's sprite in the same view closest to where that
 // one was heading (its position plus its last movement), within 64 units,
 // twice that for one seen only once, and keeps its ID; the rest get new IDs.
-// Position and size are interpolated, the angle isn't (sprites can be given
-// a new one every frame, and turning through the angles in between showed
-// in the first game).
+// Position and size are interpolated, and the angle when it changed by less
+// than 45 degrees (round 156: wreckage spins steadily; a fireball can get a
+// new angle every frame, and turning through those showed in the first game).
 namespace {
     constexpr uint32_t kSpriteIdBase = 0x5F000000u; // clear of addresses and the arrows' IDs
     constexpr float kSpritePairDistance = 64.0f;
@@ -251,6 +309,8 @@ namespace {
         float x, y, z;
         float vx, vy, vz;
         bool moved; // seen in the frame before too
+        uint16_t angle;
+        bool turn_smoothly;
         uint32_t id;
     };
     std::vector<Sprite> sprites_prev[kSpriteViews], sprites_cur[kSpriteViews];
@@ -264,7 +324,7 @@ namespace {
         return value;
     }
 
-    uint32_t sprite_id(size_t view, float x, float y, float z) {
+    const Sprite& pair_sprite(size_t view, float x, float y, float z, uint16_t angle) {
         std::vector<Sprite>& prev = sprites_prev[view];
         int best = -1;
         float best_dist = 0.0f;
@@ -278,7 +338,7 @@ namespace {
                 best_dist = d;
             }
         }
-        Sprite s{ x, y, z, 0.0f, 0.0f, 0.0f, false, 0 };
+        Sprite s{ x, y, z, 0.0f, 0.0f, 0.0f, false, angle, false, 0 };
         if (best >= 0) {
             const Sprite& p = prev[best];
             s.vx = x - p.x;
@@ -286,6 +346,11 @@ namespace {
             s.vz = z - p.z;
             s.moved = true;
             s.id = p.id;
+            // Spinning wreckage turns a little each frame; a fireball can get
+            // a new angle every frame, and turning through the angles in
+            // between showed in the first game.
+            const int16_t turn = (int16_t)(uint16_t)(angle - p.angle);
+            s.turn_smoothly = (turn > -0x2000) && (turn < 0x2000);
             prev.erase(prev.begin() + best);
         }
         else {
@@ -293,14 +358,15 @@ namespace {
             s.id = kSpriteIdBase | next_sprite_id;
         }
         sprites_cur[view].push_back(s);
-        return s.id;
+        return sprites_cur[view].back();
     }
 
     // gEXMatrixGroupDecomposed(id, push, G_MTX_MODELVIEW): position and scale
-    // interpolated, angle, skew, perspective, vertices, tiles and texcoords
-    // skipped, order linear, not editable, look-at automatic.
-    uint32_t sprite_group_params(bool push) {
-        return (push ? 1u : 0u) | (1u << 2) | (1u << 3) | (1u << 7) | (2u << 24);
+    // interpolated, the angle when it changed little, skew, perspective,
+    // vertices, tiles and texcoords skipped, order linear, not editable,
+    // look-at automatic.
+    uint32_t sprite_group_params(bool push, bool turn) {
+        return (push ? 1u : 0u) | (1u << 2) | (1u << 3) | (turn ? (1u << 5) : 0u) | (1u << 7) | (2u << 24);
     }
 }
 
@@ -340,16 +406,16 @@ extern "C" void btga_interp_sprite_load(uint8_t* rdram, recomp_context* ctx) {
     if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
         return;
     }
-    const uint32_t id = sprite_id(view, x, y, z);
+    const Sprite& sprite = pair_sprite(view, x, y, z, (uint16_t)MEM_HU(0xA, record));
     if (!sprite_group_pushed) {
         write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
-        write_cmd(rdram, 0x6400000Cu, id);
-        write_cmd(rdram, sprite_group_params(true), 0);
+        write_cmd(rdram, 0x6400000Cu, sprite.id);
+        write_cmd(rdram, sprite_group_params(true, sprite.turn_smoothly), 0);
         sprite_group_pushed = true;
     }
     else {
-        write_cmd(rdram, 0x6400000Cu, id);
-        write_cmd(rdram, sprite_group_params(false), 0);
+        write_cmd(rdram, 0x6400000Cu, sprite.id);
+        write_cmd(rdram, sprite_group_params(false, sprite.turn_smoothly), 0);
     }
 }
 

@@ -1725,6 +1725,22 @@ text = """
     { extern void btga_interp_bucket_start(uint8_t *rdram, recomp_context *ctx); btga_interp_bucket_start(rdram, ctx); }
 """
 
+# Objects drawn by func_800A1FDC's loop: the one being drawn, for the IDs of
+# matrices its draw function builds on its own stack.
+[[patches.hook]]
+func = "func_800A1FDC"
+before_vram = 0x800A20F8
+text = """
+    { extern void btga_interp_draw_object_begin(uint8_t *rdram, recomp_context *ctx); btga_interp_draw_object_begin(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800A1FDC"
+before_vram = 0x800A2100
+text = """
+    { extern void btga_interp_draw_object_end(uint8_t *rdram, recomp_context *ctx); btga_interp_draw_object_end(rdram, ctx); }
+"""
+
 # Effect sprites (second queue, func_8007B8EC): an ID from each sprite's world
 # position before its matrix load, automatic again at each view's own load,
 # popped at the exit.
