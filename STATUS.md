@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 156)
+## Overview (as of round 157)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.5).
+and higher framerates. Betas are public (0.1.0 to 0.1.6).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,32 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-05, round 157: 0.1.6
+
+Version 0.1.6 (`version_string` in `src/main/main.cpp`). Release scan: no
+testing switches or debug prints left from rounds 152-156 (`BTGA_PACING_LOG`
+stays as a documented switch), no ROM or ROM-derived files tracked, no
+build-machine or personal paths; lib patches unchanged since 0.1.4
+(RecompFrontend 0011-0013, plume 0003-0004, RT64 0001, 0009, 0011-0015,
+0018, 0019, 0021).
+
+New since 0.1.5, confirmed by the owner except where noted:
+
+- Radar arrows stay over their tanks at 16:9 (round 152), including past
+  the 4:3 edge (round 154).
+- Radar arrows interpolated above 30 fps (round 153), at the screen edges
+  and in fast turns too (round 154).
+- Effect sprites (fire, smoke) keep interpolation IDs (round 155) and
+  flying wreckage and other objects drawn from stack matrices too (round
+  156): debris much smoother; fire and smoke smoother, though their
+  animation frames still change at the game's rate.
+- The heap keeps its last 128 KB for the arrows' display lists (round 153;
+  still nearly 4 MB).
+
+Not checked yet: 2-player split screen with the arrows and the new IDs;
+All Tanks All Levels through the White House and Brandenburg Gate missions
+(round 150).
 
 ## 2026-11-05, round 156: flying wreckage and other objects keep their IDs
 
