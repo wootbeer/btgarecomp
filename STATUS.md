@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 154)
+## Overview (as of round 155)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,39 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-05, round 155: effect sprites keep their IDs (explosions)
+
+**Report (user):** above Original framerate, explosion sprites still
+flicker or move at a lower rate than the rest. The first game's port
+doesn't show it: its rounds 8 and 11 gave its effect sprites IDs.
+
+- This game queues effect sprites separately from models:
+  `func_8007B498` (called from `func_800AD14C` and `func_800AD6A8`) records
+  each sprite's world position (+0xC/+0x10/+0x14), angle (+0xA) and size
+  (+0x18/+0x1C) in 0x28-byte records from 0x80177AE0, in 32 buckets per
+  view from 0x8017CE60. A second walker, `func_8007B8EC` (from
+  `func_8009B0F0`), builds a camera-facing matrix for each record in each
+  view, converts it into the per-frame Mtx pool and loads it through
+  `func_8007AC34` at 0x8007BC3C. None of the round 145 hooks were in it,
+  so every sprite was on RT64's automatic matching: look-alike sprites
+  paired with each other (flicker on in-between frames), and round 147's
+  group limit skips the biggest groups of them (the lower rate).
+
+**Fix** (`src/game/interpolation_ids.cpp`, hooks at 0x8007BA50, 0x8007BC3C
+and 0x8007BCB8): before each sprite's matrix load, a matrix group whose ID
+comes from pairing the sprite with the previous frame's sprite in the same
+view nearest to where that one was heading (its position plus its last
+movement), within 64 units, or 128 for a sprite seen only once, as the
+first game does. Position and size are interpolated, the angle isn't.
+Each view's own matrix load goes back to automatic matching, and the
+group is popped at the walker's exit. Same display-list limit check as the
+main walker (0xEC($sp) here).
+
+Checked in the sandbox (Tank Wars, explosions): about 93-95% of sprites
+keep their ID from frame to frame, the rest are new, and explosions look
+the same at the game's rate. Smoothness still needs checking above 30 fps
+on a real PC.
 
 ## 2026-11-05, round 154: radar arrows at the screen edges and in fast turns
 

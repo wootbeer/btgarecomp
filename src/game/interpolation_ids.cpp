@@ -24,8 +24,11 @@
 // model drawn more than once per frame repeats its ID, and RT64 pairs repeats in
 // order (G_EX_ORDER_LINEAR). Anything without a stable owner keeps RT64's
 // automatic matching.
+#include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <unordered_map>
+#include <vector>
 
 #include "recomp.h"
 
@@ -165,7 +168,10 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
 }
 
 // From the frame clear (src/game/widescreen.cpp): start a new generation.
+void btga_interp_sprites_new_frame();
+
 void btga_interp_new_frame() {
+    btga_interp_sprites_new_frame();
     current ^= 1;
     generations[current].mtx_source.clear();
     generations[current].source_uses.clear();
@@ -214,5 +220,143 @@ extern "C" void btga_interp_queue_end(uint8_t* rdram, recomp_context*) {
     if (group_pushed) {
         write_cmd(rdram, 0x6400000Du, 1u); // gEXPopMatrixGroup(G_MTX_MODELVIEW)
         group_pushed = false;
+    }
+}
+
+// --- Effect sprites (round 155) -------------------------------------------
+//
+// Fire, smoke and the other effect sprites go through a second queue:
+// func_8007B498 records each with its world position (+0xC/+0x10/+0x14),
+// angle (+0xA) and size (+0x18/+0x1C), and func_8007B8EC, after the main
+// walker, builds a camera-facing matrix for each in every view, converts it
+// into the per-frame Mtx pool and loads it (func_8007AC34 at 0x8007BC3C). No
+// address identifies a sprite there, so they were all on RT64's automatic
+// matching, which paired look-alike sprites with each other (explosions
+// flickering on in-between frames) and, since round 147, gives up on the
+// biggest groups of them (explosions at the game's own rate).
+//
+// As in the first game's port (its rounds 8 and 11): each sprite is paired
+// with the previous frame's sprite in the same view closest to where that
+// one was heading (its position plus its last movement), within 64 units,
+// twice that for one seen only once, and keeps its ID; the rest get new IDs.
+// Position and size are interpolated, the angle isn't (sprites can be given
+// a new one every frame, and turning through the angles in between showed
+// in the first game).
+namespace {
+    constexpr uint32_t kSpriteIdBase = 0x5F000000u; // clear of addresses and the arrows' IDs
+    constexpr float kSpritePairDistance = 64.0f;
+    constexpr size_t kSpriteViews = 4;
+
+    struct Sprite {
+        float x, y, z;
+        float vx, vy, vz;
+        bool moved; // seen in the frame before too
+        uint32_t id;
+    };
+    std::vector<Sprite> sprites_prev[kSpriteViews], sprites_cur[kSpriteViews];
+    uint32_t next_sprite_id = 0;
+    bool sprite_group_pushed = false;
+
+    float read_float(uint8_t* rdram, gpr address) {
+        const uint32_t bits = (uint32_t)MEM_W(0, address);
+        float value;
+        std::memcpy(&value, &bits, sizeof(value));
+        return value;
+    }
+
+    uint32_t sprite_id(size_t view, float x, float y, float z) {
+        std::vector<Sprite>& prev = sprites_prev[view];
+        int best = -1;
+        float best_dist = 0.0f;
+        for (size_t i = 0; i < prev.size(); i++) {
+            const Sprite& p = prev[i];
+            const float dx = p.x + p.vx - x, dy = p.y + p.vy - y, dz = p.z + p.vz - z;
+            const float d = dx * dx + dy * dy + dz * dz;
+            const float room = p.moved ? kSpritePairDistance : 2.0f * kSpritePairDistance;
+            if (d <= room * room && (best < 0 || d < best_dist)) {
+                best = (int)i;
+                best_dist = d;
+            }
+        }
+        Sprite s{ x, y, z, 0.0f, 0.0f, 0.0f, false, 0 };
+        if (best >= 0) {
+            const Sprite& p = prev[best];
+            s.vx = x - p.x;
+            s.vy = y - p.y;
+            s.vz = z - p.z;
+            s.moved = true;
+            s.id = p.id;
+            prev.erase(prev.begin() + best);
+        }
+        else {
+            next_sprite_id = (next_sprite_id + 1) & 0xFFFFFF;
+            s.id = kSpriteIdBase | next_sprite_id;
+        }
+        sprites_cur[view].push_back(s);
+        return s.id;
+    }
+
+    // gEXMatrixGroupDecomposed(id, push, G_MTX_MODELVIEW): position and scale
+    // interpolated, angle, skew, perspective, vertices, tiles and texcoords
+    // skipped, order linear, not editable, look-at automatic.
+    uint32_t sprite_group_params(bool push) {
+        return (push ? 1u : 0u) | (1u << 2) | (1u << 3) | (1u << 7) | (2u << 24);
+    }
+}
+
+void btga_interp_sprites_new_frame() {
+    for (size_t v = 0; v < kSpriteViews; v++) {
+        sprites_prev[v].swap(sprites_cur[v]);
+        sprites_cur[v].clear();
+    }
+}
+
+// func_8007B8EC before 0x8007BA50: a new view's own matrix load; nothing in it
+// is a sprite.
+extern "C" void btga_interp_sprite_view(uint8_t* rdram, recomp_context*) {
+    if (sprite_group_pushed) {
+        write_matrix_group(rdram, kIdAuto, false);
+    }
+}
+
+// func_8007B8EC before 0x8007BC3C (gSPMatrix through func_8007AC34): the record
+// in $s0, the view in $s1.
+extern "C" void btga_interp_sprite_load(uint8_t* rdram, recomp_context* ctx) {
+    const size_t view = (size_t)(uint32_t)ctx->r17;
+    if (view >= kSpriteViews) {
+        return;
+    }
+    // Same limit as the main walker's, at 0xEC($sp) here.
+    const gpr ctx_struct = kseg0((uint32_t)MEM_W(0, kseg0(kGfxContextPtr)));
+    const uint32_t head = (uint32_t)MEM_W(0xC8, ctx_struct);
+    const uint32_t limit = (uint32_t)MEM_W(0xEC, ctx->r29);
+    if (!sprite_group_pushed && (head + 0x400 > limit)) {
+        return;
+    }
+    const gpr record = ctx->r16;
+    const float x = read_float(rdram, record + 0xC);
+    const float y = read_float(rdram, record + 0x10);
+    const float z = read_float(rdram, record + 0x14);
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+        return;
+    }
+    const uint32_t id = sprite_id(view, x, y, z);
+    if (!sprite_group_pushed) {
+        write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
+        write_cmd(rdram, 0x6400000Cu, id);
+        write_cmd(rdram, sprite_group_params(true), 0);
+        sprite_group_pushed = true;
+    }
+    else {
+        write_cmd(rdram, 0x6400000Cu, id);
+        write_cmd(rdram, sprite_group_params(false), 0);
+    }
+}
+
+// func_8007B8EC's epilogue (0x8007BCB8, also its early exit).
+extern "C" void btga_interp_sprite_end(uint8_t* rdram, recomp_context*) {
+    if (sprite_group_pushed) {
+        write_cmd(rdram, 0x6400000Du, 1u); // gEXPopMatrixGroup(G_MTX_MODELVIEW)
+        sprite_group_pushed = false;
     }
 }
