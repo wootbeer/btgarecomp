@@ -607,3 +607,11 @@ commit 4337374 and shader set), for device crashes BTGA very likely shares:
   back (mHasFocus = false). The icon's long-press Share log shortcut (on RomPickerActivity, the
   launcher activity here) does the same without starting the game; LogProvider is read-only, by grant.
 - crash_handler.cpp reads pc/sp on aarch64 too, so a crash report names the library.
+
+Merged main 0.1.6 (rounds 152-156, merged from the PC chat; versionCode 3): the radar arrows are
+redrawn as interpolated quads (src/game/marker_interp.cpp), effect sprites and stack-matrix objects
+keep interpolation IDs, and the heap leaves the last 128 KB of RDRAM for the arrows. All shared with
+PC unchanged. The Android-only nuke-flash gEXSetRectAspect affects rectangles only, and the converted
+arrows are triangles, so it doesn't reach them. No lib-patch or CMake changes. To try on the device
+at a Refresh Rate above 30: radar arrows (Hacks > Radar Pickups in Tank Wars), explosions' wreckage,
+fire and smoke, and that tanks, decals, the intro and the nuke flash are no worse.
