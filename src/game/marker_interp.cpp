@@ -10,9 +10,15 @@
 // list that draws the same texels as two triangles under an orthographic
 // projection, moved into place by a modelview matrix in a matrix group with
 // its own ID. RT64 then interpolates that matrix like any object's. An arrow
-// keeps its ID from frame to frame by pairing it with the nearest arrow of
-// the same widget call in the previous frame; one with no partner nearby
-// gets a new ID and is drawn where it is.
+// keeps its ID from frame to frame by pairing it with the previous frame's
+// arrow of the same colour nearest to where that one's last movement would
+// take it (round 154: fast camera turns move them tens of pixels a frame);
+// one with no partner nearby gets a new ID and is drawn where it is.
+//
+// The quad's position and size come from func_8007C364's arguments, not the
+// rectangle it writes, which clamps negative coordinates to 0: arrows over
+// tanks left of the 4:3 area were cut off or empty (and, until round 154,
+// an empty one stopped the conversion of the arrows after it).
 //
 // The widget's commands are only rewritten once it has returned: the
 // rectangle (G_TEXRECT plus its two RDPHALF words) becomes a G_DL call and
@@ -20,8 +26,10 @@
 // matrices and vertices go in the last 128 KB of RDRAM (kept out of the heap
 // by heap_relocate.cpp), in rotating slots so a list isn't overwritten while
 // RT64 may still read it.
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 #include "recomp.h"
@@ -36,7 +44,9 @@ namespace {
     constexpr uint32_t kSlotCount = btga::markers::kScratchSize / kSlotSize;
 
     constexpr uint32_t kIdBase = 0x4D4B0000; // 'MK', clear of the RDRAM addresses interpolation_ids.cpp uses
-    constexpr int kPairDistance = 24;        // pixels an arrow may move between frames and keep its ID
+    // How far (pixels) an arrow may be from where its last movement would
+    // put it and keep its ID.
+    constexpr int kPairDistance = 32;
     constexpr size_t kMaxCalls = 8;          // widget calls per frame (one per player view)
 
     gpr kseg0(uint32_t address) {
@@ -44,9 +54,22 @@ namespace {
     }
 
     struct Marker {
-        int x, y; // upper left, pixels
+        int x, y;   // upper left, pixels
+        int vx, vy; // movement since the previous frame
+        uint32_t rgb;
         uint32_t id;
     };
+
+    // Each func_8007C364 call inside the widget: where it starts writing,
+    // and the sprite's real rectangle in 10.2 units. The rectangle it writes
+    // has negative coordinates clamped to 0 (and its texture coordinates
+    // moved to match), so an arrow over a tank left of the 4:3 area came out
+    // cut off or empty.
+    struct RectCall {
+        uint32_t head;
+        int ulx, uly, lrx, lry;
+    };
+    std::vector<RectCall> rect_calls;
 
     std::vector<Marker> prev_frame[kMaxCalls], cur_frame[kMaxCalls];
     size_t call_index = 0;
@@ -56,12 +79,18 @@ namespace {
     bool in_marker_widget = false;
     uint32_t widget_start = 0;
 
-    uint32_t take_id(int call, int x, int y) {
+    // The ID for an arrow at x, y: the previous frame's arrow of the same
+    // colour closest to where its own movement would have taken it (fast
+    // camera turns move every arrow tens of pixels a frame), else a new one.
+    void pair(int call, Marker& m) {
         if (call < (int)kMaxCalls) {
             std::vector<Marker>& prev = prev_frame[call];
             int best = -1, best_dist = kPairDistance * kPairDistance + 1;
             for (size_t i = 0; i < prev.size(); i++) {
-                int dx = prev[i].x - x, dy = prev[i].y - y;
+                if (prev[i].rgb != m.rgb) {
+                    continue;
+                }
+                int dx = prev[i].x + prev[i].vx - m.x, dy = prev[i].y + prev[i].vy - m.y;
                 int d = dx * dx + dy * dy;
                 if (d < best_dist) {
                     best = (int)i;
@@ -69,13 +98,16 @@ namespace {
                 }
             }
             if (best >= 0) {
-                uint32_t id = prev[best].id;
+                m.id = prev[best].id;
+                m.vx = m.x - prev[best].x;
+                m.vy = m.y - prev[best].y;
                 prev.erase(prev.begin() + best);
-                return id;
+                return;
             }
         }
         next_id = (next_id + 1) & 0xFFFF;
-        return kIdBase | next_id;
+        m.id = kIdBase | next_id;
+        m.vx = m.vy = 0;
     }
 
     struct Writer {
@@ -124,34 +156,38 @@ namespace {
     constexpr float kScaleX = 256.0f / 320.0f / 4.0f;
     constexpr float kScaleY = 256.0f / 240.0f / 4.0f;
 
-    // Replaces the rectangle at `rect` (G_TEXRECT, G_RDPHALF_1, G_RDPHALF_2)
-    // with a call to a list drawn at `out`. False if it doesn't fit.
-    bool convert(uint8_t* rdram, uint32_t rect, Writer& out, int call) {
+    enum class Result { Converted, Skipped, Full };
+
+    // Replaces the rectangle at `rect` (G_TEXRECT, G_RDPHALF_1, G_RDPHALF_2),
+    // drawn by `rc` in prim colour `prim`, with a call to a list drawn at
+    // `out`.
+    Result convert(uint8_t* rdram, uint32_t rect, const RectCall& rc, uint32_t prim, Writer& out, int call) {
         uint32_t w0 = (uint32_t)MEM_W(0, kseg0(rect));
         uint32_t w1 = (uint32_t)MEM_W(4, kseg0(rect));
         uint32_t st = (uint32_t)MEM_W(12, kseg0(rect));
         uint32_t dsdt = (uint32_t)MEM_W(20, kseg0(rect));
-        int lrx = (w0 >> 12) & 0xFFF, lry = w0 & 0xFFF;
         int tile = (w1 >> 24) & 7;
-        int ulx = (w1 >> 12) & 0xFFF, uly = w1 & 0xFFF;
+        int clamped_ulx = (w1 >> 12) & 0xFFF, clamped_uly = w1 & 0xFFF;
         int16_t s = (int16_t)(st >> 16), t = (int16_t)(st & 0xFFFF);
         int16_t dsdx = (int16_t)(dsdt >> 16), dtdy = (int16_t)(dsdt & 0xFFFF);
-        int w = lrx - ulx, h = lry - uly;
-        if (w <= 0 || h <= 0) {
-            return false;
+        const int ulx = rc.ulx, uly = rc.uly;
+        const int w = rc.lrx - rc.ulx, h = rc.lry - rc.uly;
+        // Only negative coordinates get clamped; anything else that doesn't
+        // match isn't this call's rectangle.
+        if (w <= 0 || h <= 0 || w > 256 || h > 256 ||
+            clamped_ulx != std::max(ulx, 0) || clamped_uly != std::max(uly, 0)) {
+            return Result::Skipped;
         }
-        // Texture coordinates (s10.5) at the corners. A rectangle samples
-        // each pixel at s + i * dsdx, a triangle at the pixel's centre, so
-        // the quad starts half a pixel's step earlier (dsdx is s5.10 per
-        // pixel; w is in quarter pixels).
-        int16_t s0 = (int16_t)(s - dsdx / 64), t0 = (int16_t)(t - dtdy / 64);
+        // Texture coordinates (s10.5) at the corners, from the real corner
+        // rather than the clamped one. A rectangle samples each pixel at
+        // s + i * dsdx, a triangle at the pixel's centre, so the quad starts
+        // half a pixel's step earlier (dsdx is s5.10 per pixel; coordinates
+        // are in quarter pixels).
+        int s_corner = s - ((clamped_ulx - ulx) * dsdx) / 128;
+        int t_corner = t - ((clamped_uly - uly) * dtdy) / 128;
+        int16_t s0 = (int16_t)(s_corner - dsdx / 64), t0 = (int16_t)(t_corner - dtdy / 64);
         int16_t s1 = (int16_t)(s0 + (w * dsdx) / 128);
         int16_t t1 = (int16_t)(t0 + (h * dtdy) / 128);
-
-        uint32_t id = take_id(call, ulx / 4, uly / 4);
-        if (call < (int)kMaxCalls) {
-            cur_frame[call].push_back({ ulx / 4, uly / 4, id });
-        }
 
         const uint32_t start = out.addr;
         constexpr uint32_t kListSize = 26 * 8;
@@ -161,7 +197,14 @@ namespace {
         const uint32_t vtx = model + 64;
         const uint32_t total = vtx + 4 * 16 - start;
         if (start + total > out.end) {
-            return false;
+            return Result::Full;
+        }
+
+        Marker marker{ ulx / 4, uly / 4, 0, 0, prim >> 8, 0 };
+        pair(call, marker);
+        const uint32_t id = marker.id;
+        if (call < (int)kMaxCalls) {
+            cur_frame[call].push_back(marker);
         }
 
         auto phys = [](uint32_t a) { return a & 0x1FFFFFFF; };
@@ -234,7 +277,7 @@ namespace {
             out.b(0xFF); out.b(0xFF); out.b(0xFF); out.b(0xFF);
         }
         if (!out.ok()) {
-            return false;
+            return Result::Full;
         }
 
         // The rectangle becomes gSPDisplayList(start) and two no-ops.
@@ -244,7 +287,7 @@ namespace {
             MEM_W(i * 8, kseg0(rect)) = (int32_t)0xE0000000;
             MEM_W(i * 8 + 4, kseg0(rect)) = 0;
         }
-        return true;
+        return Result::Converted;
     }
 }
 
@@ -259,6 +302,31 @@ void btga::markers::new_frame() {
 void btga::markers::widget_begin(uint8_t* rdram) {
     in_marker_widget = true;
     widget_start = (uint32_t)MEM_W(0, kseg0(kOverlayDlHeadPtr));
+    rect_calls.clear();
+}
+
+// func_8007C364(Gfx** head, sprite, x, y, u0, v0, u1, v1, scale x, scale y)
+// at entry: the sprite is drawn from x, y over (u1 - u0) * scale x by
+// (v1 - v0) * scale y pixels, extending left or up for a negative scale.
+void btga::markers::rect_call(uint8_t* rdram, recomp_context* ctx) {
+    if (!in_marker_widget || rect_calls.size() >= 64) {
+        return;
+    }
+    const gpr sp = ctx->r29;
+    const int x = (int)(int32_t)ctx->r6, y = (int)(int32_t)ctx->r7;
+    const int u0 = (uint16_t)MEM_HU(0x12, sp), v0 = (uint16_t)MEM_HU(0x16, sp);
+    const int u1 = (uint16_t)MEM_HU(0x1A, sp), v1 = (uint16_t)MEM_HU(0x1E, sp);
+    uint32_t bits_x = (uint32_t)MEM_W(0x20, sp), bits_y = (uint32_t)MEM_W(0x24, sp);
+    float scale_x, scale_y;
+    std::memcpy(&scale_x, &bits_x, sizeof(float));
+    std::memcpy(&scale_y, &bits_y, sizeof(float));
+    if (!std::isfinite(scale_x) || !std::isfinite(scale_y)) {
+        return;
+    }
+    const int x2 = x + (int)((u1 - u0) * scale_x);
+    const int y2 = y + (int)((v1 - v0) * scale_y);
+    rect_calls.push_back({ (uint32_t)MEM_W(0, ctx->r4),
+        std::min(x, x2) * 4, std::min(y, y2) * 4, std::max(x, x2) * 4, std::max(y, y2) * 4 });
 }
 
 void btga::markers::widget_end(uint8_t* rdram) {
@@ -274,14 +342,30 @@ void btga::markers::widget_end(uint8_t* rdram) {
 
     slot = (slot + 1) % kSlotCount;
     Writer out{ rdram, kScratchStart + slot * kSlotSize, kScratchStart + (slot + 1) * kSlotSize };
+    uint32_t prim = 0;
+    size_t next_call = 0;
     for (uint32_t a = widget_start; a + 24 <= end; a += 8) {
-        if (((uint32_t)MEM_W(0, kseg0(a)) >> 24) == 0xE4 &&
-            ((uint32_t)MEM_W(8, kseg0(a)) >> 24) == 0xE1 &&
-            ((uint32_t)MEM_W(16, kseg0(a)) >> 24) == 0xF1) {
-            if (!convert(rdram, a, out, call)) {
-                break;
-            }
-            a += 16;
+        const uint32_t op = (uint32_t)MEM_W(0, kseg0(a)) >> 24;
+        if (op == 0xFA) {
+            prim = (uint32_t)MEM_W(4, kseg0(a)); // gDPSetPrimColor: the arrow's colour
+            continue;
         }
+        if (op != 0xE4 ||
+            ((uint32_t)MEM_W(8, kseg0(a)) >> 24) != 0xE1 ||
+            ((uint32_t)MEM_W(16, kseg0(a)) >> 24) != 0xF1) {
+            continue;
+        }
+        // The call that wrote it: the last one that started at or before it.
+        while (next_call < rect_calls.size() && rect_calls[next_call].head <= a) {
+            next_call++;
+        }
+        if (next_call == 0) {
+            continue;
+        }
+        Result r = convert(rdram, a, rect_calls[next_call - 1], prim, out, call);
+        if (r == Result::Full) {
+            break;
+        }
+        a += 16;
     }
 }

@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+#include "recomp.h"
+
 // The radar arrows drawn as interpolated quads (src/game/marker_interp.cpp),
 // called from the HUD hooks in src/game/widescreen.cpp.
 namespace btga::markers {
@@ -16,6 +18,8 @@ namespace btga::markers {
     // Around the arrow widget's HUD script element (func_800C8484).
     void widget_begin(uint8_t* rdram);
     void widget_end(uint8_t* rdram);
+    // At func_8007C364's entry (every texture rectangle).
+    void rect_call(uint8_t* rdram, recomp_context* ctx);
 }
 
 #endif

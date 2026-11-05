@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 153)
+## Overview (as of round 154)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,34 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-05, round 154: radar arrows at the screen edges and in fast turns
+
+**Report (user, round 153):** the arrows are smooth in normal movement but
+still stutter when the camera turns to the far left or right.
+
+- `func_8007C364` clamps a rectangle's negative coordinates to 0 (and
+  moves its texture coordinates to match). An arrow over a tank left of
+  the 4:3 area came out cut off or, entirely left of it, zero wide, and
+  round 153 stopped converting at the first zero-wide one, so every arrow
+  after it stayed a rectangle at 30 fps. Those arrows were never visible
+  either (before round 152 too).
+- Pairing allowed 24 pixels between frames; a fast turn moves the arrows
+  further, so they got new IDs every frame and weren't interpolated.
+
+**Fix** (`src/game/marker_interp.cpp`): the texture-rectangle hook also
+records, while the arrow widget runs, each `func_8007C364` call's display
+list position and real rectangle (x, y and (u1 - u0) * scale by
+(v1 - v0) * scale from its arguments). Each rectangle is converted with
+its call's rectangle, with the texture coordinates moved back to the real
+corner, and one that can't be converted is skipped instead of ending the
+pass. Pairing now only pairs arrows of the same colour (the prim colour
+before each rectangle) and measures from where the previous arrow's last
+movement would put it, within 32 pixels.
+
+Checked in the sandbox (Tank Wars, radar flag forced on for the test):
+every arrow converted (307 of 307 in a run, 23 of them with negative x),
+and an arrow over a tank at the far left of the 16:9 view now shows.
 
 ## 2026-11-04, round 153: radar arrows interpolated at higher refresh rates
 

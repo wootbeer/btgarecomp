@@ -291,6 +291,7 @@ extern "C" void btga_hud_map_end(uint8_t* rdram, recomp_context*) {
 
 // Every texture rectangle: func_8007C364(Gfx** head, sprite, x, y, ...).
 extern "C" void btga_hud_texrect(uint8_t* rdram, recomp_context* ctx) {
+    btga::markers::rect_call(rdram, ctx);
     if (in_map) {
         emit(rdram, ctx->r4, map_home_ptr, kAlignHudLeft);
     } else if (!(element_align == kAlignNone)) {
