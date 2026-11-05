@@ -1725,6 +1725,46 @@ text = """
     { extern void btga_interp_bucket_start(uint8_t *rdram, recomp_context *ctx); btga_interp_bucket_start(rdram, ctx); }
 """
 
+# Objects drawn by func_800A1FDC's loop: the one being drawn, for the IDs of
+# matrices its draw function builds on its own stack.
+[[patches.hook]]
+func = "func_800A1FDC"
+before_vram = 0x800A20F8
+text = """
+    { extern void btga_interp_draw_object_begin(uint8_t *rdram, recomp_context *ctx); btga_interp_draw_object_begin(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800A1FDC"
+before_vram = 0x800A2100
+text = """
+    { extern void btga_interp_draw_object_end(uint8_t *rdram, recomp_context *ctx); btga_interp_draw_object_end(rdram, ctx); }
+"""
+
+# Effect sprites (second queue, func_8007B8EC): an ID from each sprite's world
+# position before its matrix load, automatic again at each view's own load,
+# popped at the exit.
+[[patches.hook]]
+func = "func_8007B8EC"
+before_vram = 0x8007BA50
+text = """
+    { extern void btga_interp_sprite_view(uint8_t *rdram, recomp_context *ctx); btga_interp_sprite_view(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007B8EC"
+before_vram = 0x8007BC3C
+text = """
+    { extern void btga_interp_sprite_load(uint8_t *rdram, recomp_context *ctx); btga_interp_sprite_load(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007B8EC"
+before_vram = 0x8007BCB8
+text = """
+    { extern void btga_interp_sprite_end(uint8_t *rdram, recomp_context *ctx); btga_interp_sprite_end(rdram, ctx); }
+"""
+
 # Cheats and Hacks tabs (src/game/cheats.cpp). btga_cheats_frame applies the
 # stock codes' flags and the memory codes; it runs each pass of the
 # controller thread's loop (func_800988E8), which runs on the menus as well

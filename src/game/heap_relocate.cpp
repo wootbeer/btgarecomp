@@ -13,7 +13,8 @@
 //
 // The game never uses the upper 4 MB of the 8 MB it's given (checked: still
 // all zero through boot, the intro and a level load), so right after each
-// setup the heap is moved there with all of it, 4 MB instead of 1.4 MB.
+// setup the heap is moved there, nearly 4 MB instead of 1.4 MB (round 153
+// keeps the last 128 KB for marker_interp.cpp).
 // Everything else reads the two variables, including the game's own
 // save-and-restore of them, so nothing else changes.
 #include <cstdint>
@@ -21,11 +22,15 @@
 
 #include "recomp.h"
 
+#include "btga_markers.h"
+
 namespace {
     constexpr uint32_t kHeapFree = 0x8023A064;
     constexpr uint32_t kHeapNext = 0x8023A068;
     constexpr uint32_t kHeapStart = 0x80400000;
-    constexpr uint32_t kHeapSize = 0x400000;
+    // All of it but the last 128 KB, which is for the radar arrows' display
+    // lists (marker_interp.cpp).
+    constexpr uint32_t kHeapSize = btga::markers::kScratchStart - kHeapStart;
 }
 
 // After the heap setup's bzero in func_800ACE70 (0x800ACEA4) and

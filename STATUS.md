@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 151)
+## Overview (as of round 157)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.5).
+and higher framerates. Betas are public (0.1.0 to 0.1.6).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,198 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-05, round 157: 0.1.6
+
+Version 0.1.6 (`version_string` in `src/main/main.cpp`). Release scan: no
+testing switches or debug prints left from rounds 152-156 (`BTGA_PACING_LOG`
+stays as a documented switch), no ROM or ROM-derived files tracked, no
+build-machine or personal paths; lib patches unchanged since 0.1.4
+(RecompFrontend 0011-0013, plume 0003-0004, RT64 0001, 0009, 0011-0015,
+0018, 0019, 0021).
+
+New since 0.1.5, confirmed by the owner except where noted:
+
+- Radar arrows stay over their tanks at 16:9 (round 152), including past
+  the 4:3 edge (round 154).
+- Radar arrows interpolated above 30 fps (round 153), at the screen edges
+  and in fast turns too (round 154).
+- Effect sprites (fire, smoke) keep interpolation IDs (round 155) and
+  flying wreckage and other objects drawn from stack matrices too (round
+  156): debris much smoother; fire and smoke smoother, though their
+  animation frames still change at the game's rate.
+- The heap keeps its last 128 KB for the arrows' display lists (round 153;
+  still nearly 4 MB).
+
+Not checked yet: 2-player split screen with the arrows and the new IDs;
+All Tanks All Levels through the White House and Brandenburg Gate missions
+(round 150).
+
+## 2026-11-05, round 156: flying wreckage and other objects keep their IDs
+
+**Report (user, round 155):** explosions not really fixed, and the flying
+wreckage jitters more.
+
+Found by hiding one draw path at a time in the sandbox (temporary):
+
+- The wreckage isn't a sprite. Each piece is an object drawn by
+  `func_800DA340` (from the object loop, below), which builds its matrix
+  in its own stack frame (sp+0x20) and draws through `func_800AE7F0`,
+  `func_800AE4D0` or `func_800AE710`. Every piece names the same scratch
+  matrix, so they were on automatic matching; before round 155 their
+  groups were mostly over round 147's limit and stepped at the game's
+  rate, and with the sprites out of the automatic pool they were matched,
+  often with the wrong piece: more jitter. Dozens of other object types
+  draw the same way, `func_800AE4D0` with a stack matrix.
+- Round 155 also stopped interpolating the sprites' angle (the first
+  game's fireballs get a new one every frame), and spinning flat pieces
+  then turned at 30 fps.
+
+**Fix** (`src/game/interpolation_ids.cpp`):
+
+- `func_800A1FDC` draws every object through its type's draw function
+  (table at 0x80224B60, records 0x44 bytes from 0x80224EF0). Hooks around
+  that call (0x800A20F8, 0x800A2100) note the object being drawn. A
+  matrix queued from a float matrix in the caller's stack while an object
+  is drawn gets an ID from the object's record and the part's order in
+  that draw, but only for an object that drew the same number of parts in
+  the two frames before, as the first game's port does for its debris.
+  Tanks keep round 145's IDs.
+- Sprites: the angle is interpolated again when it changed by less than
+  45 degrees since the last frame.
+
+Sandbox (Tank Wars, explosions): 80-95% of the parts drawn from stack
+matrices get an object ID; the picture is unchanged at the game's rate.
+Smoothness above 30 fps still needs checking on a real PC.
+
+## 2026-11-05, round 155: effect sprites keep their IDs (explosions)
+
+**Report (user):** above Original framerate, explosion sprites still
+flicker or move at a lower rate than the rest. The first game's port
+doesn't show it: its rounds 8 and 11 gave its effect sprites IDs.
+
+- This game queues effect sprites separately from models:
+  `func_8007B498` (called from `func_800AD14C` and `func_800AD6A8`) records
+  each sprite's world position (+0xC/+0x10/+0x14), angle (+0xA) and size
+  (+0x18/+0x1C) in 0x28-byte records from 0x80177AE0, in 32 buckets per
+  view from 0x8017CE60. A second walker, `func_8007B8EC` (from
+  `func_8009B0F0`), builds a camera-facing matrix for each record in each
+  view, converts it into the per-frame Mtx pool and loads it through
+  `func_8007AC34` at 0x8007BC3C. None of the round 145 hooks were in it,
+  so every sprite was on RT64's automatic matching: look-alike sprites
+  paired with each other (flicker on in-between frames), and round 147's
+  group limit skips the biggest groups of them (the lower rate).
+
+**Fix** (`src/game/interpolation_ids.cpp`, hooks at 0x8007BA50, 0x8007BC3C
+and 0x8007BCB8): before each sprite's matrix load, a matrix group whose ID
+comes from pairing the sprite with the previous frame's sprite in the same
+view nearest to where that one was heading (its position plus its last
+movement), within 64 units, or 128 for a sprite seen only once, as the
+first game does. Position and size are interpolated, the angle isn't.
+Each view's own matrix load goes back to automatic matching, and the
+group is popped at the walker's exit. Same display-list limit check as the
+main walker (0xEC($sp) here).
+
+Checked in the sandbox (Tank Wars, explosions): about 93-95% of sprites
+keep their ID from frame to frame, the rest are new, and explosions look
+the same at the game's rate. Smoothness still needs checking above 30 fps
+on a real PC.
+
+## 2026-11-05, round 154: radar arrows at the screen edges and in fast turns
+
+**Report (user, round 153):** the arrows are smooth in normal movement but
+still stutter when the camera turns to the far left or right.
+
+- `func_8007C364` clamps a rectangle's negative coordinates to 0 (and
+  moves its texture coordinates to match). An arrow over a tank left of
+  the 4:3 area came out cut off or, entirely left of it, zero wide, and
+  round 153 stopped converting at the first zero-wide one, so every arrow
+  after it stayed a rectangle at 30 fps. Those arrows were never visible
+  either (before round 152 too).
+- Pairing allowed 24 pixels between frames; a fast turn moves the arrows
+  further, so they got new IDs every frame and weren't interpolated.
+
+**Fix** (`src/game/marker_interp.cpp`): the texture-rectangle hook also
+records, while the arrow widget runs, each `func_8007C364` call's display
+list position and real rectangle (x, y and (u1 - u0) * scale by
+(v1 - v0) * scale from its arguments). Each rectangle is converted with
+its call's rectangle, with the texture coordinates moved back to the real
+corner, and one that can't be converted is skipped instead of ending the
+pass. Pairing now only pairs arrows of the same colour (the prim colour
+before each rectangle) and measures from where the previous arrow's last
+movement would put it, within 32 pixels.
+
+Checked in the sandbox (Tank Wars, radar flag forced on for the test):
+every arrow converted (307 of 307 in a run, 23 of them with negative x),
+and an arrow over a tank at the far left of the 16:9 view now shows.
+
+## 2026-11-04, round 153: radar arrows interpolated at higher refresh rates
+
+**Report (user, round 152's build):** the arrows now sit on their tanks,
+but above 30 fps they jitter: they step at the game's rate while the tanks
+move smoothly.
+
+- RT64 interpolates perspective and orthographic draws by pairing their
+  matrices between frames (`GameFrame::set` only builds scenes from those
+  two projection types); rectangles are never interpolated. The arrows
+  are texture rectangles.
+
+**Fix** (`src/game/marker_interp.cpp`, new): when `func_800C8484`'s HUD
+element is done, each arrow rectangle in what it wrote (`G_TEXRECT`,
+`G_RDPHALF_1`, `G_RDPHALF_2`) becomes `gSPDisplayList` and two no-ops. The
+called list draws the same texels as two triangles: full-screen viewport,
+an orthographic projection (pushed and popped with RT64's extended
+commands, as are geometry mode and other mode), and a modelview matrix
+that moves the quad into place inside `gEXMatrixGroup` with position
+interpolation. Each arrow keeps its ID by pairing with the nearest arrow
+(within 24 pixels) of the same widget call in the previous frame.
+
+- The texture load, colour and combiner the game set for the rectangle
+  stay in place; the list only adds what triangles need.
+- Found along the way: the HUD draws with `G_TP_NONE`, and RT64 halves
+  triangle (not rectangle) texture coordinates in that mode, so the list
+  sets `G_TP_PERSP`. A rectangle samples pixel i at s + i * dsdx and a
+  triangle at the pixel centre, so the quad's coordinates start half a
+  step earlier. It also uses point filtering: the rectangles always landed
+  on texel centres, so the HUD's bilinear filter never showed, but at the
+  in-between positions it blurred the pixel art.
+- The lists, matrices and vertices go in the last 128 KB of RDRAM
+  (0x807E0000), now kept out of round 150's heap (still nearly 4 MB), in
+  eight rotating 16 KB slots, one per widget call.
+
+Checked in the sandbox (Tank Wars, radar flag forced on for the test):
+the arrows match the rectangles' shape, colours and positions, including
+past the 4:3 edge, and nothing changes without the radar. The sandbox
+can't render above the game's frame rate, so the smoothing itself still
+needs checking on real hardware.
+
+## 2026-11-04, round 152: radar arrows stay on their tanks in widescreen
+
+**Report (Discord, 0.1.5):** in Expand with HUD Placement 16:9, the radar
+markers (the arrows over the other tanks) sit to the left of the tanks.
+
+- The arrows come with the radar pickup (the tank's flag 0x200 at +0x1E0)
+  and only show outside the campaign modes. `func_800C8B74` (called from
+  `func_80091768`) runs `func_800C877C` for each tank, which projects it to
+  the screen through the same cull record round 98 widened
+  (`func_800ACCB4`) and stores x - 4, y - 7 at 0x803A5990 + player * 0x100,
+  8 bytes each (count at 0x8011F210 + player).
+- They are drawn by `func_800C8484`, a HUD script widget (op 23) whose
+  element sits at x 0, so round 102's anchoring put it on the left with the
+  rest of the left HUD: about 210 window pixels off at 16:9 (the 4:3 area's
+  left margin plus the 16-pixel TV-safe shift). The map is a different
+  call (`func_800C7C10`) and was right.
+
+**Fix** (`src/game/widescreen.cpp`): that widget is never anchored, so the
+arrows stay where the 3D view puts them. Its rects still get the widened
+scissor (`kAlignWideView`), as the game projects tanks out to about x -40
+to 380 in the wider view and RT64 would cut those off at the 4:3 edge.
+
+Checked in the sandbox (Tank Wars, 1 player, radar flag forced on for the
+test, 16:9): before, every arrow was about 210 pixels left of its tank;
+after, each is over its tank, including one at the right edge past the
+4:3 area, and the rest of the HUD is anchored as before. Not checked in
+2-player split screen.
 
 ## 2026-10-24, round 151: 0.1.5
 
