@@ -460,7 +460,11 @@ int main(int argc, char** argv) {
     btga::config::add_general_options(recompui::config::create_general_tab(general_tab_options));
     btga::config::add_graphics_options(recompui::config::create_graphics_tab());
     recompui::config::create_controls_tab();
-    btga::config::add_bt1_sounds_option(recompui::config::create_sound_tab());
+    {
+        recomp::config::Config& sound = recompui::config::create_sound_tab();
+        btga::config::add_bt1_sounds_option(sound);
+        btga::config::add_sfx_reverb_options(sound);
+    }
     btga::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
     recompui::config::finalize();

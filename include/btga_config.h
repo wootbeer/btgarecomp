@@ -31,6 +31,8 @@ namespace btga::config {
     // Sound tab (src/main/bt1_sounds.cpp). Call between
     // recompui::config::create_sound_tab() and recompui::config::finalize().
     void add_bt1_sounds_option(recomp::config::Config& sound);
+    // Sound Effects Reverb and its amount (src/main/game_config.cpp).
+    void add_sfx_reverb_options(recomp::config::Config& sound);
 
     Accessory get_accessory(int port);
     bool get_local_multiplayer();
@@ -52,6 +54,9 @@ namespace btga {
     // 0 Original, 1 Far, 2 Very Far, 3 Map Edge.
     void set_draw_distance(int level);
     int draw_distance_level();
+
+    // Sound tab: Sound Effects Reverb (src/game/sfx_reverb.cpp), amount 0-100.
+    void set_sfx_reverb(bool on, double percent);
 }
 
 #endif

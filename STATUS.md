@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 161)
+## Overview (as of round 162)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,33 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 162: Sound Effects Reverb option
+
+**Request:** reverb like the Turok Rage Wars port's Weapon Reverb, kept
+slight.
+
+**Findings** (temporary probes):
+
+- The synth is set up by `func_800FE778`, this game's own copy of
+  `n_alSynNew`. The `n_alSynNew` at `0x80102350` is never called. Its config
+  has fxType 6, a custom room at `0x801266B8` (4 sections, length 4000).
+- Each voice's FX mix (0-127) arrives as a parameter update, which
+  `n_alEnvmixerPull` turns into dry and wet amounts at `0x801003C0`. The
+  voice-start path at `0x801001A8` is never used.
+- In Tank Wars, the music's voices (samples past the music bank at ROM
+  `0x61A698`) send 20-50. The effects (samples from `0x593A28`) mostly
+  send 0, with a few at 10-50.
+
+**Option** (`src/game/sfx_reverb.cpp`, `src/main/game_config.cpp`): Sound
+Effects Reverb (off by default) and an amount slider (default 30%). It works
+as Turok's Weapon Reverb: the slider adds up to 30% of 127 to a voice's FX
+mix, here for every sound-effect voice. A voice counts as a sound effect if
+its wave table's base is in the effects' sample data, or past the end of the
+8 MB ROM (the first game's effects, round 159). The music is left as it is.
+
+Sandbox: with the option on at 30%, the effects' mix updates go from 0 to
+11. Needs the owner's ears.
 
 ## 2026-11-07, round 161: Very Far and Map Edge draw distances
 

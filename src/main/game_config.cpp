@@ -126,6 +126,38 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
         });
 }
 
+void btga::config::add_sfx_reverb_options(recomp::config::Config& sound) {
+    sound.add_bool_option(
+        "sfx_reverb",
+        "Sound Effects Reverb",
+        "Adds a little of the game's own reverb to the sound effects. The music already has some and "
+        "stays as it is.",
+        false
+    );
+    sound.add_number_option(
+        "sfx_reverb_amount",
+        "Sound Effects Reverb Amount",
+        "How much reverb Sound Effects Reverb adds.",
+        0, 100, 1, 0, true, 30
+    );
+    std::vector<recomp::config::ConfigValueVariant> reverb_off = { false };
+    sound.add_option_disable_dependency("sfx_reverb_amount", "sfx_reverb", reverb_off);
+
+    // Also called when the saved settings load.
+    static bool reverb_on = false;
+    static double reverb_amount = 30.0;
+    sound.add_option_change_callback("sfx_reverb",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            reverb_on = std::get<bool>(value);
+            btga::set_sfx_reverb(reverb_on, reverb_amount);
+        });
+    sound.add_option_change_callback("sfx_reverb_amount",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            reverb_amount = std::get<double>(value);
+            btga::set_sfx_reverb(reverb_on, reverb_amount);
+        });
+}
+
 btga::config::Accessory btga::config::get_accessory(int port) {
     if (!options_added) {
         return Accessory::None;

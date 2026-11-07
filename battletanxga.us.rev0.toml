@@ -2278,3 +2278,12 @@ before_vram = 0x8007B3A8
 text = """
     { extern void btga_draw_item_pool(uint8_t *rdram, recomp_context *ctx); btga_draw_item_pool(rdram, ctx); }
 """
+
+# Round 162 (src/game/sfx_reverb.cpp): Sound Effects Reverb. A voice's FX mix
+# update, before it sets the dry and wet amounts.
+[[patches.hook]]
+func = "n_alEnvmixerPull"
+before_vram = 0x801003C0
+text = """
+    { extern void btga_sfx_reverb(uint8_t *rdram, recomp_context *ctx); btga_sfx_reverb(rdram, ctx); }
+"""
