@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 157)
+## Overview (as of round 158)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,36 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 158: Fog and Draw Distance options
+
+**Request** (issue #3): a way to turn the fog off.
+
+Two options at the end of the Graphics tab, both defaulting to the game's
+own behaviour (`src/game/view_distance.cpp`, `src/main/game_config.cpp`):
+
+- **Fog** On / Off. `func_8007A250` sets the fog once a frame with the
+  game's only `G_MOVEWORD G_MW_FOG`, 0x64009D00 = `gSPFogPosition(995,
+  1000)`. Off replaces the word with 0 (multiplier and offset 0) at
+  0x8007A688, so no vertex gets any fog.
+- **Draw Distance** Original / Far. The int at 0x8023A060 is the draw
+  distance and sets the far plane (and so where the fog sits; round 110).
+  `func_8009AE38` resets it at each scene start (3400 / 2866 / 1800 by
+  layout) and the governor `func_80099FE8` adds 50 a second up to 5000.
+  Far triples the scene-start value at 0x8009AF4C; the governor leaves
+  values over 5000 alone (it only lowers them under 20 fps).
+
+With the fog off and the original distance, things at the edge pop in
+instead of fading; the option's text suggests pairing it with Far.
+
+Also: the Hacks tab's "Maximum Visibility" GameShark code is removed. It
+writes 0x800F9522, inside the RSP graphics microcode (the words there are
+vector instructions), which RT64 doesn't run, so it never did anything.
+
+Sandbox (mission 1's opening view, all four combinations): fog off clears
+the haze on the distant hangars and tower; Far moves the fog out (draw
+distance 10200). The main queue stays at about 470 of its 2288 records and
+the display list keeps over 32 KB free, as with the original distance.
 
 ## 2026-11-05, round 157: 0.1.6
 

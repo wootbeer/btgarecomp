@@ -21,7 +21,8 @@ namespace btga::config {
     void add_general_options(recomp::config::Config& general);
 
     // Screen Filter and Bloom at the end of the Graphics tab, passed straight
-    // to RT64 (lib-patches/rt64/0018, 0019). Call between
+    // to RT64 (lib-patches/rt64/0018, 0019), then Fog and Draw Distance
+    // (src/game/view_distance.cpp). Call between
     // recompui::config::create_graphics_tab() and recompui::config::finalize().
     void add_graphics_options(recomp::config::Config& graphics);
 
@@ -35,6 +36,10 @@ namespace btga::config {
 namespace btga {
     void set_widescreen_scale(float scale);
     float get_widescreen_scale();
+
+    // Graphics tab options read by the game's hooks (src/game/view_distance.cpp).
+    void set_fog_enabled(bool enabled);
+    void set_far_draw_distance(bool far);
 }
 
 #endif

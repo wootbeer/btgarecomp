@@ -1,5 +1,6 @@
 // Game-specific options on the General tab: which pak each controller holds,
-// and local multiplayer; and the screen filter and bloom on the Graphics tab.
+// and local multiplayer; and the screen filter, bloom, fog and draw distance on
+// the Graphics tab.
 // See include/btga_config.h.
 #include "btga_config.h"
 
@@ -88,6 +89,22 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
         bloom_options,
         RT64::Bloom::Off
     );
+    graphics.add_enum_option(
+        "fog",
+        "Fog",
+        "<b>Off</b> clears the haze over distant scenery. The game only draws so far, so with the fog off, "
+        "things at that edge pop in instead of fading in. Pair it with a <b>Far</b> draw distance.",
+        { {1u, "On", "On"}, {0u, "Off", "Off"} },
+        1u
+    );
+    graphics.add_enum_option(
+        "draw_distance",
+        "Draw Distance",
+        "<b>Far</b> draws scenery and tanks about three times as far away. The fog moves out with it. "
+        "Takes effect when a level starts.",
+        { {0u, "Original", "Original"}, {1u, "Far", "Far"} },
+        0u
+    );
 
     // Also called when the saved settings load.
     graphics.add_option_change_callback("screen_filter",
@@ -97,6 +114,14 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
     graphics.add_option_change_callback("bloom",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             RT64::setBloom(static_cast<RT64::Bloom>(std::get<uint32_t>(value)));
+        });
+    graphics.add_option_change_callback("fog",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            btga::set_fog_enabled(std::get<uint32_t>(value) != 0);
+        });
+    graphics.add_option_change_callback("draw_distance",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            btga::set_far_draw_distance(std::get<uint32_t>(value) != 0);
         });
 }
 

@@ -2201,3 +2201,19 @@ before_vram = 0x800AF488
 text = """
     { extern void btga_heap_setup(uint8_t *rdram); btga_heap_setup(rdram); }
 """
+
+# Fog and Draw Distance options on the Graphics tab (src/game/view_distance.cpp):
+# the frame's fog word, and the scene-start draw distance.
+[[patches.hook]]
+func = "func_8007A250"
+before_vram = 0x8007A688
+text = """
+    { extern void btga_fog_word(uint8_t *rdram, recomp_context *ctx); btga_fog_word(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8009AE38"
+before_vram = 0x8009AF4C
+text = """
+    { extern void btga_scene_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_scene_draw_distance(rdram, ctx); }
+"""
