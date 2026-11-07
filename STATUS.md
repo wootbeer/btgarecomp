@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 162)
+## Overview (as of round 163)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,41 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 163: mouse support (bindable buttons, Mouse Stick)
+
+**Request:** basic mouse support. It doesn't need direct aiming like
+snprecomp's, but it should be bindable, probably with the mouse as the
+stick, and the side buttons should be bindable too.
+
+**Bindings** (`lib-patches/RecompFrontend/0015-mouse-bindings-and-capture.patch`):
+
+- snprecomp's 0008 (mouse buttons bound like keys on the Controls tab:
+  left, middle, right and the side buttons X1/X2).
+- snprecomp's 0001 (a game callback that captures the mouse while the game
+  runs with no menu open).
+- Two additions:
+  - The scroll wheel's notches can be bound too (inputs 30 and 31, up and
+    down), each a press for one controller read. The game polls
+    (`poll_inputs`) once per controller read, so a notch is never missed.
+  - `get_mouse_deltas_raw`, the motion without the unrelated
+    mouse-sensitivity option.
+
+**Mouse Stick** (General tab, `src/main/mouse_stick.cpp`): Off (default) /
+Turn / Full, with a sensitivity slider (5-300%).
+
+- Turn adds the mouse's left-right motion since the last controller read to
+  player 1's stick X. At 100%, 25 pixels is full deflection.
+- Full also drives with up-down motion (up is forward).
+- While it's on, the mouse is captured in the window during play. Opening
+  the menu frees it.
+- It's the input callback (`btga::get_n64_input_with_mouse`) wrapping
+  recompinput's `get_n64_input`.
+
+**Sandbox:** with Turn on in Tank Wars, 15-pixel moves gave stick X 0.60.
+The button and wheel bindings weren't clicked through here (no way to
+drive the Controls tab's binding prompt), so they need a check on a PC.
+Default bindings are unchanged.
 
 ## 2026-11-07, round 162: Sound Effects Reverb option
 

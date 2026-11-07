@@ -468,6 +468,7 @@ int main(int argc, char** argv) {
     btga::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
     recompui::config::finalize();
+    btga::init_mouse_stick();
 
     // Read from the just-loaded config; takes effect on the next launch if
     // changed in the menu.
@@ -500,7 +501,7 @@ int main(int argc, char** argv) {
 
     ultramodern::input::callbacks_t input_callbacks{
         .poll_input = recompinput::poll_inputs,
-        .get_input = recompinput::profiles::get_n64_input,
+        .get_input = btga::get_n64_input_with_mouse,
         .set_rumble = recompinput::set_rumble,
         .get_connected_device_info = get_connected_device_info,
     };
