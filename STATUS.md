@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 166)
+## Overview (as of round 167)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.6).
+and higher framerates. Betas are public (0.1.0 to 0.1.7).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,49 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 167: 0.1.7
+
+Version 0.1.7 (`version_string` in `src/main/main.cpp`), PC only; the
+Android branch gets it later.
+
+**Release scan:**
+- No testing switches or debug prints left from rounds 158-166.
+- No ROM or ROM-derived files tracked. The first game's sound effects stay
+  in the user's app folder.
+- No build-machine or personal paths.
+- Lib patches since 0.1.6: RecompFrontend 0014 (option buttons, round 159)
+  and 0015 (mouse bindings and capture, rounds 163-164).
+
+**New since 0.1.6**, confirmed by the owner except where noted:
+
+- Graphics tab:
+  - **Fog** On / Off (round 158).
+  - **Draw Distance** Original / Far / Very Far / Map Edge (rounds 158,
+    160-161). Campaign camera sequences no longer reset it, and the farther
+    settings get room in the per-frame draw buffers. Very Far and Map Edge
+    were confirmed by the owner, with no blinking.
+- Sound tab:
+  - **BattleTanx 1 Sound Effects**, with a Load BattleTanx ROM button
+    (round 159).
+  - **Sound Effects Reverb** and its amount (round 162).
+- Mouse:
+  - Mouse buttons (side buttons too) and the scroll wheel can be bound on
+    the Controls tab, with left click on the main gun and right click on R
+    by default (rounds 163-164).
+  - **Mouse Stick** on the General tab (Off / Turn / Full, with
+    sensitivity), steady in hard turns (round 164).
+- Explosion fire and smoke no longer flash on in-between frames (round 165).
+- Radar arrows follow their tanks through camera turns instead of trailing
+  a frame behind (round 166). The owner calls it good enough: in a fast
+  waggle the arrows, smoothed as screen positions, still drift slightly
+  from the tanks, which are smoothed in 3D.
+- The "Maximum Visibility" GameShark code is removed from the Hacks tab.
+  It patched RSP microcode that RT64 doesn't run (round 158).
+
+**Not checked yet:**
+- 2-player split screen with the new options and the arrows.
+- All Tanks All Levels through the late missions (round 150).
 
 ## 2026-11-07, round 166: radar arrows a frame behind the camera
 
