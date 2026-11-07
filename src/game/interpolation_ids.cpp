@@ -300,14 +300,23 @@ extern "C" void btga_interp_queue_end(uint8_t* rdram, recomp_context*) {
 // Position and size are interpolated, and the angle when it changed by less
 // than 45 degrees (round 156: wreckage spins steadily; a fireball can get a
 // new angle every frame, and turning through those showed in the first game).
+//
+// Round 165: a sprite also pairs only with one about its own size (within
+// kSpriteSizeRatio either way). Fire and smoke puffs die and new ones start
+// small where they were, and pairing the two showed a puff swelling or
+// shrinking through the in-between frames: the flashes in explosions. In Tank
+// Wars about 2% of pairs changed size more than 2.5 times in a frame, against
+// 1.2-1.7 times for a growing fireball.
 namespace {
     constexpr uint32_t kSpriteIdBase = 0x5F000000u; // clear of addresses and the arrows' IDs
     constexpr float kSpritePairDistance = 64.0f;
+    constexpr float kSpriteSizeRatio = 2.0f;
     constexpr size_t kSpriteViews = 4;
 
     struct Sprite {
         float x, y, z;
         float vx, vy, vz;
+        float width, height;
         bool moved; // seen in the frame before too
         uint16_t angle;
         bool turn_smoothly;
@@ -324,7 +333,13 @@ namespace {
         return value;
     }
 
-    const Sprite& pair_sprite(size_t view, float x, float y, float z, uint16_t angle) {
+    bool similar_size(float a, float b) {
+        a = std::fabs(a);
+        b = std::fabs(b);
+        return a <= b * kSpriteSizeRatio && b <= a * kSpriteSizeRatio;
+    }
+
+    const Sprite& pair_sprite(size_t view, float x, float y, float z, float width, float height, uint16_t angle) {
         std::vector<Sprite>& prev = sprites_prev[view];
         int best = -1;
         float best_dist = 0.0f;
@@ -333,12 +348,15 @@ namespace {
             const float dx = p.x + p.vx - x, dy = p.y + p.vy - y, dz = p.z + p.vz - z;
             const float d = dx * dx + dy * dy + dz * dz;
             const float room = p.moved ? kSpritePairDistance : 2.0f * kSpritePairDistance;
+            if (!similar_size(p.width, width) || !similar_size(p.height, height)) {
+                continue;
+            }
             if (d <= room * room && (best < 0 || d < best_dist)) {
                 best = (int)i;
                 best_dist = d;
             }
         }
-        Sprite s{ x, y, z, 0.0f, 0.0f, 0.0f, false, angle, false, 0 };
+        Sprite s{ x, y, z, 0.0f, 0.0f, 0.0f, width, height, false, angle, false, 0 };
         if (best >= 0) {
             const Sprite& p = prev[best];
             s.vx = x - p.x;
@@ -403,10 +421,12 @@ extern "C" void btga_interp_sprite_load(uint8_t* rdram, recomp_context* ctx) {
     const float x = read_float(rdram, record + 0xC);
     const float y = read_float(rdram, record + 0x10);
     const float z = read_float(rdram, record + 0x14);
-    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+    const float width = read_float(rdram, record + 0x18);
+    const float height = read_float(rdram, record + 0x1C);
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(width) || !std::isfinite(height)) {
         return;
     }
-    const Sprite& sprite = pair_sprite(view, x, y, z, (uint16_t)MEM_HU(0xA, record));
+    const Sprite& sprite = pair_sprite(view, x, y, z, width, height, (uint16_t)MEM_HU(0xA, record));
     if (!sprite_group_pushed) {
         write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
         write_cmd(rdram, 0x6400000Cu, sprite.id);

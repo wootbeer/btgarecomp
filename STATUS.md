@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 164)
+## Overview (as of round 165)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,32 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 165: explosion flashes from mismatched sprite pairs
+
+**Report** (a video from the owner, 60 fps, Refresh Rate above 30):
+explosions still flash between their sprites.
+
+**Video:** frame by frame, the big fireballs are continuous. Small burning
+bits on a wreck show on one displayed frame and are gone on the next, at the
+display rate. So it's the in-between frames, not the game's own.
+
+**Findings** (temporary probe on round 155's sprite pairing, Tank Wars):
+
+- No sprite has a negative size (no mirroring).
+- Sprites are never paired across kinds: the second queue's group key
+  (entry +0 in `$s4`, the material func_8007B498 groups by) never differs
+  within a pair.
+- But about 2% of pairs change size more than 2.5 times between frames, and
+  4% more than 2 times. A growing fireball changes 1.2-1.7 times a frame.
+- Those are puffs dying and new, small ones starting where they were. The
+  pairing joined them, and RT64 showed a puff swelling or shrinking through
+  the in-between frames.
+
+**Fix** (`src/game/interpolation_ids.cpp`): a sprite pairs only with a
+previous one within 2 times its width and height (`kSpriteSizeRatio`). The
+rest get a new ID and snap. Needs a check on a PC at a high refresh rate,
+since the sandbox can't render above the game's rate.
 
 ## 2026-11-07, round 164: steadier Mouse Stick; default mouse binds
 
