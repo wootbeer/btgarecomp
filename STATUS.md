@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 165)
+## Overview (as of round 166)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,41 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 166: radar arrows a frame behind the camera
+
+**Report:** the arrows are smooth, but when the camera waggles they lag and
+then settle into place.
+
+**Cause:**
+
+- `func_800C8B74`, during the frame's update (from `func_80091768` at
+  `0x80092468`, for a tank with radar, flag `0x200` at +0x1E0), fills the
+  arrow table at `0x803A5990` (+ view * 0x100 + slot * 8: x - 4, y - 7,
+  flags). It goes through `func_800C877C`, which projects each tank with
+  `func_800ACCB4(position, out, a2, view)`.
+- That runs before the frame's camera moves, so in a turn each arrow sat
+  where its tank had been on screen a frame earlier.
+- Sandbox (Tank Wars, radar flag forced on for the test, steady turn): the
+  arrows sat about 70 pixels beside their tanks.
+- At 30 fps this was a small offset during turns. Interpolated, the arrows
+  visibly trailed their tanks and caught up once the camera stopped.
+
+**Fix** (`src/game/marker_interp.cpp`, hooks in `func_800C877C` before
+`0x800C89F0` and `0x800C8A40`):
+
+- Each projection's inputs (the position copied, the view) are kept with the
+  table entry they wrote.
+- When the arrow widget starts (the frame is being drawn, every view's
+  camera final), each is projected again with `func_800ACCB4`, which only
+  reads that view's matrices. The entry gets the new position.
+- An entry that no longer holds what was written for it, or no longer
+  projects, is left as it was.
+
+**Sandbox:** standing still, re-projection moves the arrows by about 0-1
+units (out of the game's 320-unit width). In a turn it moves them 13-58
+units back onto their tanks, and screenshots mid-turn show each arrow over
+its tank.
 
 ## 2026-11-07, round 165: explosion flashes from mismatched sprite pairs
 

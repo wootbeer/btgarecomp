@@ -30,6 +30,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <unordered_map>
 #include <vector>
 
 #include "recomp.h"
@@ -299,7 +300,96 @@ void btga::markers::new_frame() {
     call_index = 0;
 }
 
-void btga::markers::widget_begin(uint8_t* rdram) {
+// --- Arrow positions from the frame's own camera (round 166) --------------
+//
+// func_800C8B74 fills the arrow table (0x803A5990 + view * 0x100 + slot * 8:
+// x - 4, y - 7, flags) during the frame's update, through func_800C877C,
+// which projects each tank with func_800ACCB4(position, out, a2, view). That
+// runs before the frame's camera moves, so in a turn every arrow sat where
+// its tank was on screen the frame before (in the sandbox, about 70 pixels
+// off in a steady turn). Interpolated, the arrows trailed their tanks and
+// settled once the camera stopped.
+//
+// So each projection's inputs are kept, and when the arrow widget starts (the
+// frame is being drawn, every view's camera final) each is projected again
+// with func_800ACCB4, which only reads that view's matrices (+0xC0 and
+// +0x124 of its camera at 0x80235F00 + view * 0x250), and its table entry gets
+// the new position. An entry that no longer holds what was written for it, or
+// that no longer projects, is left as it is.
+extern "C" void func_800ACCB4(uint8_t* rdram, recomp_context* ctx);
+
+namespace {
+    struct Projection {
+        float pos[3];
+        int32_t a2, view;
+        int16_t x, y; // what func_800C877C wrote
+    };
+    std::unordered_map<uint32_t, Projection> projections; // by table offset
+    Projection pending{};
+    bool pending_valid = false;
+
+    constexpr uint32_t kArrowTable = 0x803A5990;
+    constexpr uint32_t kMaxTableOffset = 4 * 0x100;
+}
+
+void btga::markers::projection_call(uint8_t* rdram, recomp_context* ctx) {
+    for (int i = 0; i < 3; i++) {
+        const uint32_t bits = (uint32_t)MEM_W(i * 4, ctx->r4);
+        std::memcpy(&pending.pos[i], &bits, sizeof(float));
+    }
+    pending.a2 = (int32_t)ctx->r6;
+    pending.view = (int32_t)ctx->r16; // $a3, set from $s0 in the delay slot
+    pending_valid = true;
+}
+
+void btga::markers::projection_stored(uint8_t* rdram, recomp_context* ctx) {
+    const uint32_t offset = (uint32_t)ctx->r16;
+    if (!pending_valid || offset >= kMaxTableOffset) {
+        return;
+    }
+    pending.x = MEM_H(0, kseg0(kArrowTable + offset));
+    pending.y = MEM_H(2, kseg0(kArrowTable + offset));
+    projections[offset] = pending;
+    pending_valid = false;
+}
+
+static void reproject_arrows(uint8_t* rdram, recomp_context* ctx) {
+    for (const auto& [offset, p] : projections) {
+        const gpr entry = kseg0(kArrowTable + offset);
+        if (MEM_H(0, entry) != p.x || MEM_H(2, entry) != p.y) {
+            continue;
+        }
+        recomp_context call = *ctx;
+        const gpr sp = (ctx->r29 - 0x400) & ~(gpr)7;
+        call.r29 = sp;
+        for (int i = 0; i < 3; i++) {
+            uint32_t bits;
+            std::memcpy(&bits, &p.pos[i], sizeof(float));
+            MEM_W(0x100 + i * 4, sp) = (int32_t)bits;
+        }
+        call.r4 = sp + 0x100;
+        call.r5 = sp + 0x120;
+        call.r6 = (gpr)p.a2;
+        call.r7 = (gpr)p.view;
+        func_800ACCB4(rdram, &call);
+        if ((int32_t)call.r2 == 0) {
+            continue;
+        }
+        float out_x, out_y;
+        uint32_t bits_x = (uint32_t)MEM_W(0x120, sp), bits_y = (uint32_t)MEM_W(0x128, sp);
+        std::memcpy(&out_x, &bits_x, sizeof(float));
+        std::memcpy(&out_y, &bits_y, sizeof(float));
+        if (!std::isfinite(out_x) || !std::isfinite(out_y) || std::fabs(out_x) > 30000.0f || std::fabs(out_y) > 30000.0f) {
+            continue;
+        }
+        MEM_H(0, entry) = (int16_t)((int32_t)out_x - 4);
+        MEM_H(2, entry) = (int16_t)((int32_t)out_y - 7);
+    }
+    projections.clear();
+}
+
+void btga::markers::widget_begin(uint8_t* rdram, recomp_context* ctx) {
+    reproject_arrows(rdram, ctx);
     in_marker_widget = true;
     widget_start = (uint32_t)MEM_W(0, kseg0(kOverlayDlHeadPtr));
     rect_calls.clear();

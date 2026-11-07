@@ -2287,3 +2287,20 @@ before_vram = 0x801003C0
 text = """
     { extern void btga_sfx_reverb(uint8_t *rdram, recomp_context *ctx); btga_sfx_reverb(rdram, ctx); }
 """
+
+# Round 166 (src/game/marker_interp.cpp): the radar arrows' positions come
+# from the camera before the frame's update moves it. Keep each projection's
+# inputs and project again when the arrows are drawn.
+[[patches.hook]]
+func = "func_800C877C"
+before_vram = 0x800C89F0
+text = """
+    { extern void btga_arrow_projection_call(uint8_t *rdram, recomp_context *ctx); btga_arrow_projection_call(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800C877C"
+before_vram = 0x800C8A40
+text = """
+    { extern void btga_arrow_projection_stored(uint8_t *rdram, recomp_context *ctx); btga_arrow_projection_stored(rdram, ctx); }
+"""
