@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 158)
+## Overview (as of round 159)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,46 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 159: BattleTanx 1 Sound Effects option
+
+**Request** (issue #3): the first game's sound effects, which sound better.
+
+**Findings** (the owner's BattleTanx (USA) ROM, in the sandbox only):
+
+- This game's effects are libmus's `ptr_bank_t` ("N64 PtrTablesV2") at ROM
+  0x58FAE0 (76 samples; music's is at 0x61A698), DMA'd as is at boot, with
+  sample data from 0x593A28 (found from the 0x800-byte sample DMAs). The
+  first game uses libultra's sound player instead: an `ALBankFile` at
+  0x215620 (49 sounds, one instrument) with sample data at 0x100000.
+- Both are VADPCM with order-2, 4-predictor books. Decoded and compared
+  (envelopes, then spectrograms over 150 Hz-5.2 kHz), many of this game's
+  effects are the first game's resampled down by exactly 2^(23/12) = 3.775:
+  44.1 kHz to about 11.7 kHz.
+- The owner listened through a pack (each effect beside its three best
+  candidates) and confirmed 22 pairs; the rest stay as they are.
+- Measured at the mixer (`n_alResamplePull`, temporary): the effects play
+  at ratios 0.236-0.53 of the 22,050 Hz output (plus 1.0 for the first few
+  pulls of a voice, before libmus sets its pitch).
+
+**Feature** (`src/main/bt1_sounds.cpp`, as snprecomp's Spanish voices):
+**BattleTanx 1 Sound Effects** on the Sound tab with a **Load BattleTanx
+ROM** button (`lib-patches/RecompFrontend/0014-option-buttons.patch`,
+snprecomp's 0006 rebased onto our 0011-0013). The button checks the ROM
+(fingerprints of the bank and sample data) and keeps both in
+`battletanx1_sounds.bin` in the app folder. At game start (the game
+entry's `on_init_callback`), with the option on, the sample data is added
+past the end of the ROM and, for each confirmed pair, the effects table's
+wave table gets the first game's base, length, book and (for the two that
+loop) loop with its state, and the base-note byte goes **up** 23: libmus
+plays a sample faster the higher it is (the first try, -23, made the
+ratios 3.7 times lower). No game code changes.
+
+Sandbox: the replaced effects now play at 1.19-1.41 (3.775 times their old
+ratios, under the mixer's 2.0 limit), the others are unchanged; a match's
+recorded mix has twice the energy above 6 kHz. By sample loudness most
+pairs are within 1.5 dB; ga26, ga28, ga00 and ga34 are 3-6 dB quieter in
+the first game's version. Needs the owner's ears in game.
 
 ## 2026-11-07, round 158: Fog and Draw Distance options
 

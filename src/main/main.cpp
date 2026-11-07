@@ -373,7 +373,7 @@ std::vector<recomp::GameEntry> supported_games = {
         // exactly this reason.
         .entrypoint_address = (gpr)(int32_t)0x80071000u,
         .entrypoint = recomp_entrypoint,
-        .on_init_callback = nullptr,
+        .on_init_callback = btga::apply_bt1_sounds,
     },
 };
 
@@ -460,7 +460,7 @@ int main(int argc, char** argv) {
     btga::config::add_general_options(recompui::config::create_general_tab(general_tab_options));
     btga::config::add_graphics_options(recompui::config::create_graphics_tab());
     recompui::config::create_controls_tab();
-    recompui::config::create_sound_tab();
+    btga::config::add_bt1_sounds_option(recompui::config::create_sound_tab());
     btga::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
     recompui::config::finalize();

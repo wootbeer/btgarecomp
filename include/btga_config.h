@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "librecomp/config.hpp"
+#include "recomp.h"
 
 // Game-specific options, shown on the General and Graphics tabs
 // (src/main/game_config.cpp).
@@ -26,6 +27,11 @@ namespace btga::config {
     // recompui::config::create_graphics_tab() and recompui::config::finalize().
     void add_graphics_options(recomp::config::Config& graphics);
 
+    // BattleTanx 1 Sound Effects and its Load BattleTanx ROM button on the
+    // Sound tab (src/main/bt1_sounds.cpp). Call between
+    // recompui::config::create_sound_tab() and recompui::config::finalize().
+    void add_bt1_sounds_option(recomp::config::Config& sound);
+
     Accessory get_accessory(int port);
     bool get_local_multiplayer();
 }
@@ -36,6 +42,10 @@ namespace btga::config {
 namespace btga {
     void set_widescreen_scale(float scale);
     float get_widescreen_scale();
+
+    // The game entry's on_init_callback (src/main/bt1_sounds.cpp): swaps in
+    // the first game's sound effects when that option is on.
+    void apply_bt1_sounds(uint8_t* rdram, recomp_context* context);
 
     // Graphics tab options read by the game's hooks (src/game/view_distance.cpp).
     void set_fog_enabled(bool enabled);
