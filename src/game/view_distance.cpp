@@ -18,7 +18,13 @@
 // it too (func_800D25E0): a shot's own value (0x800D289C), and 5000 when the
 // script ends (0x800D28B0), so a mission's camera sequence used to undo Far
 // (round 160; Tank Wars and mission 1 have none). Far triples all three
-// stores; the governor leaves anything over 5000 alone on a PC.
+// stores and Very Far multiplies them by 6; Map Edge sets them all to
+// kMaxDrawDistance (round 161). The governor leaves anything over 5000 alone
+// on a PC.
+//
+// The ceiling: the scenery cull (func_800AF978 -> func_800AB980) and
+// func_800E2F9C / func_800E3460 square the draw distance in a 32-bit int,
+// which overflows past 46,340.
 //
 // The "Maximum Visibility" GameShark code doesn't do this: it patches the
 // RSP graphics microcode at 0x800F9522, which RT64 doesn't run.
@@ -31,17 +37,21 @@
 
 namespace {
     std::atomic<bool> fog_enabled{ true };
-    std::atomic<bool> far_draw_distance{ false };
+    std::atomic<int> distance_level{ 0 };
 
-    constexpr int kFarDrawDistanceFactor = 3;
+    constexpr int32_t kMaxDrawDistance = 45000;
 }
 
 void btga::set_fog_enabled(bool enabled) {
     fog_enabled.store(enabled);
 }
 
-void btga::set_far_draw_distance(bool far) {
-    far_draw_distance.store(far);
+void btga::set_draw_distance(int level) {
+    distance_level.store(level);
+}
+
+int btga::draw_distance_level() {
+    return distance_level.load();
 }
 
 // func_8007A250 before 0x8007A688: $v1 is the fog word about to be stored.
@@ -55,7 +65,15 @@ extern "C" void btga_fog_word(uint8_t* rdram, recomp_context* ctx) {
 // (func_8009AE38, 0x8009AF4C) and the camera scripts (func_800D25E0,
 // 0x800D289C and 0x800D28B0).
 extern "C" void btga_scene_draw_distance(uint8_t* rdram, recomp_context* ctx) {
-    if (far_draw_distance.load()) {
-        ctx->r2 = (gpr)(int32_t)((int32_t)ctx->r2 * kFarDrawDistanceFactor);
+    int32_t distance = (int32_t)ctx->r2;
+    switch (distance_level.load()) {
+        case 1: distance *= 3; break; // Far
+        case 2: distance *= 6; break; // Very Far
+        case 3: distance = kMaxDrawDistance; break; // Map Edge
+        default: return;
     }
+    if (distance > kMaxDrawDistance) {
+        distance = kMaxDrawDistance;
+    }
+    ctx->r2 = (gpr)distance;
 }

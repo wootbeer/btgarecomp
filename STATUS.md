@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 160)
+## Overview (as of round 161)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,51 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 161: Very Far and Map Edge draw distances
+
+**Request:** a draw distance beyond Far, or out to the edge of the map.
+
+**Options:** Draw Distance is now Original / Far (x3) / Very Far (x6) /
+Map Edge (`src/game/view_distance.cpp`). Map Edge sets every store of the
+draw distance to 45,000, and the others are capped there. The ceiling: the
+scenery cull (`func_800AF978`, passing the square on to `func_800AB980`) and
+`func_800E2F9C` / `func_800E3460` (the square times 0.92) square the
+distance in a 32-bit int, which overflows past 46,340. Nothing else limits
+it: the far plane goes to `guPerspective` (`0x80109090`) as a float, and
+the scenery region list (`func_800ABE6C`, 256 slots on the stack) held at
+most 5 regions.
+
+**Limits it ran into** (temporary probes, mission 1's start at Map Edge):
+
+- The display-list buffer. The queue writers stopped at `base + 0xADE0`
+  with 24 bytes to spare and dropped the rest of the queue (round 120's
+  limit).
+- Mesh-draw items reached 1,745 of 2,288 (dropped once full).
+- Mesh entries (92 of 300) and the matrix buffer (0x1280 of 0xC000) were
+  fine.
+
+**Fix** (`src/game/draw_limits.cpp`):
+
+- Both display-list buffers move to unused memory at `0x80C40000`,
+  `0x40000` bytes each. This is round 120's relocation, reverted in round
+  121 because that flicker turned out to be RT64's.
+- With the draw distance above Original, latched once a frame at the pool
+  reset (`func_8007B03C`):
+  - the cut-off becomes `0x30000` (hooks before `0x8007B6E8` and
+    `0x8007B984`);
+  - the item pool moves to `0x80C00000` with room for `0x2000` items
+    (hooks before `0x8007B258` and `0x8007B3A8`).
+- At Original the game keeps its own limits.
+
+**Sandbox:**
+
+- Map Edge, mission 1: no draws dropped, about 150 KB of buffer to spare,
+  items peaked at 1,680.
+- Original: the same headroom as before (about 32 KB), no drops.
+- Tank Wars at Map Edge shows the whole arena.
+- The governor still trims the distance by 50 a second under 20 fps (the
+  sandbox's software renderer is that slow).
 
 ## 2026-11-07, round 160: Far draw distance survives campaign camera scripts
 

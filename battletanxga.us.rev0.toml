@@ -2233,3 +2233,48 @@ before_vram = 0x800D28B0
 text = """
     { extern void btga_scene_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_scene_draw_distance(rdram, ctx); }
 """
+
+# Round 161 (src/game/draw_limits.cpp): room for the farther draw distances.
+# The display-list buffers move above 8 MB; with the draw distance above
+# Original, the queue writers' cut-off and the mesh-draw item pool grow.
+[[patches.hook]]
+func = "func_80079CB8"
+before_vram = 0x80079E9C
+text = """
+    { extern void btga_dl_buffer_base(uint8_t *rdram, recomp_context *ctx); btga_dl_buffer_base(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007B03C"
+before_vram = 0x8007B03C
+text = """
+    { extern void btga_draw_limits_frame(uint8_t *rdram, recomp_context *ctx); btga_draw_limits_frame(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007B65C"
+before_vram = 0x8007B6E8
+text = """
+    { extern void btga_dl_buffer_cutoff(uint8_t *rdram, recomp_context *ctx); btga_dl_buffer_cutoff(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007B8EC"
+before_vram = 0x8007B984
+text = """
+    { extern void btga_dl_buffer_cutoff(uint8_t *rdram, recomp_context *ctx); btga_dl_buffer_cutoff(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007B1F0"
+before_vram = 0x8007B258
+text = """
+    { extern void btga_draw_item_limit(uint8_t *rdram, recomp_context *ctx); btga_draw_item_limit(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_8007B1F0"
+before_vram = 0x8007B3A8
+text = """
+    { extern void btga_draw_item_pool(uint8_t *rdram, recomp_context *ctx); btga_draw_item_pool(rdram, ctx); }
+"""

@@ -100,9 +100,10 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
     graphics.add_enum_option(
         "draw_distance",
         "Draw Distance",
-        "<b>Far</b> draws scenery and tanks about three times as far away. The fog moves out with it. "
-        "Takes effect when a level starts.",
-        { {0u, "Original", "Original"}, {1u, "Far", "Far"} },
+        "<b>Far</b> draws scenery and tanks about three times as far away, <b>Very Far</b> six times, and "
+        "<b>Map Edge</b> as far as the game can. The fog moves out with it. Farther settings draw more each "
+        "frame, so they're heavier on slower PCs. Takes effect when a level starts.",
+        { {0u, "Original", "Original"}, {1u, "Far", "Far"}, {2u, "VeryFar", "Very Far"}, {3u, "MapEdge", "Map Edge"} },
         0u
     );
 
@@ -121,7 +122,7 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
         });
     graphics.add_option_change_callback("draw_distance",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
-            btga::set_far_draw_distance(std::get<uint32_t>(value) != 0);
+            btga::set_draw_distance(static_cast<int>(std::get<uint32_t>(value)));
         });
 }
 

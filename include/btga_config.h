@@ -49,7 +49,9 @@ namespace btga {
 
     // Graphics tab options read by the game's hooks (src/game/view_distance.cpp).
     void set_fog_enabled(bool enabled);
-    void set_far_draw_distance(bool far);
+    // 0 Original, 1 Far, 2 Very Far, 3 Map Edge.
+    void set_draw_distance(int level);
+    int draw_distance_level();
 }
 
 #endif
