@@ -414,6 +414,12 @@ int main(int argc, char** argv) {
         { recompinput::InputField::controller_analog(SDL_CONTROLLER_AXIS_TRIGGERRIGHT, true) });
     recompinput::set_default_mapping_for_controller(recompinput::GameInput::R,
         { recompinput::InputField::controller_analog(SDL_CONTROLLER_AXIS_TRIGGERLEFT, true) });
+    // Keyboard defaults: the frontend's keys, plus the main gun (Z) on the left mouse button and
+    // R on the right one (round 164).
+    recompinput::set_default_mapping_for_keyboard(recompinput::GameInput::Z,
+        { recompinput::InputField::keyboard(SDL_SCANCODE_Q), recompinput::InputField{ recompinput::InputType::Mouse, SDL_BUTTON_LEFT } });
+    recompinput::set_default_mapping_for_keyboard(recompinput::GameInput::R,
+        { recompinput::InputField::keyboard(SDL_SCANCODE_R), recompinput::InputField{ recompinput::InputType::Mouse, SDL_BUTTON_RIGHT } });
 
     recomp::Version project_version{};
     if (!recomp::Version::from_string(version_string, project_version)) {

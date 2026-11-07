@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 163)
+## Overview (as of round 164)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,34 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 164: steadier Mouse Stick; default mouse binds
+
+**Report:** mouse support works well, but the tank wobbles when turning
+hard with Mouse Stick on Turn. With a controller or the keyboard it's
+smooth.
+
+**Cause:** the stick was the motion since the game's last controller read.
+Motion reaches the game in bursts, once per pass of the window's event
+loop, and those passes don't line up with the game's reads. In a hard turn
+the stick alternated read by read between full and partial or empty.
+
+**Fix:**
+- The frontend keeps a running total of the mouse's motion
+  (`get_mouse_motion_total` in `lib-patches/RecompFrontend/0015`, replacing
+  `get_mouse_deltas_raw`).
+- Mouse Stick turns the change over the last 80 ms into a speed: 750 pixels
+  a second is full deflection at 100%, as before.
+- A hard turn now stays at full stick from read to read.
+- The sandbox renders too slowly to judge the smoothness (its events arrive
+  every few frames), so it needs a check on a PC.
+
+**Default mouse binds** (request): the keyboard defaults gain the left
+mouse button on Z (main gun) and the right one on R (secondary), set in
+`src/main/main.cpp` with `set_default_mapping_for_keyboard`. Saved bindings
+are kept, so they apply to a new setup or Reset to Defaults. Sandbox: left
+clicks fired the main gun (ammo 100 to 96). R couldn't be checked there,
+because no special weapon had been picked up.
 
 ## 2026-11-07, round 163: mouse support (bindable buttons, Mouse Stick)
 
