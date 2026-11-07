@@ -2217,3 +2217,19 @@ before_vram = 0x8009AF4C
 text = """
     { extern void btga_scene_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_scene_draw_distance(rdram, ctx); }
 """
+
+# The campaign camera scripts' two draw-distance stores (a shot's own value,
+# and 5000 when the script ends).
+[[patches.hook]]
+func = "func_800D25E0"
+before_vram = 0x800D289C
+text = """
+    { extern void btga_scene_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_scene_draw_distance(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800D25E0"
+before_vram = 0x800D28B0
+text = """
+    { extern void btga_scene_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_scene_draw_distance(rdram, ctx); }
+"""

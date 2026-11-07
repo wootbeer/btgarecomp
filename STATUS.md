@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 159)
+## Overview (as of round 160)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,33 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-07, round 160: Far draw distance survives campaign camera scripts
+
+**Report:** with Draw Distance on Far, things still visibly draw in.
+
+**Findings** (temporary hooks, since removed):
+
+- In Tank Wars, Far works. The farthest object the visibility test
+  (`func_800AA664`, distance against the draw distance plus the object's
+  radius) let through was about 7,525 units, against 4,396 on Original.
+- Campaign camera scripts (`func_800D25E0`) also write the draw distance
+  at 0x8023A060. A shot stores its own value (0x800D289C), and the end of
+  the script stores 5000 (0x800D28B0). So once a mission's opening camera
+  sequence ran, Far was back to the original 5000 for the rest of the
+  mission. Tank Wars and mission 1 have no such script, which is why
+  round 158's checks didn't catch it.
+
+**Fix:** the same hook as the scene start (`btga_scene_draw_distance`, x3
+when Far is on) now also runs before both camera-script stores
+(`battletanxga.us.rev0.toml`). Nothing changes with Original.
+
+**Limits:** scenery culling squares the distance in a 32-bit int, so it
+must stay under about 46,000 (on Far, the scripts' 5000 becomes 15,000). The
+governor still lowers the distance by 50 a second while the game runs
+under 20 fps.
+
+Needs a check in a mission that opens with a camera sequence.
 
 ## 2026-11-07, round 159: BattleTanx 1 Sound Effects option
 

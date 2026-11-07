@@ -14,8 +14,11 @@
 // the fog's position too. func_8009AE38 resets it at every scene start to
 // 3400 / 2866 / 1800 by screen layout (0x8009AF4C), and the frame-rate
 // governor func_80099FE8 then adds 50 a second while it's under 5000, or
-// takes 50 off while the game runs under 20 fps. Far triples the scene-start
-// value; the governor leaves anything over 5000 alone on a PC.
+// takes 50 off while the game runs under 20 fps. Campaign camera scripts set
+// it too (func_800D25E0): a shot's own value (0x800D289C), and 5000 when the
+// script ends (0x800D28B0), so a mission's camera sequence used to undo Far
+// (round 160; Tank Wars and mission 1 have none). Far triples all three
+// stores; the governor leaves anything over 5000 alone on a PC.
 //
 // The "Maximum Visibility" GameShark code doesn't do this: it patches the
 // RSP graphics microcode at 0x800F9522, which RT64 doesn't run.
@@ -48,7 +51,9 @@ extern "C" void btga_fog_word(uint8_t* rdram, recomp_context* ctx) {
     }
 }
 
-// func_8009AE38 before 0x8009AF4C: $v0 is the scene's starting draw distance.
+// Before each store of the draw distance from $v0: the scene start
+// (func_8009AE38, 0x8009AF4C) and the camera scripts (func_800D25E0,
+// 0x800D289C and 0x800D28B0).
 extern "C" void btga_scene_draw_distance(uint8_t* rdram, recomp_context* ctx) {
     if (far_draw_distance.load()) {
         ctx->r2 = (gpr)(int32_t)((int32_t)ctx->r2 * kFarDrawDistanceFactor);
