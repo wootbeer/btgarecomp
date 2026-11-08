@@ -29,7 +29,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <cstdlib>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -56,7 +55,6 @@ namespace {
         // (round 171), and the ones that turned too far since the last frame.
         std::unordered_map<uint32_t, std::array<float, 9>> rotations;
         std::unordered_set<uint32_t> snap_rotation;
-        std::unordered_set<uint32_t> turret_ids, hull_ids; // TEMPORARY (round 172 test switch)
     };
     Generation generations[2];
     int current = 0;
@@ -149,49 +147,11 @@ namespace {
         return false;
     }
 
-    // TEMPORARY test switch (round 172), for the Rattler's cannon: BTGA_TURRET_TEST in the
-    // environment changes how tank turrets (IDs tank + 3) are interpolated.
-    //   1: rotation not interpolated (position and the rest are)
-    //   2: nothing interpolated (the turret moves at the game's rate)
-    //   3: no ID (RT64's automatic matching, as before round 136)
-    //   4: hulls (tank + 1) not interpolated either, with turrets as 2
-    int turret_test() {
-        static const int mode = [] {
-            const char* v = std::getenv("BTGA_TURRET_TEST");
-            return v ? std::atoi(v) : 0;
-        }();
-        return mode;
-    }
-
-    bool in_set(uint32_t id, std::unordered_set<uint32_t> Generation::*set) {
-        for (const Generation& gen : generations) {
-            if ((gen.*set).count(id) != 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    bool is_tank_turret(uint32_t id) {
-        return id != kIdAuto && in_set(id, &Generation::turret_ids);
-    }
-
     uint32_t matrix_group_params(uint32_t id, bool push) {
         constexpr uint32_t kInterpolate = 1, kAuto = 2, kSkip = 0;
         const bool tagged = (id != kIdAuto);
-        uint32_t motion = tagged ? kInterpolate : kAuto;
-        uint32_t rotation = snaps_rotation(id) ? kSkip : motion;
-        const int test = turret_test();
-        const bool hull = id != kIdAuto && in_set(id, &Generation::hull_ids);
-        if (test != 0 && (is_tank_turret(id) || (test == 4 && hull))) {
-            if (test == 1) {
-                rotation = kSkip;
-            }
-            else if (test == 2 || test == 4) {
-                motion = kSkip;
-                rotation = kSkip;
-            }
-        }
+        const uint32_t motion = tagged ? kInterpolate : kAuto;
+        const uint32_t rotation = snaps_rotation(id) ? kSkip : motion;
         const uint32_t order = tagged ? 0u : 1u; // G_EX_ORDER_LINEAR for IDs, AUTO for the automatic group
         const uint32_t params =
             (push ? 1u : 0u) |       // push
@@ -237,40 +197,52 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     // that at 0x84 of its frame, which sits right above ours (0x40). The scratch matrix,
     // its own argument, is at 0x4C there -- checked, so another caller is left alone.
     //
-    // Round 169: some tanks have extra parts (the Rattler's cannon among them), built in two
-    // more scratch matrices, 0x8021B500 and 0x8021B548, each several meshes under one Mtx and
-    // sometimes built twice a frame. Named by their scratch address alone, a part had an ID
-    // only on frames when no other tank drew one, so the ID moved from tank to tank and RT64
-    // blended one tank's cannon toward another's: it floated off the hull, tilted. They are
-    // named by the tank too, and by the order the tank builds them in the frame.
+    // Round 169: some tanks have extra parts, built in more scratch matrices (0x8021B500 and
+    // 0x8021B548; round 173 added 0x8021B478, the Rattler's multi-barrel cannon), each several
+    // meshes under one Mtx and sometimes built twice a frame. Named by their scratch address
+    // alone, a part had an ID only on frames when no other tank drew one, so the ID moved from
+    // tank to tank and RT64 blended one tank's part toward another's. They are named by the
+    // tank too, and by the order the tank builds them in the frame. With tank IDs they also get
+    // round 171's rotation snap.
     const bool hull_or_turret = (float_source == 0x8021B2A0u) || (float_source == 0x8021B2E8u);
-    const bool extra_part = (float_source == 0x8021B500u) || (float_source == 0x8021B548u);
+    const bool extra_part = (float_source == 0x8021B500u) || (float_source == 0x8021B548u) ||
+                            (float_source == 0x8021B478u);
     if (hull_or_turret || extra_part) {
         const gpr drawer_sp = ctx->r29 + 0x40;
+        uint32_t object = 0;
         if ((uint32_t)MEM_W(0x4C, drawer_sp) == float_source) {
-            const uint32_t object = (uint32_t)MEM_W(0x84, drawer_sp);
-            if ((object >= 0x80000000u) && (object < 0x80800000u) && ((object & 3) == 0)) {
-                // Odd, so never the address of an Mtx or float matrix used as an ID; all
-                // below the next tank (0x4CC on).
-                if (hull_or_turret) {
-                    source = object | ((float_source == 0x8021B2A0u) ? 1u : 3u);
-                    if (turret_test() != 0) {
-                        ((float_source == 0x8021B2A0u) ? generations[current].hull_ids : generations[current].turret_ids).insert(source);
-                    }
+            object = (uint32_t)MEM_W(0x84, drawer_sp);
+        }
+        else if (extra_part && ((uint32_t)MEM_W(0x58, drawer_sp) == float_source) &&
+                 ((uint32_t)MEM_W(0xA0, drawer_sp) == (uint32_t)drawer_sp + 0x88u + 0x1E8u) &&
+                 ((uint32_t)MEM_W(0xA4, drawer_sp) == 1u)) {
+            // Round 173: most tanks' extra parts come the other way, from func_80092C38 at
+            // 0x80094590 through the generic model drawer func_800AD9A8 (frame 0x88). It is
+            // given the part's matrix from the caller's $s0 and saves that at 0x58, and the
+            // tank ($s3) at 0x64; its stack arguments (0x18: the caller's sp + 0x1E8, 0x1C: 1)
+            // mark the call. In mission 1 only one tank at a time came through func_800AE184; the
+            // rest came this way, so their parts had no tank ID.
+            object = (uint32_t)MEM_W(0x64, drawer_sp);
+        }
+        if ((object >= 0x80000000u) && (object < 0x80800000u) && ((object & 3) == 0)) {
+            // Odd, so never the address of an Mtx or float matrix used as an ID; all
+            // below the next tank (0x4CC on).
+            if (hull_or_turret) {
+                source = object | ((float_source == 0x8021B2A0u) ? 1u : 3u);
+            }
+            else {
+                // IDs tank + 5, 7 and 11 (0x8021B478, round 173), each + 8 * k.
+                const uint32_t slot = (float_source == 0x8021B500u) ? 5u : (float_source == 0x8021B548u) ? 7u : 11u;
+                std::vector<uint32_t>& built = generations[current].extra_parts[object + slot];
+                size_t k = 0;
+                while (k < built.size() && built[k] != mtx) {
+                    k++;
                 }
-                else {
-                    const uint32_t slot = (float_source == 0x8021B500u) ? 5u : 7u;
-                    std::vector<uint32_t>& built = generations[current].extra_parts[object + slot];
-                    size_t k = 0;
-                    while (k < built.size() && built[k] != mtx) {
-                        k++;
-                    }
-                    if (k == built.size()) {
-                        built.push_back(mtx);
-                    }
-                    if (k < 16) {
-                        source = object + slot + 8u * (uint32_t)k;
-                    }
+                if (k == built.size()) {
+                    built.push_back(mtx);
+                }
+                if (k < 16) {
+                    source = object + slot + 8u * (uint32_t)k;
                 }
             }
         }
@@ -355,8 +327,6 @@ void btga_interp_new_frame() {
     generations[current].extra_parts.clear();
     generations[current].rotations.clear();
     generations[current].snap_rotation.clear();
-    generations[current].turret_ids.clear();
-    generations[current].hull_ids.clear();
 }
 
 // func_800A1FDC, around each object's draw call (0x800A20F8 and after it): the
@@ -396,10 +366,7 @@ extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
     if (!group_pushed && (head + 0x400 > limit)) {
         return;
     }
-    uint32_t id = id_for(mtx);
-    if (turret_test() == 3 && is_tank_turret(id)) {
-        id = kIdAuto;
-    }
+    const uint32_t id = id_for(mtx);
     if (!group_pushed) {
         write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
         write_matrix_group(rdram, id, true);

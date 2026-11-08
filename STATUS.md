@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 172)
+## Overview (as of round 173)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,49 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-08, round 173: the Rattler's cannon is its own part, drawn two ways
+
+**Report** (round 172's test switch, `BTGA_TURRET_TEST` 1 to 4):
+- `1` (turret rotation not interpolated): the Rattler is good in turns but
+  still jumps over hills; the M1A1's turret jitters badly in turns.
+- `2` (turret not interpolated): the same for the Rattler; the M1A1's turret
+  jitters moving forward and turning.
+- `3` (turret has no ID): the same for the Rattler; the M1A1's turret gets
+  its occasional jitter from before.
+- `4` (turret and hull not interpolated): both tanks jitter badly.
+
+So the jumping part isn't the turret: with the turret not interpolated at
+all, the Rattler's cannon still jumped.
+
+**Cause.** The cannon is another extra part, built in the scratch matrix
+`0x8021B478` (the barrels spin about 30 degrees a frame while firing). It
+had no tank ID, so it was named by the shared scratch address, and the ID
+passed from tank to tank, as round 169 found for `0x8021B500` and
+`0x8021B548`. It's drawn two ways:
+- by `func_800AE184`, like the hull and turret (one tank at a time in
+  mission 1);
+- by `func_80092C38` at `0x80094590`, through the generic model drawer
+  `func_800AD9A8` (frame `0x88`). That frame holds the part's matrix (the
+  caller's `$s0`, at `0x58`) and the tank (`$s3`, at `0x64`). Its stack
+  arguments mark the call: `0x18` is the caller's sp + `0x1E8`, and `0x1C`
+  is 1.
+
+**Fix** (`src/game/interpolation_ids.cpp`): `0x8021B478` is an extra part,
+with IDs tank + 11 + 8 * k, and both drawers name the tank. In the sandbox
+(mission 1 as the Rattler, turning and firing), 1,500 of 1,500 cannon
+matrices got tank IDs (about 80% before). The largest change between frames
+was the barrels' 30-degree spin, which interpolates, so round 171's snap
+didn't fire.
+
+**Removed** round 172's test switch (`BTGA_TURRET_TEST`); turrets are back
+as in round 171.
+
+**Not done:** about 10% of hull and 6% of turret matrices still have no tank
+ID in play. Most come through the same `func_800AD9A8` call, built in the
+hull or turret scratch for another part of the model (`$s0` isn't the
+scratch). Some come from another caller. That may be the M1A1's occasional
+turret jitter. It wasn't changed here, so the cannon can be tested on its own.
 
 ## 2026-11-08, round 172: Rattler cannon still swinging; a test switch
 
