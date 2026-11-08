@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 167)
+## Overview (as of round 168)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,41 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-08, round 168: more BattleTanx 1 sound effects (contributor's matches)
+
+**Request:** a contributor matched sounds from N64SoundListTool rips. The
+owner listened through a pack of his 21 pairs and confirmed all of them.
+
+**Names:** his rips call this game's effects `BANK_00_INSTR_<n>_SND_0000` and
+the first game's `BANK_00_INSTR_0000_SND_<n>`, both in hex. That's this
+game's table order (76 entries at ROM `0x58FAE0`, none skipped or repeated)
+and the first game's sound order in its effects bank (`0x215620`; its music
+bank is at `0x298D60`). 8 of his pairs were exactly ours.
+
+**Finding:** our matches are all this game's sample slowed 23 semitones
+(3.77 times the samples). Six of his pairs are a steady 2.82, 18 semitones,
+which is why the first pack (built for 23) made them sound "close but not
+quite". The owner listened to each at both speeds and picked the
+length-matched one for all but ga32.
+
+**Change** (`src/main/bt1_sounds.cpp`): each replacement carries its own
+shift, the length ratio in whole semitones (or 23 for ga32). From 22 to 34
+replaced effects:
+- New: ga02 (28 semitones), ga03 (11), ga04 (18), ga09 (20), ga14 (13),
+  ga15 (18, loops like its partner), ga17 (18), ga20 (18), ga25 (18),
+  ga27 (18), ga31 (20), ga32 (23).
+- Changed: ga36 is now bt15 (19) instead of bt23 (bt23 goes to ga14);
+  ga35 is now 25 semitones instead of 23, the owner's length-matched pick.
+- The detune floats (+0x28) were tried for fractional shifts and dropped:
+  libmus adds them to the note, but 1.0, 4.0 and 12.0 all gave the same
+  3.8% rise. The fractional ratios (2.91, 3.09, 3.23) are most likely
+  trimmed samples rather than odd shifts.
+
+**Sandbox** (Tank Wars, playback ratios at `n_alResamplePull`): ga02 0.236
+to 1.19, ga03 0.315 to 0.595, ga20 0.315 to 0.89, ga35 0.375 to 1.59, ga36
+0.315 to 0.94. The highest is 1.59, under the mixer's 2.0. Needs the owner's
+ears in game, especially ga25 and ga31 (between two whole semitones).
 
 ## 2026-11-07, round 167: 0.1.7
 

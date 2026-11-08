@@ -19,13 +19,17 @@
 //   bases from the wave bank at ROM 0x593A28).
 // - A replaced sample's wave table gets the first game's base, length,
 //   predictor book (both games use order 2 with 4 predictors, so it fits in
-//   place) and, for the two that loop, its loop with its state.
-// - Its base note goes up 23: despite the name, libmus plays a sample faster
-//   the higher that value is (measured: -23 made a replaced effect's playback
-//   ratio 3.7 times lower). So the 3.775 times as many samples play at the
-//   same pitch and length. The highest playback ratio these effects reach is
-//   then about 2.0 at 22,050 Hz output (measured: the effects play at
-//   0.236-0.53), the mixer's limit.
+//   place) and, for those that loop, its loop with its state.
+// - Its base note goes up by as many semitones as this game slowed the sample
+//   (23 for most, kReplacements): despite the name, libmus plays a sample
+//   faster the higher that value is (measured: -23 made a replaced effect's
+//   playback ratio 3.7 times lower). So the extra samples play at the same
+//   pitch and length. The mixer can't go past a ratio of 2.0 at 22,050 Hz
+//   output; the effects play at 0.236-0.53 (measured), and the largest shift,
+//   28 semitones, is on ga02, measured at 0.236 (about 1.2 after).
+//   The detune floats (+0x28) aren't used: libmus adds them to the note, and
+//   setting one to 1.0, 4.0 or 12.0 all raised the playback ratio by the same
+//   3.8% (round 168), so whole semitones in the base note it is.
 //
 // Nothing in the game's code changes.
 #include "btga_config.h"
@@ -58,18 +62,42 @@ namespace {
     constexpr uint32_t ga_ptr_bank = 0x58FAE0;
     constexpr uint32_t ga_wave_bank = 0x593A28;
     constexpr uint32_t ga_samples = 76;
-    constexpr int semitones_up = 23; // 2^(23/12) = 3.775
-
     // This game's sample -> the first game's sound (instrument 0 of its only
-    // bank), as matched by ear. Only the ones the owner was sure of.
+    // bank), as matched by ear, and how far this game had slowed it down: the
+    // sample's base note goes up that many semitones, so the first game's
+    // 44.1 kHz sample plays at the same pitch and length.
+    //
+    // Most were slowed 23 semitones (2^(23/12) = 3.775, round 159), a group
+    // 18 (2.83). Round 168's pairs came from a contributor's rip
+    // (N64SoundListTool names in the comments: GA = BANK_00_INSTR_<ga, hex>,
+    // BT1 = BANK_00_INSTR_0000_SND_<bt1, hex>), checked by the owner against
+    // each pair's length ratio; the shift is that ratio in whole semitones,
+    // except where the owner preferred 23 (ga32).
     struct Replacement {
         uint8_t ga;
         uint8_t bt1;
+        int8_t semitones;
     };
     constexpr Replacement kReplacements[] = {
-        { 0, 39 }, { 6, 31 }, { 7, 32 }, { 8, 3 }, { 10, 5 }, { 11, 6 }, { 12, 22 }, { 13, 21 },
-        { 16, 7 }, { 18, 9 }, { 19, 25 }, { 21, 11 }, { 22, 26 }, { 26, 28 }, { 28, 30 }, { 30, 20 },
-        { 33, 13 }, { 34, 14 }, { 35, 35 }, { 36, 23 }, { 39, 18 }, { 59, 42 },
+        { 0, 39, 23 }, { 6, 31, 23 }, { 7, 32, 23 }, { 8, 3, 23 }, { 10, 5, 23 }, { 11, 6, 23 },
+        { 12, 22, 23 }, { 13, 21, 23 }, { 16, 7, 23 }, { 18, 9, 23 }, { 19, 25, 23 }, { 21, 11, 23 },
+        { 22, 26, 23 }, { 26, 28, 23 }, { 28, 30, 23 }, { 30, 20, 23 }, { 33, 13, 23 }, { 34, 14, 23 },
+        { 39, 18, 23 }, { 59, 42, 23 },
+        { 35, 35, 25 }, // round 168: length-matched (4.26), was 23
+        { 36, 15, 19 }, // round 168: was bt23
+        // Round 168.
+        { 2, 0, 28 },   // INSTR_0002 = SND_0000, 5.12
+        { 3, 1, 11 },   // INSTR_0003 = SND_0001, 1.87
+        { 4, 2, 18 },   // INSTR_0004 = SND_0002, 2.82
+        { 9, 4, 20 },   // INSTR_0009 = SND_0004, 3.23
+        { 14, 23, 13 }, // INSTR_000E = SND_0017, 2.12
+        { 15, 24, 18 }, // INSTR_000F = SND_0018, 2.82 (both loop: tank treads)
+        { 17, 8, 18 },  // INSTR_0011 = SND_0008, 2.81
+        { 20, 10, 18 }, // INSTR_0014 = SND_000A, 2.82
+        { 25, 27, 18 }, // INSTR_0019 = SND_001B, 2.91
+        { 27, 29, 18 }, // INSTR_001B = SND_001D, 2.87
+        { 31, 12, 20 }, // INSTR_001F = SND_000C, 3.09
+        { 32, 34, 23 }, // INSTR_0020 = SND_0022, 4.93; the owner preferred 23
     };
 
     // The saved file: magic, then the bank and the sample data.
@@ -285,7 +313,7 @@ void btga::apply_bt1_sounds(uint8_t* rdram, recomp_context*) {
         if (loop != 0) {
             std::memcpy(bank + loop, bt.loop, 12 + 32);
         }
-        bank[basenotes + r.ga] = (uint8_t)((int8_t)bank[basenotes + r.ga] + semitones_up);
+        bank[basenotes + r.ga] = (uint8_t)((int8_t)bank[basenotes + r.ga] + r.semitones);
     }
     recomp::set_rom_contents(std::move(rom));
 }
