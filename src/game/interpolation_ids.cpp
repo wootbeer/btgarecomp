@@ -25,10 +25,12 @@
 // order (G_EX_ORDER_LINEAR). Anything without a stable owner keeps RT64's
 // automatic matching.
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "recomp.h"
@@ -49,6 +51,10 @@ namespace {
         // A tank's extra parts (round 169): tank object + scratch slot -> the
         // Mtx built from that scratch for it this frame, in order.
         std::unordered_map<uint32_t, std::vector<uint32_t>> extra_parts;
+        // Tank parts (odd IDs) -> their rotation this frame, rows normalized
+        // (round 171), and the ones that turned too far since the last frame.
+        std::unordered_map<uint32_t, std::array<float, 9>> rotations;
+        std::unordered_set<uint32_t> snap_rotation;
     };
     Generation generations[2];
     int current = 0;
@@ -124,17 +130,35 @@ namespace {
     // had the tagged components too while the tanks were untagged, but forcing interpolation on
     // whatever automatic matching pairs flickered explosions on the in-between frames (gone at
     // Original), and their sprites changing size and shape every frame are just what AUTO stops.
+    // A tank part that turned more than this in one game frame (round 171).
+    constexpr float kTankSnapCos = 0.7071f; // 45 degrees
+
+    // Whether this ID's rotation jumped this frame: then only its position and
+    // scale are interpolated, the rotation taken as it is.
+    bool snaps_rotation(uint32_t id) {
+        if ((id & 1) == 0 || id == kIdAuto) {
+            return false;
+        }
+        for (const Generation& gen : generations) {
+            if (gen.snap_rotation.count(id) != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     uint32_t matrix_group_params(uint32_t id, bool push) {
-        constexpr uint32_t kInterpolate = 1, kAuto = 2;
+        constexpr uint32_t kInterpolate = 1, kAuto = 2, kSkip = 0;
         const bool tagged = (id != kIdAuto);
         const uint32_t motion = tagged ? kInterpolate : kAuto;
+        const uint32_t rotation = snaps_rotation(id) ? kSkip : motion;
         const uint32_t order = tagged ? 0u : 1u; // G_EX_ORDER_LINEAR for IDs, AUTO for the automatic group
         const uint32_t params =
             (push ? 1u : 0u) |       // push
             (0u << 1) |              // proj: modelview
             (1u << 2) |              // mode: decompose
             (motion << 3) |          // position
-            (motion << 5) |          // rotation
+            (rotation << 5) |        // rotation
             (motion << 7) |          // scale
             (motion << 9) |          // skew
             (motion << 11) |         // perspective
@@ -238,6 +262,40 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     if (source != 0) {
         gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
+        // Round 171: a tank part whose rotation jumps in one frame. The Rattler's cannon (its
+        // turret) showed it: on two in-between frames in a row it swung off sideways, tilted,
+        // while the frames around them were right -- its turret turning about half a turn
+        // and back, which a round, many-barrelled cannon hides on the game's own frames, and
+        // RT64 blended through the angle between. Such a part takes its new rotation as it
+        // is (position and scale still smoothed), as the sprites do (round 156).
+        if ((source & 1) != 0 && float_source != 0 && gen.rotations.count(source) == 0) {
+            std::array<float, 9> rot;
+            for (int row = 0; row < 3; row++) {
+                float len = 0.0f;
+                for (int col = 0; col < 3; col++) {
+                    const uint32_t bits = (uint32_t)MEM_W(0x10 * row + 4 * col, (gpr)(int32_t)float_source);
+                    std::memcpy(&rot[row * 3 + col], &bits, sizeof(float));
+                    len += rot[row * 3 + col] * rot[row * 3 + col];
+                }
+                len = std::sqrt(len);
+                for (int col = 0; col < 3; col++) {
+                    rot[row * 3 + col] = (len > 1e-6f) ? rot[row * 3 + col] / len : 0.0f;
+                }
+            }
+            gen.rotations[source] = rot;
+            const Generation& last = generations[current ^ 1];
+            auto prev = last.rotations.find(source);
+            if (prev != last.rotations.end()) {
+                // cos of the angle between: (trace(Rprev^T R) - 1) / 2
+                float trace = 0.0f;
+                for (int i = 0; i < 9; i++) {
+                    trace += prev->second[i] * rot[i];
+                }
+                if ((trace - 1.0f) * 0.5f < kTankSnapCos) {
+                    gen.snap_rotation.insert(source);
+                }
+            }
+        }
     }
 }
 
@@ -252,6 +310,8 @@ void btga_interp_new_frame() {
     generations[current].mtx_source.clear();
     generations[current].source_uses.clear();
     generations[current].extra_parts.clear();
+    generations[current].rotations.clear();
+    generations[current].snap_rotation.clear();
 }
 
 // func_800A1FDC, around each object's draw call (0x800A20F8 and after it): the

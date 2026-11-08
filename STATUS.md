@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 170)
+## Overview (as of round 171)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,40 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-08, round 171: the Rattler's cannon swinging off on in-between frames
+
+**Report** (video, 0.1.8, above the original frame rate): the Rattler's
+cannon still jitters, especially in turns.
+
+**Video:**
+- On two in-between frames in a row (347 and 349 at 60 fps), the cannon is
+  thrown left and tilted.
+- The game's own frames around them (346, 348, 350) look right.
+- Round 169's extra-part IDs are not involved: the Rattler's cannon is its
+  turret (`0x8021B2E8`, ID tank + 3), and the Rattler has no extra parts.
+
+**Findings** (sandbox, mission 1 as the Rattler, picked on the Change Tank
+screen with All Tanks All Levels; logged every part the tank drawer builds):
+- Each tank part is built once a frame with its own ID, and no ID jumps
+  between tanks.
+- The turret's matrix carries its own world-space aim at the hull's
+  position, not the hull's rotation times a local one.
+- No turret turned more than 60 degrees in a frame in that run. The jump
+  wasn't reproduced, and the sandbox can't show in-between frames reliably.
+
+**Reasoning:** the same swing on two in-between frames in a row, with the
+real frames correct, fits a turret turning about half a turn and back. The
+round, many-barrelled cannon looks the same at both angles on the game's
+frames, and RT64 blends through the angle between.
+
+**Change** (`src/game/interpolation_ids.cpp`): every tank part (odd ID) has
+its rotation compared with the last frame's. If it turned more than 45
+degrees, its matrix group skips rotation for that frame. Position and scale
+are still interpolated, so it takes its new angle as it is, as round 156's
+sprites do. In the sandbox that happened 18 times in 10,000 checks, all at
+the level start (tanks placed), none in ordinary turns. Needs the owner's
+check in a Rattler.
 
 ## 2026-11-08, round 170: 0.1.8
 
