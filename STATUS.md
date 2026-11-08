@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 174)
+## Overview (as of round 175)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -70,6 +70,28 @@ original 2026-09-18 plan and are long out of date.
 
 # Log
 
+## 2026-11-08, round 175: the grenade's bounce with the BattleTanx 1 effects
+
+**Report:** Sound Channels seems fine so far. The grenade's bounce sound is
+missing with BattleTanx 1 Sound Effects on, and back with it off.
+
+**Found** (Tank Wars, the game's All Weapons code, enemies off; A fires the
+special weapon, B picks the next one): the grenade plays ga47 (launch), ga22
+twice (the bounces), then ga10 (explosion). ga22 was replaced by the first
+game's sound 26 (round 159, 23 semitones). The two are the same sound (their
+loudness over time matches), but the resampler's ratio (voice +0x44, read in
+`n_alResamplePull` before its clamp at `0x801011C0`) was:
+- off: 1.4142 (ga22, half an octave up for the bounce);
+- on: 2.0, the mixer's limit. The 44.1 kHz sample would need 1.414 x 3.775
+  = 5.3, so it played about 17 semitones low and 2.7 times long.
+
+In a fight with enemies on and every weapon fired, 14 different replaced
+effects played and none reached 2.0. The bounce is the only one found
+played that high.
+
+**Fix** (`src/main/bt1_sounds.cpp`): ga22 is no longer replaced; the
+grenade keeps this game's bounce. Nothing else was seen using ga22.
+
 ## 2026-11-08, round 174: Sound Channels
 
 **Report:** round 173 fixed the Rattler's cannon; the M1A1 is good too.
@@ -102,15 +124,7 @@ DMA buffers grow in proportion; the heap moves to unused memory above 8 MB
 **Android:** the heap is above 8 MB, like the draw-limit buffers (round
 161), so it needs the same check there.
 
-**Open: grenade bounce.** The owner reports the grenade's bounce sound
-is missing since the BattleTanx 1 effects (round 168's pairs). Not found
-yet:
-- No replaced pair has leading silence (checked from the decoded samples).
-- No sample shares a book, loop or wave table with another, so a
-  replacement can't corrupt a neighbour (checked in the ROM's ptr bank).
-- Getting grenades in the sandbox failed: the All Weapons cheat didn't
-  take in the Tank Wars mode the script starts, and writing the ammo
-  directly upset the game.
+**Grenade bounce:** see round 175.
 
 ## 2026-11-08, round 173: the Rattler's cannon is its own part, drawn two ways
 

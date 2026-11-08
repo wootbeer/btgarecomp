@@ -73,6 +73,11 @@ namespace {
     // BT1 = BANK_00_INSTR_0000_SND_<bt1, hex>), checked by the owner against
     // each pair's length ratio; the shift is that ratio in whole semitones,
     // except where the owner picked otherwise by ear (ga25, ga31, ga32).
+    //
+    // Not ga22 (was the first game's sound 26, 23 semitones, round 159): the
+    // grenade's bounce plays it at a ratio of 1.414, which the first game's
+    // sample would need at 5.3, past the mixer's 2.0. It came out 17 semitones
+    // too low and 2.7 times too long (round 175).
     struct Replacement {
         uint8_t ga;
         uint8_t bt1;
@@ -81,7 +86,7 @@ namespace {
     constexpr Replacement kReplacements[] = {
         { 0, 39, 23 }, { 6, 31, 23 }, { 7, 32, 23 }, { 8, 3, 23 }, { 10, 5, 23 }, { 11, 6, 23 },
         { 12, 22, 23 }, { 13, 21, 23 }, { 16, 7, 23 }, { 18, 9, 23 }, { 19, 25, 23 }, { 21, 11, 23 },
-        { 22, 26, 23 }, { 26, 28, 23 }, { 28, 30, 23 }, { 30, 20, 23 }, { 33, 13, 23 }, { 34, 14, 23 },
+        { 26, 28, 23 }, { 28, 30, 23 }, { 30, 20, 23 }, { 33, 13, 23 }, { 34, 14, 23 },
         { 39, 18, 23 }, { 59, 42, 23 },
         { 35, 35, 25 }, // round 168: length-matched (4.26), was 23
         { 36, 15, 19 }, // round 168: was bt23
