@@ -72,7 +72,7 @@ namespace {
     // (N64SoundListTool names in the comments: GA = BANK_00_INSTR_<ga, hex>,
     // BT1 = BANK_00_INSTR_0000_SND_<bt1, hex>), checked by the owner against
     // each pair's length ratio; the shift is that ratio in whole semitones,
-    // except where the owner preferred 23 (ga32).
+    // except where the owner picked otherwise by ear (ga25, ga31, ga32).
     struct Replacement {
         uint8_t ga;
         uint8_t bt1;
@@ -94,9 +94,9 @@ namespace {
         { 15, 24, 18 }, // INSTR_000F = SND_0018, 2.82 (both loop: tank treads)
         { 17, 8, 18 },  // INSTR_0011 = SND_0008, 2.81
         { 20, 10, 18 }, // INSTR_0014 = SND_000A, 2.82
-        { 25, 27, 18 }, // INSTR_0019 = SND_001B, 2.91
+        { 25, 27, 19 }, // INSTR_0019 = SND_001B, 2.91 (18.5; 19 by ear)
         { 27, 29, 18 }, // INSTR_001B = SND_001D, 2.87
-        { 31, 12, 20 }, // INSTR_001F = SND_000C, 3.09
+        { 31, 12, 19 }, // INSTR_001F = SND_000C, 3.09 (19.5; 19 by ear)
         { 32, 34, 23 }, // INSTR_0020 = SND_0022, 4.93; the owner preferred 23
     };
 

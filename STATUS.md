@@ -91,8 +91,8 @@ length-matched one for all but ga32.
 shift, the length ratio in whole semitones (or 23 for ga32). From 22 to 34
 replaced effects:
 - New: ga02 (28 semitones), ga03 (11), ga04 (18), ga09 (20), ga14 (13),
-  ga15 (18, loops like its partner), ga17 (18), ga20 (18), ga25 (18),
-  ga27 (18), ga31 (20), ga32 (23).
+  ga15 (18, loops like its partner), ga17 (18), ga20 (18), ga25 (19),
+  ga27 (18), ga31 (19), ga32 (23).
 - Changed: ga36 is now bt15 (19) instead of bt23 (bt23 goes to ga14);
   ga35 is now 25 semitones instead of 23, the owner's length-matched pick.
 - The detune floats (+0x28) were tried for fractional shifts and dropped:
@@ -103,7 +103,10 @@ replaced effects:
 **Sandbox** (Tank Wars, playback ratios at `n_alResamplePull`): ga02 0.236
 to 1.19, ga03 0.315 to 0.595, ga20 0.315 to 0.89, ga35 0.375 to 1.59, ga36
 0.315 to 0.94. The highest is 1.59, under the mixer's 2.0. Needs the owner's
-ears in game, especially ga25 and ga31 (between two whole semitones).
+ears in game.
+
+ga25 and ga31 fell between two whole semitones (18.5 and 19.5). The owner
+compared each at both pitches against the original and picked 19 for both.
 
 ## 2026-11-07, round 167: 0.1.7
 
