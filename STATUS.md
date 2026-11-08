@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 168)
+## Overview (as of round 169)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,39 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-08, round 169: the Rattler's cannon floating off its hull
+
+**Report** (a video from the owner, above the original frame rate): the
+Rattler's cannon sometimes jumps while moving.
+
+**Video:** for about two game frames the cannon floats above the hull,
+tilted, then drops back into place.
+
+**Cause:**
+- `func_800AE184` draws a tank's parts from shared scratch matrices. Round
+  136 named the hull (`0x8021B2A0`) and turret (`0x8021B2E8`) by the tank
+  object (`object | 1`, `object | 3`).
+- Some tanks also draw extra parts from two more scratch matrices,
+  `0x8021B500` and `0x8021B548`. Each is several meshes under one Mtx, and
+  some are built twice in a frame. The Rattler's cannon is among them.
+- Those parts kept the scratch address as their ID. Whenever two such tanks
+  were drawn, it fell back to automatic matching. When only one was, that
+  tank's part had the ID.
+- So the ID moved from tank to tank between frames, and RT64 blended one
+  tank's cannon toward another's.
+- Logged in Tank Wars: 4 of the 10 tank objects drew these parts.
+
+**Fix** (`src/game/interpolation_ids.cpp`): the extra parts are named by the
+tank as well: `object + 5` (`0x8021B500`) or `object + 7` (`0x8021B548`),
+`+ 8 * k` for the k-th one that tank builds from it that frame. These are
+odd like the other tank IDs, below the next tank (0x4CC on). The same checks
+as the hull and turret apply (the drawer's own argument at `0x4C` of its
+frame).
+
+**Sandbox:** over a Tank Wars run, the extra parts were queued 4,519 times,
+all with per-tank IDs, and no ID was shared by two Mtx in a frame. The
+blending itself can't be seen here (no rendering above the game's rate).
 
 ## 2026-11-08, round 168: more BattleTanx 1 sound effects (contributor's matches)
 

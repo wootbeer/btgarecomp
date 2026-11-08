@@ -46,6 +46,9 @@ namespace {
     struct Generation {
         std::unordered_map<uint32_t, uint32_t> mtx_source;
         std::unordered_map<uint32_t, uint32_t> source_uses;
+        // A tank's extra parts (round 169): tank object + scratch slot -> the
+        // Mtx built from that scratch for it this frame, in order.
+        std::unordered_map<uint32_t, std::vector<uint32_t>> extra_parts;
     };
     Generation generations[2];
     int current = 0;
@@ -169,13 +172,39 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     // loops over the tank objects (0x4CC apart, from 0x801AD128) in $s3; the drawer saves
     // that at 0x84 of its frame, which sits right above ours (0x40). The scratch matrix,
     // its own argument, is at 0x4C there -- checked, so another caller is left alone.
-    if ((float_source == 0x8021B2A0u) || (float_source == 0x8021B2E8u)) {
+    //
+    // Round 169: some tanks have extra parts (the Rattler's cannon among them), built in two
+    // more scratch matrices, 0x8021B500 and 0x8021B548, each several meshes under one Mtx and
+    // sometimes built twice a frame. Named by their scratch address alone, a part had an ID
+    // only on frames when no other tank drew one, so the ID moved from tank to tank and RT64
+    // blended one tank's cannon toward another's: it floated off the hull, tilted. They are
+    // named by the tank too, and by the order the tank builds them in the frame.
+    const bool hull_or_turret = (float_source == 0x8021B2A0u) || (float_source == 0x8021B2E8u);
+    const bool extra_part = (float_source == 0x8021B500u) || (float_source == 0x8021B548u);
+    if (hull_or_turret || extra_part) {
         const gpr drawer_sp = ctx->r29 + 0x40;
         if ((uint32_t)MEM_W(0x4C, drawer_sp) == float_source) {
             const uint32_t object = (uint32_t)MEM_W(0x84, drawer_sp);
             if ((object >= 0x80000000u) && (object < 0x80800000u) && ((object & 3) == 0)) {
-                // Odd, so never the address of an Mtx or float matrix used as an ID.
-                source = object | ((float_source == 0x8021B2A0u) ? 1u : 3u);
+                // Odd, so never the address of an Mtx or float matrix used as an ID; all
+                // below the next tank (0x4CC on).
+                if (hull_or_turret) {
+                    source = object | ((float_source == 0x8021B2A0u) ? 1u : 3u);
+                }
+                else {
+                    const uint32_t slot = (float_source == 0x8021B500u) ? 5u : 7u;
+                    std::vector<uint32_t>& built = generations[current].extra_parts[object + slot];
+                    size_t k = 0;
+                    while (k < built.size() && built[k] != mtx) {
+                        k++;
+                    }
+                    if (k == built.size()) {
+                        built.push_back(mtx);
+                    }
+                    if (k < 16) {
+                        source = object + slot + 8u * (uint32_t)k;
+                    }
+                }
             }
         }
     }
@@ -222,6 +251,7 @@ void btga_interp_new_frame() {
     current ^= 1;
     generations[current].mtx_source.clear();
     generations[current].source_uses.clear();
+    generations[current].extra_parts.clear();
 }
 
 // func_800A1FDC, around each object's draw call (0x800A20F8 and after it): the
