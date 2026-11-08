@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 173)
+## Overview (as of round 174)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,48 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-08, round 174: Sound Channels
+
+**Report:** round 173 fixed the Rattler's cannon; the M1A1 is good too.
+
+**Request** (a player, via the owner): more sound channels. "Whenever
+there's a lot of chaos going on; sounds will just refuse to play."
+
+**Cause.** The game starts libmus (MusInitialize, `func_800FAFBC`) once at
+boot from `func_80097560`, with a musConfig at sp+0x10: 42 channels, a
+0x3EBC0-byte heap at `0x801B45D8`, 0x100 synth updates, 0x1000 RSP commands,
+58 DMA buffers of 0x800. The synth gets one voice per channel
+(`func_800FF560`). Music and effects share them. `__MusIntStartEffect`
+(`func_800FD8B8`) takes a free channel, or else the playing one with the
+lowest priority if it's below the new effect's, or else drops the effect.
+In Tank Wars, driving and firing, all 42 were busy the whole time.
+
+**Feature** (`src/game/sound_channels.cpp`, Sound tab, takes effect at the
+next start): Original (42), 64, 96, 128 or 256. Before the MusInitialize
+call (hook at `0x80097608`), the count goes up; updates, RSP commands and
+DMA buffers grow in proportion; the heap moves to unused memory above 8 MB
+(`0x80800000`, 2 MB; the audio microcode reads anywhere in the first
+16 MB). The old heap had 27 KB free, too little to grow in place.
+
+**Checked in the sandbox** (Tank Wars, driving and firing):
+- Busy channels at most: 42 of 42 at Original, 108 of 128, 124 of 256.
+- libmus heap used: 0x38220 at Original, 0x97C00 at 128, 0x125FF0 at 256.
+- The audio output at 256 has the same level as at Original (no silence
+  or garbage). Not listened to.
+
+**Android:** the heap is above 8 MB, like the draw-limit buffers (round
+161), so it needs the same check there.
+
+**Open: grenade bounce.** The owner reports the grenade's bounce sound
+is missing since the BattleTanx 1 effects (round 168's pairs). Not found
+yet:
+- No replaced pair has leading silence (checked from the decoded samples).
+- No sample shares a book, loop or wave table with another, so a
+  replacement can't corrupt a neighbour (checked in the ROM's ptr bank).
+- Getting grenades in the sandbox failed: the All Weapons cheat didn't
+  take in the Tank Wars mode the script starts, and writing the ammo
+  directly upset the game.
 
 ## 2026-11-08, round 173: the Rattler's cannon is its own part, drawn two ways
 

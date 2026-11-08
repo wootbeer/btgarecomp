@@ -191,6 +191,23 @@ void btga::config::add_sfx_reverb_options(recomp::config::Config& sound) {
         });
 }
 
+void btga::config::add_sound_channels_option(recomp::config::Config& sound) {
+    sound.add_enum_option(
+        "sound_channels",
+        "Sound Channels",
+        "How many sounds can play at once, music included. The game has 42, and in a big fight new "
+        "sound effects are dropped when they're all in use. More channels let them play. "
+        "Takes effect the next time the game starts.",
+        { {42u, "Original", "Original"}, {64u, "64", "64"}, {96u, "96", "96"}, {128u, "128", "128"}, {256u, "256", "256"} },
+        42u
+    );
+    // Also called when the saved settings load.
+    sound.add_option_change_callback("sound_channels",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            btga::set_sound_channels(static_cast<int>(std::get<uint32_t>(value)));
+        });
+}
+
 btga::config::Accessory btga::config::get_accessory(int port) {
     if (!options_added) {
         return Accessory::None;

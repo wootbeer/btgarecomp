@@ -33,6 +33,8 @@ namespace btga::config {
     void add_bt1_sounds_option(recomp::config::Config& sound);
     // Sound Effects Reverb and its amount (src/main/game_config.cpp).
     void add_sfx_reverb_options(recomp::config::Config& sound);
+    // Sound Channels (src/main/game_config.cpp).
+    void add_sound_channels_option(recomp::config::Config& sound);
 
     Accessory get_accessory(int port);
     bool get_local_multiplayer();
@@ -57,6 +59,8 @@ namespace btga {
 
     // Sound tab: Sound Effects Reverb (src/game/sfx_reverb.cpp), amount 0-100.
     void set_sfx_reverb(bool on, double percent);
+    // Sound tab: Sound Channels (src/game/sound_channels.cpp), read once at boot.
+    void set_sound_channels(int count);
 
     // General tab: Mouse Stick (src/main/mouse_stick.cpp). Mode 0 Off, 1 Turn,
     // 2 Full; sensitivity in percent.

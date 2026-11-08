@@ -470,6 +470,7 @@ int main(int argc, char** argv) {
         recomp::config::Config& sound = recompui::config::create_sound_tab();
         btga::config::add_bt1_sounds_option(sound);
         btga::config::add_sfx_reverb_options(sound);
+        btga::config::add_sound_channels_option(sound);
     }
     btga::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
