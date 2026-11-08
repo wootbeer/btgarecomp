@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 169)
+## Overview (as of round 170)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.7).
+and higher framerates. Betas are public (0.1.0 to 0.1.8).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,22 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-08, round 170: 0.1.8
+
+Version 0.1.8 (`version_string` in `src/main/main.cpp`). It's PC only; the
+Android branch gets it later.
+
+**Release scan:** no testing switches or debug prints left from rounds
+168-169, no ROM or ROM-derived files tracked, and no lib patch changes
+since 0.1.7.
+
+**New since 0.1.7**, confirmed by the owner:
+- BattleTanx 1 Sound Effects replaces 34 effects instead of 22 (round 168).
+  The 12 new pairs come from a contributor's matches. Each replaced effect
+  now has its own pitch shift, and ga36 uses a different BattleTanx 1 sound.
+- The Rattler's cannon no longer floats off its hull at higher frame rates.
+  The same goes for other tanks' extra parts (round 169).
 
 ## 2026-11-08, round 169: the Rattler's cannon floating off its hull
 
