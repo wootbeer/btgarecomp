@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 171)
+## Overview (as of round 172)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,37 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-08, round 172: Rattler cannon still swinging; a test switch
+
+**Report** (video, round 171's build): still happening.
+
+**Video:** in a bounce over a bump (frames 122-125 at 60 fps), the cannon
+rises above the hull, shifted right and tilted. It's worst on 122 and 124,
+but off on 123 and 125 too. So it isn't only round 171's half-turn flip.
+
+**Checked in the sandbox** (mission 1 as the Rattler; nothing wrong found):
+- Every tank-part matrix load in the walker was tagged with its own ID
+  (62,000 loads, none untagged).
+- Hull and turret matrices are rigid (scale 1, orthogonal) and share their
+  position. Their up vectors agree to 0.99.
+- No display list drawn under a tank ID has a `G_MTX` or `G_POPMTX` inside,
+  so the cannon has no nested matrix.
+- The only builds without a tank object come from `func_800947C4`, the
+  Change Tank screen's ghost tank.
+- The sandbox can't show in-between frames reliably, so the swing itself
+  hasn't been seen here.
+
+**Test switch** (TEMPORARY, `src/game/interpolation_ids.cpp`):
+`BTGA_TURRET_TEST` in the environment changes how tank turrets (IDs tank +
+3, recorded as they're queued) are interpolated, to narrow it down on the
+owner's PC:
+- `1`: rotation not interpolated.
+- `2`: not interpolated at all.
+- `3`: no ID (automatic matching).
+- `4`: as 2, and hulls too.
+
+Remove it once it has done its job.
 
 ## 2026-11-08, round 171: the Rattler's cannon swinging off on in-between frames
 

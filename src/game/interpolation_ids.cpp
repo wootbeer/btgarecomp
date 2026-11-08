@@ -29,6 +29,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -55,6 +56,7 @@ namespace {
         // (round 171), and the ones that turned too far since the last frame.
         std::unordered_map<uint32_t, std::array<float, 9>> rotations;
         std::unordered_set<uint32_t> snap_rotation;
+        std::unordered_set<uint32_t> turret_ids, hull_ids; // TEMPORARY (round 172 test switch)
     };
     Generation generations[2];
     int current = 0;
@@ -147,11 +149,49 @@ namespace {
         return false;
     }
 
+    // TEMPORARY test switch (round 172), for the Rattler's cannon: BTGA_TURRET_TEST in the
+    // environment changes how tank turrets (IDs tank + 3) are interpolated.
+    //   1: rotation not interpolated (position and the rest are)
+    //   2: nothing interpolated (the turret moves at the game's rate)
+    //   3: no ID (RT64's automatic matching, as before round 136)
+    //   4: hulls (tank + 1) not interpolated either, with turrets as 2
+    int turret_test() {
+        static const int mode = [] {
+            const char* v = std::getenv("BTGA_TURRET_TEST");
+            return v ? std::atoi(v) : 0;
+        }();
+        return mode;
+    }
+
+    bool in_set(uint32_t id, std::unordered_set<uint32_t> Generation::*set) {
+        for (const Generation& gen : generations) {
+            if ((gen.*set).count(id) != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool is_tank_turret(uint32_t id) {
+        return id != kIdAuto && in_set(id, &Generation::turret_ids);
+    }
+
     uint32_t matrix_group_params(uint32_t id, bool push) {
         constexpr uint32_t kInterpolate = 1, kAuto = 2, kSkip = 0;
         const bool tagged = (id != kIdAuto);
-        const uint32_t motion = tagged ? kInterpolate : kAuto;
-        const uint32_t rotation = snaps_rotation(id) ? kSkip : motion;
+        uint32_t motion = tagged ? kInterpolate : kAuto;
+        uint32_t rotation = snaps_rotation(id) ? kSkip : motion;
+        const int test = turret_test();
+        const bool hull = id != kIdAuto && in_set(id, &Generation::hull_ids);
+        if (test != 0 && (is_tank_turret(id) || (test == 4 && hull))) {
+            if (test == 1) {
+                rotation = kSkip;
+            }
+            else if (test == 2 || test == 4) {
+                motion = kSkip;
+                rotation = kSkip;
+            }
+        }
         const uint32_t order = tagged ? 0u : 1u; // G_EX_ORDER_LINEAR for IDs, AUTO for the automatic group
         const uint32_t params =
             (push ? 1u : 0u) |       // push
@@ -214,6 +254,9 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
                 // below the next tank (0x4CC on).
                 if (hull_or_turret) {
                     source = object | ((float_source == 0x8021B2A0u) ? 1u : 3u);
+                    if (turret_test() != 0) {
+                        ((float_source == 0x8021B2A0u) ? generations[current].hull_ids : generations[current].turret_ids).insert(source);
+                    }
                 }
                 else {
                     const uint32_t slot = (float_source == 0x8021B500u) ? 5u : 7u;
@@ -312,6 +355,8 @@ void btga_interp_new_frame() {
     generations[current].extra_parts.clear();
     generations[current].rotations.clear();
     generations[current].snap_rotation.clear();
+    generations[current].turret_ids.clear();
+    generations[current].hull_ids.clear();
 }
 
 // func_800A1FDC, around each object's draw call (0x800A20F8 and after it): the
@@ -351,7 +396,10 @@ extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
     if (!group_pushed && (head + 0x400 > limit)) {
         return;
     }
-    const uint32_t id = id_for(mtx);
+    uint32_t id = id_for(mtx);
+    if (turret_test() == 3 && is_tank_turret(id)) {
+        id = kIdAuto;
+    }
     if (!group_pushed) {
         write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
         write_matrix_group(rdram, id, true);
