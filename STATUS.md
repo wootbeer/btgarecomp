@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 182)
+## Overview (as of round 183)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,33 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 183: Lossless Scaling cuts from black; the turret clip
+
+**Report:** two clips at 2x (round 180 or later): the screen changes, and
+the turret turning.
+
+**Screen changes:** cuts to the title screen (0.28) came out clean. Cuts
+from black to a picture that's mostly black too still had a warped frame:
+black to the 3DO logo (video frame 13) and black to Game Setup (388). Those
+change the thumbnail's cells by only 0.03-0.09. `scene_cut()` now also
+counts 0.02 or more as a cut when either frame's mean brightness is under
+0.03 (nearly black). On the owner's clips that catches both, and game play
+never comes near it: its darkest frame is 0.16.
+
+**Turret clip** (60 fps recording, phase correlation of each frame with the
+last): turning, the background moves about 70-76 px per displayed frame
+at 1080p, 150 px (8% of the width) per game frame, in equal pairs
+(generated, then real). So the generated frames are in the right place and
+evenly spaced, apart from one repeated frame and some 64/72 px stretches.
+What shows:
+- The generated frames smear the tank's edges and the barrel, where the
+  background comes out from behind the tank: Lossless Scaling has only the
+  pictures, not the game's motion.
+- 2x is 60 fps on the owner's 144 Hz display without variable refresh, so
+  frames stay up 2 or 3 refreshes (13.9 or 20.8 ms) unevenly, which judders
+  in a pan this fast. A recording can't show that. Suggested test: the
+  display at 120 Hz, where 2x and 4x divide evenly.
 
 ## 2026-11-09, round 182: Lossless Scaling skips the frame after a cut too
 

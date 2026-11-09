@@ -81,6 +81,8 @@ namespace lsfg {
         bool thumbnail_pending = false;
         std::vector<float> last_cells;
         float last_difference = -1.0f;
+        // Mean brightness (0-1) of the last two thumbnails.
+        float brightness = -1.0f, last_brightness = -1.0f;
         // Real frames put in, and the one that last cut to another picture.
         uint64_t inputs = 0;
         uint64_t last_cut = UINT64_MAX;
@@ -289,6 +291,13 @@ namespace lsfg {
             c /= float(cell_w * cell_h) * 255.0f;
         }
 
+        float brightness = 0.0f;
+        for (float c : cells) {
+            brightness += c;
+        }
+        impl->last_brightness = impl->brightness;
+        impl->brightness = brightness / float(cells.size());
+
         if (impl->last_cells.size() == cells.size()) {
             float sum = 0.0f;
             for (size_t i = 0; i < cells.size(); i++) {
@@ -302,7 +311,14 @@ namespace lsfg {
     }
 
     bool FrameGenerator::scene_cut(float threshold) {
-        if (scene_difference() >= threshold) {
+        // A cut from or to a (nearly) black screen changes little of the
+        // picture when the other is mostly dark too (black to a logo on black:
+        // 0.03-0.09), but it's still a cut. Game play stays far brighter
+        // (0.16 or more in the owner's clips).
+        constexpr float kDark = 0.03f, kDarkCut = 0.02f;
+        const float difference = scene_difference();
+        const bool dark = (impl->last_brightness >= 0.0f) && (std::min(impl->brightness, impl->last_brightness) < kDark);
+        if ((difference >= threshold) || (dark && (difference >= kDarkCut))) {
             impl->last_cut = impl->inputs;
         }
         return (impl->last_cut != UINT64_MAX) && (impl->inputs - impl->last_cut <= 1);

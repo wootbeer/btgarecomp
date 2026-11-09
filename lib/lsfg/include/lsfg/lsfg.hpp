@@ -95,7 +95,8 @@ namespace lsfg {
         // Whether the frames to be generated this time would show a cut: frames
         // generated across one morph one picture into the other, so a host
         // should show the new real frame alone then. True for the real frame
-        // that cut (scene_difference() >= threshold) and the one after it: the
+        // that cut (scene_difference() >= threshold, or 0.02 from or to a
+        // nearly black screen, where a cut changes less) and the one after it: the
         // motion estimate uses the last three real frames, so that one's
         // generated frames still draw on the picture before the cut. Call once
         // per real frame, as scene_difference().
