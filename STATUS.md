@@ -123,6 +123,9 @@ expected pitch exactly (e.g. 700 Hz + 3.5 semitones = 856.9 Hz) at 29-36 dB,
 with the expected loop points. In the menus and Tank Wars, the game reads
 sample data from past the 8 MB ROM, where the packs' sounds are.
 
+Confirmed on Windows by the owner: the test tone pack replaces the effects
+in game.
+
 For the Android update: the new sources are picked up by the glob; it needs
 `lib/dr_libs` on the include path.
 
