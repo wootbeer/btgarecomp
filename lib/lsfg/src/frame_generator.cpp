@@ -81,6 +81,9 @@ namespace lsfg {
         bool thumbnail_pending = false;
         std::vector<float> last_cells;
         float last_difference = -1.0f;
+        // Real frames put in, and the one that last cut to another picture.
+        uint64_t inputs = 0;
+        uint64_t last_cut = UINT64_MAX;
 
         LSFG::Core::Image& next_input() {
             return context ? context->nextInput() : performance_context->nextInput();
@@ -262,6 +265,7 @@ namespace lsfg {
         };
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1, &to_host, 0, nullptr);
         impl->thumbnail_pending = true;
+        impl->inputs++;
     }
 
     float FrameGenerator::scene_difference() {
@@ -295,6 +299,13 @@ namespace lsfg {
 
         impl->last_cells = std::move(cells);
         return impl->last_difference;
+    }
+
+    bool FrameGenerator::scene_cut(float threshold) {
+        if (scene_difference() >= threshold) {
+            impl->last_cut = impl->inputs;
+        }
+        return (impl->last_cut != UINT64_MAX) && (impl->inputs - impl->last_cut <= 1);
     }
 
     bool FrameGenerator::record_generate(VkCommandBuffer cmd) {

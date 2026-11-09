@@ -86,11 +86,20 @@ namespace lsfg {
 
         // How much the picture changed between the last two real frames put in,
         // 0 (the same) to 1 (black to white), from a thumbnail of each: a cut
-        // to another scene, rather than motion, is about 0.15 or more. Frames
-        // generated across a cut morph one picture into the other, so a host
-        // should show the new frame alone then. Call after the GPU has done the
-        // work record_input() recorded; -1 before there are two frames.
+        // to another scene, rather than motion, is about 0.15 or more (game
+        // play, camera turns included, stays under about 0.05 at 30 fps). Call
+        // after the GPU has done the work record_input() recorded; -1 before
+        // there are two frames.
         float scene_difference();
+
+        // Whether the frames to be generated this time would show a cut: frames
+        // generated across one morph one picture into the other, so a host
+        // should show the new real frame alone then. True for the real frame
+        // that cut (scene_difference() >= threshold) and the one after it: the
+        // motion estimate uses the last three real frames, so that one's
+        // generated frames still draw on the picture before the cut. Call once
+        // per real frame, as scene_difference().
+        bool scene_cut(float threshold = 0.15f);
 
         // Records generating the frames between the previous real frame and
         // the one just copied in. False when there's no previous frame yet

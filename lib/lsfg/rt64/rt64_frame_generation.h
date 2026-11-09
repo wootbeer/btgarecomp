@@ -57,9 +57,9 @@ namespace RT64 {
         uint32_t record(RenderCommandList *commandList);
 
         // After the GPU has done record()'s work: whether the game frame cut to
-        // another picture (a scene change rather than motion). Frames
-        // generated across it would morph one picture into the other, so the
-        // game frame is shown alone then.
+        // another picture (a scene change rather than motion), or is the one
+        // after such a cut. Frames generated across a cut would morph one
+        // picture into the other, so the game frame is shown alone then.
         bool sceneCut();
 
         // Records copying generated frame `index` to dst (COPY_DEST, swap chain size).

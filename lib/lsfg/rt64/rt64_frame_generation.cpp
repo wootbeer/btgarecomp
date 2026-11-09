@@ -205,10 +205,8 @@ namespace RT64 {
 
     bool FrameGeneration::sceneCut() {
 #   ifdef RT64_FRAME_GENERATION
-        // lsfg::FrameGenerator::scene_difference(): 0 the same picture, 1 black to white.
-        constexpr float kSceneCutDifference = 0.15f;
-        const float difference = impl->generator->scene_difference();
-        return difference >= kSceneCutDifference;
+        // The real frame that cut to another picture, and the one after it.
+        return impl->generator->scene_cut();
 #   else
         return false;
 #   endif

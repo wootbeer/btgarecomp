@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 181)
+## Overview (as of round 182)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,27 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 182: Lossless Scaling skips the frame after a cut too
+
+**Report** (Windows, 2x): screen changes are better than before round 180
+but not perfect. The tank turret's jitter feels worse.
+
+**Cuts:** lsfg's `beta` pass reads the features of the last three real
+frames (`alpha`'s outputs, frame count % 3), not two. The frames generated
+after the frame following a cut still draw on the picture before it. Now
+`lsfg::FrameGenerator::scene_cut()` is true for the cut frame and the one
+after, and the RT64 side shows both without generated frames. It's in the
+library so other hosts get it.
+
+**Turret:** not from round 180. Measured on the owner's 60 fps gameplay
+clips (recorded before Lossless Scaling, every second frame as the game's 30
+fps, thumbnails built as the GPU blits them): the scene difference stays at
+or under 0.05 through turret turns and driving, against the 0.15 threshold.
+The one higher value, 0.115, was Windows' Alt-Tab overlay. So the cut check
+doesn't fire in play, and nothing else in rounds 180-181 changes generation.
+The barrel smear was reported before round 180: Lossless Scaling's motion
+estimate is weak on thin rotating objects. Not resolved.
 
 ## 2026-11-09, round 181: exact pitch shifts for the BattleTanx 1 effects
 
