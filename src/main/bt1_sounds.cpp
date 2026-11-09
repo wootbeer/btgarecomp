@@ -162,6 +162,11 @@ namespace {
         return h;
     }
 
+    // In the game's own UI: a system message box can open behind the window.
+    void show_message(const std::string& text) {
+        recompui::open_info_prompt("BattleTanx 1 Sound Effects", text, "OK", [] {}, recompui::ButtonStyle::Primary);
+    }
+
     // Load BattleTanx ROM: keeps the first game's effects bank and samples.
     void load_bt1() {
         recompui::file::open_file_dialog([](bool success, const std::filesystem::path& path) {
@@ -172,7 +177,7 @@ namespace {
             {
                 std::ifstream file(path, std::ios::binary);
                 if (!file.good()) {
-                    recompui::message_box("Failed to open the ROM file.");
+                    show_message("Failed to open the ROM file.");
                     return;
                 }
                 rom.assign(std::istreambuf_iterator<char>(file), {});
@@ -180,9 +185,7 @@ namespace {
             if (!normalize(rom) || rom.size() < bt1_ctl + bt1_ctl_size ||
                 fingerprint(rom.data() + bt1_ctl, bt1_ctl_size, 16) != bt1_ctl_fingerprint ||
                 fingerprint(rom.data() + bt1_tbl, bt1_tbl_size, 0x1000) != bt1_tbl_fingerprint) {
-                recompui::message_box(
-                    "This isn't BattleTanx (USA).\n"
-                    "Choose the first BattleTanx game's ROM, not Global Assault.");
+                show_message("This isn't BattleTanx (USA). Choose the first BattleTanx game's ROM, not Global Assault.");
                 return;
             }
             std::vector<uint8_t> out(magic, magic + sizeof(magic));
@@ -193,10 +196,10 @@ namespace {
             std::ofstream file(saved_path(), std::ios::binary);
             file.write(reinterpret_cast<const char*>(out.data()), (std::streamsize)out.size());
             if (!file.good()) {
-                recompui::message_box("Failed to save the BattleTanx sound effects.");
+                show_message("Failed to save the BattleTanx sound effects.");
                 return;
             }
-            recompui::message_box("The BattleTanx sound effects are ready. Turn on BattleTanx 1 Sound Effects to use them.");
+            show_message("The BattleTanx sound effects are ready. Turn on BattleTanx 1 Sound Effects to use them.");
         });
     }
 

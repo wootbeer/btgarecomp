@@ -33,6 +33,11 @@ namespace {
     enum class Mode : uint32_t { RT64, LosslessScaling };
     enum class Quality : uint32_t { Quality, Performance };
 
+    // In the game's own UI: a system message box can open behind the window.
+    void show_message(const std::string& header, const std::string& text) {
+        recompui::open_info_prompt(header, text, "OK", [] {}, recompui::ButtonStyle::Primary);
+    }
+
     std::filesystem::path dll_path() {
         return recompui::file::get_app_folder_path() / "lossless_scaling" / "Lossless.dll";
     }
@@ -67,7 +72,7 @@ namespace {
             }
 #if defined(__APPLE__)
             (void)(path);
-            recompui::message_box("Lossless Scaling frame generation isn't available on macOS.");
+            show_message("Lossless Scaling", "Lossless Scaling frame generation isn't available on macOS.");
 #else
             lsfg::ShaderSet shaders;
             std::string error;
@@ -76,18 +81,18 @@ namespace {
             std::filesystem::remove(cache_path(), ec);
             // Translate from the chosen file first, so a wrong one doesn't replace a good copy.
             if (!lsfg::load_shaders(path, cache_path(), shaders, error)) {
-                recompui::message_box(("This file can't be used: " + error).c_str());
+                show_message("Lossless.dll", "This file can't be used: " + error);
                 return;
             }
             if (!std::filesystem::equivalent(path, dll_path(), ec)) {
                 std::filesystem::copy_file(path, dll_path(), std::filesystem::copy_options::overwrite_existing, ec);
                 if (ec) {
-                    recompui::message_box("Failed to copy Lossless.dll into the app folder.");
+                    show_message("Lossless.dll", "Failed to copy Lossless.dll into the app folder.");
                     return;
                 }
             }
             apply();
-            recompui::message_box("Lossless.dll is ready. Set Frame Generation to Lossless Scaling to use it.");
+            show_message("Lossless.dll", "Lossless.dll is ready. Set Frame Generation to Lossless Scaling to use it.");
 #endif
         });
     }
