@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 183)
+## Overview (as of round 184)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,37 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 184: Lossless Scaling frames paced by display refreshes
+
+**Report:** screen transitions are right now, better than the Lossless
+Scaling app. The turret still jitters at 2x, also with the display at
+120 Hz; the app, run over the game (our RT64 mode, Original), jitters too
+but much less.
+
+**Why** (most likely; not reproducible here, the sandbox has no real
+display): the swap chain is FIFO (vsync), and the generated frames were
+presented on a timer (the game frame interval's moving average split
+evenly). A timed present shows at whichever refresh comes next, and the
+timer isn't locked to the display, so a present near a refresh's edge
+stays up a refresh more or less than its neighbours. Even at 120 Hz, where
+2x divides evenly, each game frame's four refreshes could come out 1+3 or
+3+1 instead of 2+2. In a pan that fast (150 px per game frame) that's a
+judder.
+
+**Change** (RT64 present queue, patch 0022): where the device has present
+wait (as RT64's own pacing uses), a game frame's interval is counted in
+whole refreshes (moving average x refresh rate, rounded), split evenly over
+the generated frames and the game frame, and each is presented again for
+each refresh of its share, waiting for each present to show before the
+next. When a newer game frame is already waiting, the game frame's
+remaining refreshes are cut so no delay builds up. Without present wait, or
+with fewer refreshes than frames, it's timed as before. At 144 Hz, 2x is
+still 2.4 refreshes a frame and can't be even.
+
+The sandbox runs 2x for 90 s without errors (timed path: no present wait).
+The turret's smear in the generated frames is separate: Lossless Scaling's
+motion estimate, not pacing.
 
 ## 2026-11-09, round 183: Lossless Scaling cuts from black; the turret clip
 
