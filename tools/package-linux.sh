@@ -9,7 +9,8 @@
 #
 # Output: dist/BattleTanxGARecompiled-<version>-linux-x86_64.tar.gz with the
 # binary, a launcher script that runs it from its own folder (assets/ is
-# loaded relative to the working directory), assets, README, license and the
+# loaded relative to the working directory), assets, README, the sound pack
+# guide, license and the
 # third-party license notices. The system provides SDL2, GTK 3, FreeType and
 # Vulkan. Uses its own build folder (build-release-linux, or $BUILD_DIR).
 set -euo pipefail
@@ -41,7 +42,7 @@ cd "$(dirname "$(readlink -f "$0")")" && exec ./BattleTanxGARecompiled "$@"
 EOF
 chmod 755 "$stage/BattleTanxGARecompiled.sh"
 cp -r assets "$stage/"
-cp README.md COPYING "$stage/"
+cp README.md SOUND_PACKS.md COPYING "$stage/"
 
 # License notices for the third-party code built into the binary.
 licenses=(
@@ -67,6 +68,10 @@ licenses=(
     "plutovg:lib/RecompFrontend/recompui/lib/lunasvg/plutovg/LICENSE"
     "GamepadMotionHelpers:lib/RecompFrontend/lib/GamepadMotionHelpers/LICENSE"
     "SlotMap:lib/SlotMap/README.md"
+    # Lossless Scaling frame generation (lib/lsfg): lsfg-vk's passes, DXVK's shader compiler, SPIR-V headers.
+    "lsfg-vk:lib/lsfg/LICENSE-lsfg-vk.md"
+    "DXVK:lib/lsfg/LICENSE-dxvk.txt"
+    "SPIRV-Headers:lib/rt64/src/contrib/re-spirv/external/SPIRV-Headers/LICENSE"
 )
 for entry in "${licenses[@]}"; do
     file="${entry#*:}"
