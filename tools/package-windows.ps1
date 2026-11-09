@@ -87,6 +87,10 @@ $licenses = [ordered]@{
     "GamepadMotionHelpers"  = "lib\RecompFrontend\lib\GamepadMotionHelpers\LICENSE"
     "SlotMap"               = "lib\SlotMap\README.md"
     "DirectXShaderCompiler" = "licenses\DirectXShaderCompiler.txt"
+    # Lossless Scaling frame generation (lib\lsfg): lsfg-vk's passes, DXVK's shader compiler, SPIR-V headers.
+    "lsfg-vk"               = "lib\lsfg\LICENSE-lsfg-vk.md"
+    "DXVK"                  = "lib\lsfg\LICENSE-dxvk.txt"
+    "SPIRV-Headers"         = "lib\rt64\src\contrib\re-spirv\external\SPIRV-Headers\LICENSE"
 }
 foreach ($entry in $licenses.GetEnumerator()) {
     if (Test-Path $entry.Value) {

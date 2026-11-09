@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 185)
+## Overview (as of round 186)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.8).
+and higher framerates. Betas are public (0.1.0 to 0.1.9).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,36 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 186: 0.1.9
+
+Version 0.1.9 (`version_string` in `src/main/main.cpp`). It's PC only; the
+Android branch gets it next.
+
+**Release scan:** no testing switches or debug prints left from rounds
+171-185 (the two `getenv` switches in the source predate 0.1.8), and no ROM,
+ROM-derived or Lossless Scaling files tracked. Lib patches new since 0.1.8:
+RT64 0022 (frame generation), plume 0005 (Vulkan memory model),
+RecompFrontend 0016 (Graphics API option); applied to clean copies of RT64,
+plume and RecompFrontend, all patches reproduce the working trees exactly.
+The Windows package now also ships lsfg-vk's, DXVK's and the SPIR-V headers'
+license notices (`tools/package-windows.ps1`).
+
+**New since 0.1.8**, confirmed by the owner:
+- The Rattler's cannon stays on its hull at higher frame rates (rounds
+  171-173).
+- Sound Channels option (round 174).
+- The grenade's bounce plays again with BattleTanx 1 Sound Effects on
+  (round 175).
+- Graphics API option (round 176).
+- Lossless Scaling frame generation, from the player's own Lossless.dll:
+  2x/3x/4x, Quality/Performance, screen changes shown without morphing, and
+  frames paced by display refreshes (rounds 176-184). It adds about one game
+  frame of input delay; fast turns still smear around the tank, as in the
+  Lossless Scaling app.
+- BattleTanx 1 Sound Effects: exact pitch for nine effects and one more
+  effect, INSTR_0028 (round 181).
+- Sound packs: custom sound effects as mods, see SOUND_PACKS.md (round 185).
 
 ## 2026-11-09, round 185: sound packs
 
