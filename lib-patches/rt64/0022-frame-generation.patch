@@ -1,0 +1,189 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -298,8 +298,19 @@
+                 frameCountersNextPresented = frameCounters.count;
+             }
+ 
++            // Lossless Scaling frame generation (lib/lsfg/rt64): a new game frame goes through it, and
++            // is presented after the frames generated between it and the last one. Repeats of the last
++            // frame (a paused game, a menu) are presented as they are.
++            bool presentedGenerated = false;
++            if ((framesToPresent == 1) && swapChainValid && (colorTarget != nullptr) && !present.paused && (present.presentId != frameGenerationPresentId)) {
++                presentedGenerated = threadPresentGenerated(present, colorTarget, filtering, removeBlackBorders, lockedWorkloadMutex, swapChainValid);
++                if (presentedGenerated) {
++                    frameGenerationPresentId = present.presentId;
++                }
++            }
++
+             uint32_t swapChainIndex = 0;
+-            const bool presentFrame = (i < framesToPresent) && swapChainValid;
++            const bool presentFrame = (i < framesToPresent) && swapChainValid && !presentedGenerated;
+             if (presentFrame) {
+                 swapChainValid = ext.swapChain->acquireTexture(acquiredSemaphore.get(), &swapChainIndex);
+             }
+@@ -411,6 +422,128 @@
+         }
+     }
+ 
++    bool PresentQueue::threadPresentGenerated(const Present &present, RenderTarget *colorTarget, UserConfiguration::Filtering filtering, bool removeBlackBorders, bool &lockedWorkloadMutex, bool &swapChainValid) {
++        const bool vulkan = (ext.createdGraphicsAPI == UserConfiguration::GraphicsAPI::Vulkan);
++        if (!frameGeneration.prepare(ext.device, ext.swapChain, vulkan)) {
++            return false;
++        }
++
++        // 1. Draw the game frame into the generator's source image, take it in and generate.
++        RenderCommandList *commandList = ext.presentGraphicsWorker->commandList.get();
++        RenderTexture *sourceTexture = frameGeneration.sourceTexture();
++        commandList->begin();
++        commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(sourceTexture, RenderTextureLayout::COLOR_WRITE));
++
++        VIRenderer::RenderParams renderParams;
++        renderParams.device = ext.device;
++        renderParams.commandList = commandList;
++        renderParams.swapChain = ext.swapChain;
++        renderParams.shaderLibrary = ext.shaderLibrary;
++        renderParams.textureFormat = colorTarget->format;
++        renderParams.resolutionScale = colorTarget->resolutionScale;
++        renderParams.downsamplingScale = 1;
++        renderParams.filtering = filtering;
++        renderParams.vi = &present.screenVI;
++        renderParams.removeBlackBorders = removeBlackBorders;
++        if (colorTarget->downsampleMultiplier > 1) {
++            colorTarget->downsampleTarget(ext.presentGraphicsWorker, ext.shaderLibrary);
++            renderParams.texture = colorTarget->downsampledTexture.get();
++            renderParams.textureWidth = colorTarget->width / colorTarget->downsampleMultiplier;
++            renderParams.textureHeight = colorTarget->height / colorTarget->downsampleMultiplier;
++            renderParams.downsamplingScale = colorTarget->downsampleMultiplier;
++        }
++        else {
++            colorTarget->resolveTarget(ext.presentGraphicsWorker, ext.shaderLibrary);
++            renderParams.texture = colorTarget->getResolvedTexture();
++            renderParams.textureWidth = colorTarget->width;
++            renderParams.textureHeight = colorTarget->height;
++        }
++
++        if (renderParams.texture != nullptr) {
++            viRenderer->prepareBloom(renderParams);
++        }
++
++        commandList->setFramebuffer(frameGeneration.sourceFramebuffer());
++        commandList->clearColor();
++        if (renderParams.texture != nullptr) {
++            commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(renderParams.texture, RenderTextureLayout::SHADER_READ));
++            viRenderer->render(renderParams);
++        }
++
++        commandList->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(sourceTexture, RenderTextureLayout::COPY_SOURCE));
++        const uint32_t generatedFrames = frameGeneration.record(commandList);
++        commandList->end();
++        ext.presentGraphicsWorker->execute();
++        ext.presentGraphicsWorker->wait();
++
++        // The game frame is in the source image now: the workload can go on while the frames are presented.
++        if (lockedWorkloadMutex) {
++            ext.sharedResources->workloadMutex.unlock();
++            lockedWorkloadMutex = false;
++        }
++
++        notifyPresentId(present);
++
++        // 2. The generated frames, then the game frame, spaced evenly over the game frame interval.
++        const std::chrono::nanoseconds spacing = frameGeneration.markGameFrame(generatedFrames + 1);
++        Timestamp firstPresent;
++        for (uint32_t f = 0; (f <= generatedFrames) && swapChainValid; f++) {
++            if ((f > 0) && (spacing.count() > 0)) {
++                Timer::preciseSleepUntil(firstPresent + spacing * f);
++            }
++
++            uint32_t swapChainIndex = 0;
++            swapChainValid = ext.swapChain->acquireTexture(acquiredSemaphore.get(), &swapChainIndex);
++            if (!swapChainValid) {
++                break;
++            }
++
++            RenderTexture *swapChainTexture = ext.swapChain->getTexture(swapChainIndex);
++            RenderFramebuffer *swapChainFramebuffer = swapChainFramebuffers[swapChainIndex].get();
++            commandList->begin();
++            commandList->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(swapChainTexture, RenderTextureLayout::COPY_DEST));
++            if (f < generatedFrames) {
++                frameGeneration.recordOutput(commandList, f, swapChainTexture);
++            }
++            else {
++                commandList->copyTexture(swapChainTexture, sourceTexture);
++            }
++
++            commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(swapChainTexture, RenderTextureLayout::COLOR_WRITE));
++            commandList->setFramebuffer(swapChainFramebuffer);
++
++            RenderHookDraw *drawHook = GetRenderHookDraw();
++            if (drawHook != nullptr) {
++                drawHook(commandList, swapChainFramebuffer);
++            }
++
++            {
++                const std::scoped_lock lock(inspectorMutex);
++                if (inspector != nullptr) {
++                    inspector->draw(commandList);
++                }
++            }
++
++            commandList->barriers(RenderBarrierStage::NONE, RenderTextureBarrier(swapChainTexture, RenderTextureLayout::PRESENT));
++            commandList->end();
++            const RenderCommandList *constCommandList = commandList;
++            RenderCommandSemaphore *waitSemaphore = acquiredSemaphore.get();
++            RenderCommandSemaphore *signalSemaphore = drawSemaphores[swapChainIndex].get();
++            ext.presentGraphicsWorker->commandQueue->executeCommandLists(&constCommandList, 1, &waitSemaphore, 1, &signalSemaphore, 1, ext.presentGraphicsWorker->commandFence.get());
++            ext.presentGraphicsWorker->wait();
++
++            presentTimestamp = Timer::current();
++            if (f == 0) {
++                firstPresent = presentTimestamp;
++            }
++
++            swapChainValid = ext.swapChain->present(swapChainIndex, &signalSemaphore, 1);
++            presentProfiler.logAndRestart();
++        }
++
++        return true;
++    }
++
+     void PresentQueue::skipInterpolation() {
+         {
+             std::unique_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
+@@ -550,5 +683,8 @@
+             ext.presentGraphicsWorker->commandQueue->executeCommandLists(&commandList, 1, &waitSemaphore, 1, nullptr, 0, ext.presentGraphicsWorker->commandFence.get());
+             ext.presentGraphicsWorker->wait();
+         }
++
++        // The present worker is idle here: the frame generator can go.
++        frameGeneration.release();
+     }
+ };
+--- a/src/hle/rt64_present_queue.h
++++ b/src/hle/rt64_present_queue.h
+@@ -11,6 +11,7 @@
+ #include "rt64_application_window.h"
+ #include "rt64_present.h"
+ #include "rt64_shared_queue_resources.h"
++#include "rt64_frame_generation.h"
+ 
+ #define PRESENT_QUEUE_SIZE 4
+ 
+@@ -57,6 +58,8 @@
+         Timestamp presentTimestamp;
+         VIHistory viHistory;
+         bool presentWaitEnabled = false;
++        FrameGeneration frameGeneration;
++        uint64_t frameGenerationPresentId = 0;
+ 
+         PresentQueue();
+         ~PresentQueue();
+@@ -68,6 +71,7 @@
+         void waitForPresentId(uint64_t waitId);
+         void setup(const External &ext);
+         void threadPresent(const Present &present, bool &swapChainValid);
++        bool threadPresentGenerated(const Present &present, RenderTarget *colorTarget, UserConfiguration::Filtering filtering, bool removeBlackBorders, bool &lockedWorkloadMutex, bool &swapChainValid);
+         void skipInterpolation();
+         void notifyPresentId(const Present &present);
+         void threadAdvanceBarrier();

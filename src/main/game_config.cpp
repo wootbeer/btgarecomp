@@ -140,6 +140,8 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
         0u
     );
 
+    btga::config::add_frame_generation_options(graphics);
+
     // Also called when the saved settings load.
     graphics.add_option_change_callback("screen_filter",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {

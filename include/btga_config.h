@@ -31,6 +31,9 @@ namespace btga::config {
     // Sound tab (src/main/bt1_sounds.cpp). Call between
     // recompui::config::create_sound_tab() and recompui::config::finalize().
     void add_bt1_sounds_option(recomp::config::Config& sound);
+    // Frame Generation, its Lossless Scaling options and Load Lossless.dll
+    // (src/main/frame_generation_config.cpp); from add_graphics_options().
+    void add_frame_generation_options(recomp::config::Config& graphics);
     // Sound Effects Reverb and its amount (src/main/game_config.cpp).
     void add_sfx_reverb_options(recomp::config::Config& sound);
     // Sound Channels (src/main/game_config.cpp).

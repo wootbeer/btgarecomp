@@ -88,6 +88,20 @@ btga_apply_lib_patches(RecompFrontend)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/rt64 ${CMAKE_BINARY_DIR}/rt64)
 
+# Lossless Scaling frame generation (lib/lsfg, round 177): the library on plume's Vulkan,
+# and its RT64 side compiled into RT64 (its present queue calls it, lib-patches/rt64/0022).
+target_sources(rt64 PRIVATE ${CMAKE_SOURCE_DIR}/lib/lsfg/rt64/rt64_frame_generation.cpp)
+target_include_directories(rt64 PUBLIC ${CMAKE_SOURCE_DIR}/lib/lsfg/rt64)
+if (NOT APPLE)
+    set(LSFG_VULKAN_TARGET plume)
+    set(LSFG_SPIRV_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/lib/rt64/src/contrib/re-spirv/external/SPIRV-Headers/include)
+    if (NOT WIN32)
+        set(LSFG_TEST_LIBS SDL2)
+    endif()
+    add_subdirectory(${CMAKE_SOURCE_DIR}/lib/lsfg ${CMAKE_BINARY_DIR}/lsfg)
+    target_link_libraries(rt64 lsfg)
+endif()
+
 set(BUILD_SHARED_LIBS OFF)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime)
@@ -473,6 +487,8 @@ set(RECOMP_FRONTEND_N64MODERNRUNTIME_PATH ${CMAKE_SOURCE_DIR}/lib/N64ModernRunti
 set(RECOMP_FRONTEND_RT64_PATH ${CMAKE_SOURCE_DIR}/lib/rt64)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/RecompFrontend)
+# recompui includes RT64's headers by folder rather than linking it: the frame generation header too.
+target_include_directories(recompui PRIVATE ${CMAKE_SOURCE_DIR}/lib/lsfg/rt64)
 
 # Upstream RmlUi 6.0 uses uint32_t and friends without including <cstdint>, which clang with a
 # current libstdc++ rejects, and recompui includes those headers. Add the include from here

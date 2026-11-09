@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 176)
+## Overview (as of round 177)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,77 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 177: Lossless Scaling frame generation
+
+**Request:** round 176's plan, written so other ports and projects can take it
+over easily, without costing speed. Input latency as low as possible.
+
+**Library** (`lib/lsfg/`, README there):
+- lsfg-vk v1.0.0's frame generation (MIT), reworked:
+  - runs on the host's Vulkan device and records into its command buffer;
+  - owns its images (no Linux file descriptors);
+  - uses plain barriers, so `synchronization2` isn't needed.
+- DXVK v2.6.2's DXBC compiler (zlib), trimmed to return SPIR-V.
+- `include/lsfg/lsfg.hpp`, which knows nothing of RT64:
+  - `load_shaders` reads the 48 shaders out of `Lossless.dll` (RCDATA
+    255-302), translates them with lsfg-vk's binding renumbering, and caches
+    them by the DLL's hash;
+  - `FrameGenerator` covers creation, `record_input`, `record_generate` and
+    `record_output`, with blits to and from any image;
+  - `check_device` says whether the GPU has the features needed.
+- `test/lsfg_test.cpp` (CMake option `LSFG_BUILD_TEST`) sends a square moving
+  40 pixels a frame through its own device. On lavapipe, quality and
+  performance modes put it within half a pixel of halfway in each generated
+  frame. The performance mode alone missed a single 80-pixel jump: its
+  coarser motion estimate, not a bug (lsfg-vk records the same passes).
+
+**RT64:**
+- `lib-patches/plume/0005-vulkan-memory-model.patch` enables
+  `vulkanMemoryModel` where supported. The translated shaders declare the
+  VulkanMemoryModel capability. `shaderStorageImageWriteWithoutFormat` was
+  already on (plume enables every core feature).
+- `lib-patches/rt64/0022-frame-generation.patch` adds
+  `threadPresentGenerated()` to the present queue. It runs only for a new
+  game frame when RT64 isn't interpolating, and not for repeats (same
+  present ID, a paused game or a menu) or paused presents. It:
+  1. draws the VI output into the generator's source image, copies it in and
+     generates, in one submission;
+  2. releases the workload mutex and notifies the present ID, so the game
+     goes on;
+  3. presents each generated frame, then the game frame (copied from the
+     source), with RecompFrontend's draw hook (the menu) and the inspector on
+     each. They're spaced evenly over the game frame interval (an average,
+     ignoring gaps over 250 ms). The first one goes up at once, so the added
+     delay is the game frame interval times n/(n+1).
+- `lib/lsfg/rt64/rt64_frame_generation.cpp` (compiled into RT64 from our
+  CMake) holds the settings (`RT64::setFrameGeneration`, any thread), the
+  generator and its source image (rebuilt on a size change), and the timing.
+  It reports why it isn't running (no DLL, not Vulkan, unsupported GPU) in
+  `RT64::getFrameGenerationStatus()` and on stderr. It's off on macOS.
+
+**Settings** (`src/main/frame_generation_config.cpp`, Graphics tab, carries over
+to other RecompFrontend ports):
+- **Frame Generation:** RT64 / Lossless Scaling, with a **Load
+  Lossless.dll** button. The button translates the chosen file first (a
+  wrong one gets a message and replaces nothing), then copies it to
+  `<app folder>/lossless_scaling/Lossless.dll`, with the cache next to it.
+- **Lossless Scaling Multiplier:** 2x / 3x / 4x.
+- **Lossless Scaling Mode:** Quality / Performance.
+- Choosing Lossless Scaling sets the Graphics API to Vulkan (from the next
+  start) and Framerate to Original. Framerate is greyed out while it's on;
+  the multiplier and mode while it's off.
+- The flow scale follows Lossless Scaling's suggestion: 1 up to 1080p,
+  1080/height above.
+
+**Checked in the sandbox** (lavapipe):
+- In Tank Wars, each game frame went out as 2 presents.
+- With the game frame left out (a temporary switch), the screen showed whole,
+  sharp generated frames.
+- RT64 mode is as before.
+- The options and button show on the Graphics tab.
+- Not checked: Windows (clang-cl) builds, speed and smoothness on a real GPU,
+  and the Load Lossless.dll dialog.
 
 ## 2026-11-09, round 176: Graphics API option; Lossless Scaling frame generation, first steps
 
