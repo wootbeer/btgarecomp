@@ -25,6 +25,9 @@ Add a blank portable.txt in the application's folder to make portable if you wan
 ## Building  
 See [BUILDING.md](BUILDING.md).
   
+## Sound Packs  
+Replace the game's sound effects with your own. See [SOUND_PACKS.md](SOUND_PACKS.md).
+  
 ## Issues and Limitations
 
 Known:  
