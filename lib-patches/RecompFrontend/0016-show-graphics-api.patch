@@ -1,0 +1,17 @@
+diff --git a/recompui/src/config/ui_config_tab_graphics.cpp b/recompui/src/config/ui_config_tab_graphics.cpp
+index 4fdf81f..59f0521 100644
+--- a/recompui/src/config/ui_config_tab_graphics.cpp
++++ b/recompui/src/config/ui_config_tab_graphics.cpp
+@@ -344,10 +344,10 @@ namespace recompui {
+             config.add_enum_option(
+                 graphics::options::api_option,
+                 "Graphics API",
+-                "Selects the graphics API to use.",
++                "Selects the graphics API to use. Takes effect the next time the game starts.",
+                 graphics_api_options,
+                 ultramodern::renderer::GraphicsApi::Auto,
+-                true
++                false
+             );
+ 
+             config.add_enum_option(

@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 175)
+## Overview (as of round 176)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,40 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 176: Graphics API option; Lossless Scaling frame generation, first steps
+
+**Request:** frame generation from Lossless Scaling as an alternative to
+RT64's interpolation ("RT64 / Lossless Scaling"), using the player's own
+`Lossless.dll`, with input latency kept as low as possible. Vulkan only, so
+show RT64's Graphics API option (snprecomp already does). Android later, in
+the Android chat.
+
+**Graphics API** (`lib-patches/RecompFrontend/0016-show-graphics-api.patch`):
+the frontend has the option (Auto, D3D12 on Windows, Vulkan, Metal on macOS)
+but marked always hidden. Now shown; read once when RT64 starts.
+
+**Lossless Scaling plan** (from lsfg-vk v1.0.0, MIT, the Linux Vulkan layer
+GameHub uses on Android):
+- The owner's DLL (SHA-1 7a4ffe80...) has 202 DXBC shaders as RCDATA,
+  including all 48 lsfg-vk loads (IDs 255-302). Neither the DLL nor anything
+  from it goes in the repo or a release.
+- The shaders are turned into SPIR-V with DXVK's DXBC compiler. lsfg-vk's copy
+  of it (`PancakeTAS/dxbc`) is gone, so it's taken from DXVK v2.6.2 (zlib):
+  `src/dxbc`, `src/spirv` and a few `src/util` headers, with DXVK's logger, its
+  device-based options and its shader object replaced (the compiler returns
+  the SPIR-V). This builds; running it on the DLL is waiting on the owner's go
+  ahead (the sandbox stops running programs built from outside code).
+- lsfg-vk's frame generation library makes its own Vulkan device and shares
+  images over Linux file descriptors. It's to record into RT64's own command
+  lists on RT64's device instead: no second device, nothing Linux-only. Its
+  shaders need `vulkanMemoryModel` and its barriers `synchronization2`, which
+  RT64's device (Vulkan 1.2) doesn't enable; plume is to enable them where
+  supported.
+- In RT64's present (`rt64_present_queue.cpp`), with Lossless on: the VI
+  output goes to an image of its own, frame generation makes 1-3 frames
+  between it and the last one, those are presented spaced over the game
+  frame, then the real one; the menu is drawn on each.
 
 ## 2026-11-08, round 175: the grenade's bounce with the BattleTanx 1 effects
 
