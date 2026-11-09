@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 179)
+## Overview (as of round 180)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,33 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 180: Lossless Scaling skips scene cuts
+
+**Report** (video, Lossless Scaling): going from one screen to another
+(menus, intro, cutscene cuts) shows a warping transition, where it should
+just change. The owner doesn't want RT64's interpolation in front of it.
+
+**Why:** LSFG makes frames between the last game frame and the new one by
+estimating motion. When the new frame is another picture altogether, there's
+no motion to find, and the generated frames morph one picture into the other.
+
+**Done:**
+- `lsfg::FrameGenerator::record_input()` also blits each frame into a 64x36
+  thumbnail and copies it to host visible memory. `scene_difference()`
+  averages it in 8x6 cells and returns the mean change from the previous
+  frame's, 0 (the same) to 1 (black to white).
+- The present queue already waits for the GPU after recording generation, so
+  it reads the difference then. At 0.15 or more (`kSceneCutDifference`,
+  `lib/lsfg/rt64/rt64_frame_generation.cpp`) the game frame is shown alone,
+  with no generated frames, and the old picture stays up until it.
+
+**Measured** (sandbox, lavapipe, the game at ~4 fps, so motion per frame is
+about 7 times a real 30 fps's): still frames ~0.001; driving median 0.008,
+95th percentile 0.085, one frame 0.29 on a sharp turn; the intro's cuts 0.17
+to 0.29. At 30 fps gameplay should stay well under the threshold; if a fast
+turn does reach it, that frame shows without generated frames (a one-frame
+step), not a warp.
 
 ## 2026-11-09, round 179: back to round 177's frame generation
 

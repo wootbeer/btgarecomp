@@ -13,6 +13,9 @@
 #include "v3_1p/context.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <stdexcept>
+#include <vector>
 #include <exception>
 #include <optional>
 
@@ -20,6 +23,11 @@ namespace lsfg {
 
     namespace {
         constexpr VkFormat kFormat = VK_FORMAT_R8G8B8A8_UNORM;
+
+        // Scene cut detection: the frame shrunk to a 64x36 thumbnail, compared
+        // with the last one as 8x6 cells of 8x6 pixels' average color.
+        constexpr uint32_t kThumbWidth = 64, kThumbHeight = 36;
+        constexpr uint32_t kCellsX = 8, kCellsY = 6;
 
         // Moves one of the generator's images between compute use (GENERAL)
         // and a transfer, keeping the layout it tracks up to date.
@@ -63,6 +71,16 @@ namespace lsfg {
         LSFG::Vulkan vk;
         std::optional<LSFG_3_1::Context> context;
         std::optional<LSFG_3_1P::Context> performance_context;
+
+        // Scene cut detection: a thumbnail of each real frame, read back.
+        VkDevice device = VK_NULL_HANDLE;
+        LSFG::Core::Image thumbnail;
+        VkBuffer readback = VK_NULL_HANDLE;
+        VkDeviceMemory readback_memory = VK_NULL_HANDLE;
+        const uint8_t* readback_data = nullptr;
+        bool thumbnail_pending = false;
+        std::vector<float> last_cells;
+        float last_difference = -1.0f;
 
         LSFG::Core::Image& next_input() {
             return context ? context->nextInput() : performance_context->nextInput();
@@ -141,6 +159,44 @@ namespace lsfg {
             }
             // The shaders are compiled into pipelines by now; the set isn't kept.
             impl->vk.shaders = LSFG::Pool::ShaderPool();
+
+            // Scene cut detection: the thumbnail and a mapped buffer to read it back.
+            impl->device = device;
+            impl->thumbnail = LSFG::Core::Image(core_device, { kThumbWidth, kThumbHeight }, kFormat,
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+            const VkBufferCreateInfo buffer_info{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .size = VkDeviceSize(kThumbWidth) * kThumbHeight * 4,
+                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+            };
+            if (vkCreateBuffer(device, &buffer_info, nullptr, &impl->readback) != VK_SUCCESS) {
+                throw std::runtime_error("Couldn't create the scene detection buffer.");
+            }
+            VkMemoryRequirements requirements;
+            vkGetBufferMemoryRequirements(device, impl->readback, &requirements);
+            VkPhysicalDeviceMemoryProperties memory;
+            vkGetPhysicalDeviceMemoryProperties(physical_device, &memory);
+            const VkMemoryPropertyFlags wanted = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            uint32_t type = UINT32_MAX;
+            for (uint32_t i = 0; i < memory.memoryTypeCount; i++) {
+                if ((requirements.memoryTypeBits & (1u << i)) && ((memory.memoryTypes[i].propertyFlags & wanted) == wanted)) {
+                    type = i;
+                    break;
+                }
+            }
+            const VkMemoryAllocateInfo allocate_info{
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize = requirements.size,
+                .memoryTypeIndex = type
+            };
+            void* mapped = nullptr;
+            if ((type == UINT32_MAX) || (vkAllocateMemory(device, &allocate_info, nullptr, &impl->readback_memory) != VK_SUCCESS) ||
+                (vkBindBufferMemory(device, impl->readback, impl->readback_memory, 0) != VK_SUCCESS) ||
+                (vkMapMemory(device, impl->readback_memory, 0, VK_WHOLE_SIZE, 0, &mapped) != VK_SUCCESS)) {
+                throw std::runtime_error("Couldn't set up the scene detection buffer.");
+            }
+            impl->readback_data = static_cast<const uint8_t*>(mapped);
             return std::unique_ptr<FrameGenerator>(new FrameGenerator(std::move(impl)));
         }
         catch (const std::exception& e) {
@@ -156,6 +212,12 @@ namespace lsfg {
             // The contexts' objects go before the pool they come from.
             impl->context.reset();
             impl->performance_context.reset();
+            if (impl->readback != VK_NULL_HANDLE) {
+                vkDestroyBuffer(impl->device, impl->readback, nullptr);
+            }
+            if (impl->readback_memory != VK_NULL_HANDLE) {
+                vkFreeMemory(impl->device, impl->readback_memory, nullptr);
+            }
         }
     }
 
@@ -175,6 +237,64 @@ namespace lsfg {
             input.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, { 0, 0 }, impl->extent);
         transition(cmd, input, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
+
+        // The thumbnail for scene cut detection, copied to the read back buffer.
+        LSFG::Core::Image& thumbnail = impl->thumbnail;
+        transition(cmd, thumbnail, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        blit(cmd, src_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, src_extent,
+            thumbnail.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, { 0, 0 }, { kThumbWidth, kThumbHeight });
+        transition(cmd, thumbnail, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        const VkBufferImageCopy region{
+            .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1 },
+            .imageExtent = { kThumbWidth, kThumbHeight, 1 }
+        };
+        vkCmdCopyImageToBuffer(cmd, thumbnail.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, impl->readback, 1, &region);
+        const VkBufferMemoryBarrier to_host{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = impl->readback,
+            .size = VK_WHOLE_SIZE
+        };
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1, &to_host, 0, nullptr);
+        impl->thumbnail_pending = true;
+    }
+
+    float FrameGenerator::scene_difference() {
+        if (!impl->thumbnail_pending) {
+            return impl->last_difference;
+        }
+
+        impl->thumbnail_pending = false;
+        std::vector<float> cells(kCellsX * kCellsY * 3, 0.0f);
+        const uint32_t cell_w = kThumbWidth / kCellsX, cell_h = kThumbHeight / kCellsY;
+        for (uint32_t y = 0; y < kThumbHeight; y++) {
+            for (uint32_t x = 0; x < kThumbWidth; x++) {
+                const uint8_t* p = impl->readback_data + (size_t(y) * kThumbWidth + x) * 4;
+                float* cell = &cells[((y / cell_h) * kCellsX + (x / cell_w)) * 3];
+                cell[0] += p[0];
+                cell[1] += p[1];
+                cell[2] += p[2];
+            }
+        }
+        for (float& c : cells) {
+            c /= float(cell_w * cell_h) * 255.0f;
+        }
+
+        if (impl->last_cells.size() == cells.size()) {
+            float sum = 0.0f;
+            for (size_t i = 0; i < cells.size(); i++) {
+                sum += std::fabs(cells[i] - impl->last_cells[i]);
+            }
+            impl->last_difference = sum / float(cells.size());
+        }
+
+        impl->last_cells = std::move(cells);
+        return impl->last_difference;
     }
 
     bool FrameGenerator::record_generate(VkCommandBuffer cmd) {

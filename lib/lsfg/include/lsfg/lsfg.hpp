@@ -84,6 +84,14 @@ namespace lsfg {
         // extent() if its size differs.
         void record_input(VkCommandBuffer cmd, VkImage src_image, VkExtent2D src_extent);
 
+        // How much the picture changed between the last two real frames put in,
+        // 0 (the same) to 1 (black to white), from a thumbnail of each: a cut
+        // to another scene, rather than motion, is about 0.15 or more. Frames
+        // generated across a cut morph one picture into the other, so a host
+        // should show the new frame alone then. Call after the GPU has done the
+        // work record_input() recorded; -1 before there are two frames.
+        float scene_difference();
+
         // Records generating the frames between the previous real frame and
         // the one just copied in. False when there's no previous frame yet
         // (the first frame after creation), when there's nothing to show.

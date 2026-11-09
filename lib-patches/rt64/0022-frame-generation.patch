@@ -22,7 +22,7 @@ diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
              if (presentFrame) {
                  swapChainValid = ext.swapChain->acquireTexture(acquiredSemaphore.get(), &swapChainIndex);
              }
-@@ -411,6 +422,128 @@
+@@ -411,6 +422,133 @@
          }
      }
  
@@ -75,10 +75,15 @@ diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
 +        }
 +
 +        commandList->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(sourceTexture, RenderTextureLayout::COPY_SOURCE));
-+        const uint32_t generatedFrames = frameGeneration.record(commandList);
++        uint32_t generatedFrames = frameGeneration.record(commandList);
 +        commandList->end();
 +        ext.presentGraphicsWorker->execute();
 +        ext.presentGraphicsWorker->wait();
++
++        // A cut to another picture: the frames generated across it would morph one into the other.
++        if (frameGeneration.sceneCut()) {
++            generatedFrames = 0;
++        }
 +
 +        // The game frame is in the source image now: the workload can go on while the frames are presented.
 +        if (lockedWorkloadMutex) {
@@ -151,7 +156,7 @@ diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
      void PresentQueue::skipInterpolation() {
          {
              std::unique_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
-@@ -550,5 +683,8 @@
+@@ -550,5 +688,8 @@
              ext.presentGraphicsWorker->commandQueue->executeCommandLists(&commandList, 1, &waitSemaphore, 1, nullptr, 0, ext.presentGraphicsWorker->commandFence.get());
              ext.presentGraphicsWorker->wait();
          }

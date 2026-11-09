@@ -203,6 +203,17 @@ namespace RT64 {
 #   endif
     }
 
+    bool FrameGeneration::sceneCut() {
+#   ifdef RT64_FRAME_GENERATION
+        // lsfg::FrameGenerator::scene_difference(): 0 the same picture, 1 black to white.
+        constexpr float kSceneCutDifference = 0.15f;
+        const float difference = impl->generator->scene_difference();
+        return difference >= kSceneCutDifference;
+#   else
+        return false;
+#   endif
+    }
+
     void FrameGeneration::recordOutput(RenderCommandList *commandList, uint32_t index, RenderTexture *dst) {
 #   ifdef RT64_FRAME_GENERATION
         VkCommandBuffer cmd = static_cast<VulkanCommandList *>(commandList)->vk;

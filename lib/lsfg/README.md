@@ -44,6 +44,10 @@ two types the compiler uses. The Windows wide-string helpers are gone.
    size)` builds the pipelines and images (RGBA8).
 3. Per real frame, in a command buffer of the host's:
    - `record_input(cmd, image, size)` blits the frame in;
+   - after the GPU has done that, `scene_difference()` says how much the
+     picture changed (from a thumbnail): at about 0.15 or more it's a cut
+     to another scene, and the host should show the new frame alone, since
+     frames generated across a cut morph one picture into the other;
    - `record_generate(cmd)` makes `generated_frames` frames between the
      previous real frame and this one;
    - `record_output(cmd, i, image, offset, size)` blits generated frame `i`
