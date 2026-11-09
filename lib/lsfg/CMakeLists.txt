@@ -13,6 +13,13 @@ if (NOT LSFG_SPIRV_INCLUDE_DIR)
     message(FATAL_ERROR "lsfg: set LSFG_SPIRV_INCLUDE_DIR to SPIRV-Headers' include folder")
 endif()
 
+# Standard headers the upstream code doesn't include itself (see std_includes.h).
+if (MSVC)
+    set(LSFG_STD_INCLUDES "/FI${CMAKE_CURRENT_SOURCE_DIR}/std_includes.h")
+else()
+    set(LSFG_STD_INCLUDES -include "${CMAKE_CURRENT_SOURCE_DIR}/std_includes.h")
+endif()
+
 # DXVK's DXBC to SPIR-V compiler (v2.6.2, zlib; trimmed, see README.md).
 file(GLOB LSFG_DXBC_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/dxbc/dxbc/*.cpp"
@@ -31,6 +38,7 @@ if (MSVC)
 else()
     target_compile_options(lsfg_dxbc PRIVATE -w)
 endif()
+target_compile_options(lsfg_dxbc PRIVATE ${LSFG_STD_INCLUDES})
 
 # lsfg-vk's frame generation (v1.0.0, MIT; reworked to run on the host's
 # device, see README.md) and this library's interface (include/lsfg/lsfg.hpp).
@@ -52,6 +60,7 @@ target_link_libraries(lsfg PUBLIC ${LSFG_VULKAN_TARGET} PRIVATE lsfg_dxbc)
 if (MSVC)
     target_compile_options(lsfg PRIVATE /EHsc)
 endif()
+target_compile_options(lsfg PRIVATE ${LSFG_STD_INCLUDES})
 
 # The test tool (test/lsfg_test.cpp): frame generation on a device of its own.
 option(LSFG_BUILD_TEST "Build lsfg_test" OFF)
