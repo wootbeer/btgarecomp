@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 178)
+## Overview (as of round 179)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,27 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 179: back to round 177's frame generation
+
+**Report** (round 178, 144 Hz, no FreeSync):
+- Adaptive warped heavily ("like being on acid").
+- 3x jittered and warped at times, where round 177's hadn't.
+- 2x seemed better before; round 177 was better overall apart from 4x.
+- For comparison, the owner had used the Lossless Scaling app with LSFG 3.1,
+  fixed 3x, default settings.
+
+**Done:** round 178's code is reverted. `lib/lsfg`, the RT64 patch, the RT64
+side and the settings match round 177's last commit (eabdd6e): per-pass
+buffers, timestamped generation, Adaptive and the Frame Rate rename are gone.
+The setting is Lossless Scaling Multiplier again, 2x/3x/4x, default 2x.
+
+Round 178 changed three things fixed modes go through, none of which should
+have changed their result: per-pass constant buffers instead of ones shared
+by timestamp, host visible *and* coherent buffer memory instead of either,
+and measuring the game frame interval before the GPU work instead of after.
+Not found which, if any, the owner saw. 4x's judder on a 144 Hz display
+without variable refresh stands (120 fps on 144 Hz).
 
 ## 2026-11-09, round 178: Lossless Scaling Adaptive frame rate
 

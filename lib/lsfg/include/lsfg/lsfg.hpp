@@ -50,8 +50,7 @@ namespace lsfg {
 
     struct Settings {
         // Frames generated between two real ones: 1 doubles the frame rate,
-        // 2 triples it, and so on. With record_generate(cmd, timestamps), the
-        // most frames that can be asked for at once.
+        // 2 triples it, and so on.
         uint32_t generated_frames = 1;
         // Lossless Scaling's performance mode (LSFG 3.1 performance).
         bool performance = false;
@@ -89,13 +88,6 @@ namespace lsfg {
         // the one just copied in. False when there's no previous frame yet
         // (the first frame after creation), when there's nothing to show.
         bool record_generate(VkCommandBuffer cmd);
-
-        // As record_generate(cmd), for frames at the given points in time
-        // between the previous real frame (0) and this one (1), each in (0, 1),
-        // at most settings().generated_frames of them; output i is
-        // timestamps[i]. For pacing frames to a display's refresh rather than a
-        // fixed multiple. The GPU must be done with the previous generation.
-        bool record_generate(VkCommandBuffer cmd, const std::vector<float>& timestamps);
 
         // Records copying generated frame `index` (0 is the earliest, nearest
         // the previous real frame) to dst_image, which must be in

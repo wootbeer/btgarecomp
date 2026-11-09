@@ -22,7 +22,7 @@ diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
              if (presentFrame) {
                  swapChainValid = ext.swapChain->acquireTexture(acquiredSemaphore.get(), &swapChainIndex);
              }
-@@ -411,6 +422,130 @@
+@@ -411,6 +422,128 @@
          }
      }
  
@@ -75,14 +75,7 @@ diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
 +        }
 +
 +        commandList->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(sourceTexture, RenderTextureLayout::COPY_SOURCE));
-+        uint32_t refreshRate = 0;
-+        {
-+            std::scoped_lock<std::mutex> configurationLock(ext.sharedResources->configurationMutex);
-+            refreshRate = ext.sharedResources->swapChainRate;
-+        }
-+
-+        std::chrono::nanoseconds spacing;
-+        const uint32_t framesToShow = frameGeneration.record(commandList, refreshRate, spacing);
++        const uint32_t generatedFrames = frameGeneration.record(commandList);
 +        commandList->end();
 +        ext.presentGraphicsWorker->execute();
 +        ext.presentGraphicsWorker->wait();
@@ -95,10 +88,10 @@ diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
 +
 +        notifyPresentId(present);
 +
-+        // 2. The frames planned for this game frame (generated ones, then usually the game frame), spaced
-+        // over the game frame interval or one per refresh.
++        // 2. The generated frames, then the game frame, spaced evenly over the game frame interval.
++        const std::chrono::nanoseconds spacing = frameGeneration.markGameFrame(generatedFrames + 1);
 +        Timestamp firstPresent;
-+        for (uint32_t f = 0; (f < framesToShow) && swapChainValid; f++) {
++        for (uint32_t f = 0; (f <= generatedFrames) && swapChainValid; f++) {
 +            if ((f > 0) && (spacing.count() > 0)) {
 +                Timer::preciseSleepUntil(firstPresent + spacing * f);
 +            }
@@ -113,7 +106,12 @@ diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
 +            RenderFramebuffer *swapChainFramebuffer = swapChainFramebuffers[swapChainIndex].get();
 +            commandList->begin();
 +            commandList->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(swapChainTexture, RenderTextureLayout::COPY_DEST));
-+            frameGeneration.recordFrame(commandList, f, swapChainTexture);
++            if (f < generatedFrames) {
++                frameGeneration.recordOutput(commandList, f, swapChainTexture);
++            }
++            else {
++                commandList->copyTexture(swapChainTexture, sourceTexture);
++            }
 +
 +            commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(swapChainTexture, RenderTextureLayout::COLOR_WRITE));
 +            commandList->setFramebuffer(swapChainFramebuffer);
@@ -153,7 +151,7 @@ diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
      void PresentQueue::skipInterpolation() {
          {
              std::unique_lock<std::mutex> interpolatedLock(ext.sharedResources->interpolatedMutex);
-@@ -550,5 +685,8 @@
+@@ -550,5 +683,8 @@
              ext.presentGraphicsWorker->commandQueue->executeCommandLists(&commandList, 1, &waitSemaphore, 1, nullptr, 0, ext.presentGraphicsWorker->commandFence.get());
              ext.presentGraphicsWorker->wait();
          }

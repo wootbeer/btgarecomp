@@ -25,10 +25,6 @@ Changes from lsfg-vk's `framegen/`:
 - It owns its input and output images instead of importing them from Linux
   file descriptors.
 - Barriers are `vkCmdPipelineBarrier`, so `synchronization2` isn't needed.
-- Each generation pass has its own constant buffers (`ResourcePool::getPassBuffer`).
-  Their timestamp can be rewritten per frame (`setPassTimestamp`), so frames can
-  be made for any points in time, not just evenly spaced ones. The buffers'
-  memory must be host visible and coherent.
 - `lsfg.cpp`, the instance, command pool, fence, semaphore and DDS upload
   code are gone. The contexts are `record()`, `nextInput()` and `outputs()`.
 
@@ -48,19 +44,13 @@ two types the compiler uses. The Windows wide-string helpers are gone.
    size)` builds the pipelines and images (RGBA8).
 3. Per real frame, in a command buffer of the host's:
    - `record_input(cmd, image, size)` blits the frame in;
-   - `record_generate(cmd)` makes `generated_frames` frames, evenly spaced,
-     between the previous real frame and this one. `record_generate(cmd,
-     timestamps)` makes them at the given points in time instead (0 is the
-     previous frame, 1 this one), as many as needed up to `generated_frames`.
-     That's for pacing to a display's refresh;
+   - `record_generate(cmd)` makes `generated_frames` frames between the
+     previous real frame and this one;
    - `record_output(cmd, i, image, offset, size)` blits generated frame `i`
      out, for example to a swap chain image.
 4. The host presents the generated frames, spaced over the real frame
    interval, then the real frame. That adds one real frame of delay: the
-   generated frames need the next real frame. The RT64 side's adaptive mode
-   instead shows one frame per display refresh, made for the moment it's
-   shown, with the real frame when a refresh falls on it. That's smooth on a
-   fixed refresh rate at any game frame rate.
+   generated frames need the next real frame.
 
 Requirements for the host's device: `vulkanMemoryModel` and
 `shaderStorageImageWriteWithoutFormat` enabled (`lsfg::check_device` says if
@@ -105,10 +95,8 @@ reports why it isn't running, such as no DLL or D3D12, through
 ## Test
 
 `test/lsfg_test.cpp` makes its own Vulkan device. It sends five frames
-through with a square moving 40 pixels a frame, generating at 1/4, 1/2 and
-3/4, then at 0.2 and 0.6. It checks the square is that far along in each
-frame (`LSFG_TEST_PASSES` sets how many passes the generator has, 3 by
-default):
+through with a square moving 40 pixels a frame, and checks each generated
+frame has the square halfway:
 
 ```
 cmake -DLSFG_BUILD_TEST=ON ...   (builds lsfg_test next to the game)
@@ -116,5 +104,4 @@ lsfg_test path/to/Lossless.dll [cache file] [performance]
 ```
 
 On a software Vulkan driver (lavapipe), both modes put the square within half
-a pixel of where it belongs. Performance mode misses on a single large jump,
-which is its coarser motion estimate.
+a pixel of halfway.

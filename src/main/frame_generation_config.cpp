@@ -1,9 +1,6 @@
 // Frame Generation on the Graphics tab (round 177): RT64's own interpolation, or
 // Lossless Scaling's frame generation from the player's Lossless.dll (lib/lsfg).
 //
-// Adaptive (round 178, the default) makes one frame per display refresh, each
-// for the moment it's shown; 2x/3x/4x a fixed multiple of the game's rate.
-//
 // Lossless Scaling needs Vulkan, and makes frames between the game's own, so
 // choosing it also picks the Vulkan graphics API (from the next start) and the
 // Original frame rate (RT64 then makes no frames of its own). Load
@@ -51,14 +48,14 @@ namespace {
 
     struct State {
         Mode mode = Mode::RT64;
-        uint32_t multiplier = 0; // 0: adaptive
+        uint32_t multiplier = 2;
         Quality quality = Quality::Quality;
     } state;
 
     void apply() {
         RT64::FrameGenerationSettings settings;
         settings.enabled = (state.mode == Mode::LosslessScaling);
-        settings.generatedFrames = (state.multiplier == 0) ? 0 : (state.multiplier - 1);
+        settings.generatedFrames = state.multiplier - 1;
         settings.performance = (state.quality == Quality::Performance);
         std::error_code ec;
         if (std::filesystem::exists(dll_path(), ec)) {
@@ -116,14 +113,11 @@ void btga::config::add_frame_generation_options(recomp::config::Config& graphics
     );
     graphics.add_enum_option(
         multiplier_id,
-        "Lossless Scaling Frame Rate",
-        "<b>Adaptive</b> shows one frame for each refresh of your display, each made for the moment "
-        "it's shown: smooth at any refresh rate, without G-Sync or FreeSync. "
-        "<b>2x</b>, <b>3x</b> and <b>4x</b> show that many times the game's frame rate (at 30 fps: "
-        "60, 90 and 120); they're smoothest when your display's refresh rate is a multiple of that, "
-        "or with G-Sync or FreeSync.",
-        { {0u, "Adaptive", "Adaptive"}, {2u, "2x", "2x"}, {3u, "3x", "3x"}, {4u, "4x", "4x"} },
-        0u
+        "Lossless Scaling Multiplier",
+        "How many times the game's frame rate Lossless Scaling shows: at 30 fps, <b>2x</b> is 60, "
+        "<b>3x</b> 90 and <b>4x</b> 120.",
+        { {2u, "2x", "2x"}, {3u, "3x", "3x"}, {4u, "4x", "4x"} },
+        2u
     );
     graphics.add_enum_option(
         quality_id,

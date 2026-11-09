@@ -178,25 +178,13 @@ namespace lsfg {
     }
 
     bool FrameGenerator::record_generate(VkCommandBuffer cmd) {
-        std::vector<float> timestamps(impl->settings.generated_frames);
-        for (uint32_t i = 0; i < impl->settings.generated_frames; i++) {
-            timestamps[i] = float(i + 1) / float(impl->settings.generated_frames + 1);
-        }
-        return record_generate(cmd, timestamps);
-    }
-
-    bool FrameGenerator::record_generate(VkCommandBuffer cmd, const std::vector<float>& timestamps) {
         const bool has_previous = impl->frame_count() > 0;
-        const size_t count = std::min<size_t>(timestamps.size(), impl->settings.generated_frames);
-        for (size_t i = 0; i < count; i++) {
-            impl->vk.resources.setPassTimestamp(impl->vk.device, i, std::clamp(timestamps[i], 0.0f, 1.0f));
-        }
         const LSFG::Core::CommandBuffer buffer(cmd);
         if (impl->context) {
-            impl->context->record(buffer, count);
+            impl->context->record(buffer, impl->settings.generated_frames);
         }
         else {
-            impl->performance_context->record(buffer, count);
+            impl->performance_context->record(buffer, impl->settings.generated_frames);
         }
         return has_previous;
     }

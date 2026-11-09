@@ -1,5 +1,3 @@
-#include <volk.h>
-
 #include "pool/resourcepool.hpp"
 #include "core/buffer.hpp"
 #include "core/device.hpp"
@@ -8,9 +6,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
-#include <cstring>
 
 using namespace LSFG;
 using namespace LSFG::Pool;
@@ -53,47 +49,6 @@ Core::Buffer ResourcePool::getBuffer(
     Core::Buffer buffer(device, data, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     buffers[hash] = buffer;
     return buffer;
-}
-
-Core::Buffer ResourcePool::getPassBuffer(
-            const Core::Device& device, size_t pass,
-            float timestamp, bool firstIter, bool firstIterS) {
-    const uint64_t key = (static_cast<uint64_t>(pass) << 2) |
-        (static_cast<uint64_t>(firstIter) << 0) | (static_cast<uint64_t>(firstIterS) << 1);
-    auto it = passBuffers.find(key);
-    if (it != passBuffers.end())
-        return it->second;
-
-    const ConstantBuffer data{
-        .inputOffset = { 0, 0 },
-        // firstIter and firstIterS stay 0, as lsfg-vk's getBuffer() leaves them.
-        .advancedColorKind = this->isHdr ? 2U : 0U,
-        .hdrSupport = this->isHdr,
-        .resolutionInvScale = this->flowScale,
-        .timestamp = timestamp,
-        .uiThreshold = 0.5F,
-    };
-    Core::Buffer buffer(device, data, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-    passBuffers[key] = buffer;
-    passTimestamps[pass] = timestamp;
-    return buffer;
-}
-
-void ResourcePool::setPassTimestamp(const Core::Device& device, size_t pass, float timestamp) {
-    auto current = passTimestamps.find(pass);
-    if (current == passTimestamps.end() || current->second == timestamp)
-        return;
-    current->second = timestamp;
-    for (uint64_t flags = 0; flags < 4; flags++) {
-        auto it = passBuffers.find((static_cast<uint64_t>(pass) << 2) | flags);
-        if (it == passBuffers.end())
-            continue;
-        void* mapped = nullptr;
-        if (vkMapMemory(device.handle(), it->second.getMemory(), 0, VK_WHOLE_SIZE, 0, &mapped) != VK_SUCCESS)
-            continue;
-        std::memcpy(static_cast<uint8_t*>(mapped) + offsetof(ConstantBuffer, timestamp), &timestamp, sizeof(float));
-        vkUnmapMemory(device.handle(), it->second.getMemory());
-    }
 }
 
 Core::Sampler ResourcePool::getSampler(
