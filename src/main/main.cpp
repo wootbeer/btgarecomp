@@ -452,6 +452,7 @@ int main(int argc, char** argv) {
     for (const auto& game : supported_games) {
         recomp::register_game(game);
     }
+    btga::register_sound_packs();
 
     recompinput::players::set_single_player_mode(true);
 

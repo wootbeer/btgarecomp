@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 184)
+## Overview (as of round 185)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,62 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 185: sound packs
+
+**Request:** custom sound packs, like texture packs, so players can use
+whatever effects they want; the BattleTanx 1 option stays. Music is out of
+scope (players can play their own).
+
+**Format** (`src/main/sound_packs.cpp`, its header comment is the spec):
+- A .zip in the mods folder (no mod.json needed; named after the file), or a
+  folder with a mod.json like any mod, holding `btga_audio.json` (marks it as
+  a sound pack) and `sfx/BANK_00_INSTR_xxxx.wav/.ogg/.mp3`, N64SoundListTool's
+  names (xxxx = the effect's index in the sound table, hex, 0000-004B).
+- Packs are a mod content type (`btga_audio.json`) with a "zip" container,
+  so they're listed in the Mods tab with on/off toggles. They apply when the
+  game starts (after the BT1 option, before the game reads its sound table);
+  where two replace one effect, the one higher in the list wins.
+- `btga_audio.json` overrides, all optional: `semitones` (fractions too),
+  `volume`, `loop_start`/`loop_end` (file samples).
+
+**Speed:** N64SoundListTool writes all of this game's effects at 22,050 Hz
+(read from its source: the PtrTablesV2 bank reader sets 22050 and its game
+list has no override for this game; it also labels BT1's 44.1 kHz samples
+22,050). So a file plays relative to that: at 22,050 Hz, at the original's
+speed. Files are resampled (windowed sinc) to that, so none plays faster
+than the original did (the mixer's 2.0 limit), and the base note is the
+original's (a BT1 shift on that effect is undone).
+
+**Samples:** the game's sample player only decodes VADPCM (n_alAdpcmPull has
+no raw 16-bit path), so each sound is encoded: `src/main/vadpcm.cpp` has the
+encoder and decoder (moved from bt1_sounds.cpp) and a codebook designer (4
+second-order predictors, generalized Lloyd from one least-squares predictor).
+Re-encoding every effect resampled 3%, its codebooks score 28.1 dB against
+the game's own 28.2 dB (Nintendo's tool).
+
+**Loops:** only effects that loop in the game can loop (the bank has no room
+for new loop structures). The loop is the manifest's, else the WAV's smpl
+chunk or the Ogg's LOOPSTART/LOOPEND/LOOPLENGTH tags, else the whole file,
+rounded to 16-sample frames. The loop state is the decoded frame holding
+the loop start: checked on the game's looping effects (ga15, 37, 42, 75 match
+exactly).
+
+**Decoders:** WAV (8/16/24/32-bit PCM, 32-bit float, any channels, mixed to
+mono), Ogg Vorbis (stb_vorbis from RT64's contrib, `src/main/stb_vorbis.cpp`),
+MP3 (dr_mp3 0.7.2, `lib/dr_libs`, public domain / MIT-0).
+
+**Tested** (sandbox): a zip of 76 tones and a folder pack of every format
+(u8 11,025 Hz WAV with a manifest loop, 24-bit stereo 32 kHz WAV, float WAV,
+48 kHz MP3 with semitones 3.5 and volume 0.5, 44.1 kHz Ogg with loop tags,
+and a broken file). Both load; the folder pack, higher in the list, wins its
+five effects and reports the broken file. Decoded, each comes out at the
+expected pitch exactly (e.g. 700 Hz + 3.5 semitones = 856.9 Hz) at 29-36 dB,
+with the expected loop points. In the menus and Tank Wars, the game reads
+sample data from past the 8 MB ROM, where the packs' sounds are.
+
+For the Android update: the new sources are picked up by the glob; it needs
+`lib/dr_libs` on the include path.
 
 ## 2026-11-09, round 184: Lossless Scaling frames paced by display refreshes
 

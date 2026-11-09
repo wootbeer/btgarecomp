@@ -53,6 +53,13 @@ namespace btga {
     // The game entry's on_init_callback (src/main/bt1_sounds.cpp): swaps in
     // the first game's sound effects when that option is on.
     void apply_bt1_sounds(uint8_t* rdram, recomp_context* context);
+    // How many semitones apply_bt1_sounds() raised effect `effect`'s base note (0 if
+    // it didn't replace it), so a sound pack replacing it can undo that.
+    int bt1_sounds_semitones(uint32_t effect);
+
+    // Sound packs (src/main/sound_packs.cpp): registers them as a mod content
+    // type. Call before the mods folder is scanned.
+    void register_sound_packs();
 
     // Graphics tab options read by the game's hooks (src/game/view_distance.cpp).
     void set_fog_enabled(bool enabled);

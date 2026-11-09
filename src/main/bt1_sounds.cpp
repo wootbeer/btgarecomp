@@ -49,6 +49,7 @@
 #include "recompui/config.h"
 #include "recompui/recompui.h"
 #include "util/file.h"
+#include "vadpcm.h"
 
 namespace {
     const std::string option_id = "bt1_sound_effects";
@@ -102,6 +103,9 @@ namespace {
         { 40, 37, 18, 292 }, // this game's starts 4,672 samples (0.1 s) into the first game's
         { 14, 23, 12 },
     };
+
+    // What apply_bt1_sounds() added to each effect's base note.
+    int8_t applied_semitones[ga_samples] = {};
 
     // The saved file: magic, then the bank and the sample data.
     constexpr char magic[8] = { 'B', 'T', 'X', 'S', 'F', 'X', '1', 0 };
@@ -213,90 +217,6 @@ namespace {
         const uint8_t* loop; // start, end, count, state; nullptr if it doesn't loop
     };
 
-    // VADPCM with an order 2, 4 predictor book (both games'), as the audio
-    // microcode decodes it: 9-byte frames of 16 samples, a header byte (scale
-    // shift, predictor) and 4-bit residuals, predicted in halves of 8.
-    struct AdpcmBook {
-        int32_t c[4][2][8];
-    };
-
-    AdpcmBook read_book(const uint8_t* book) {
-        AdpcmBook b;
-        for (int p = 0; p < 4; p++) {
-            for (int o = 0; o < 2; o++) {
-                for (int i = 0; i < 8; i++) {
-                    b.c[p][o][i] = (int16_t)read_be16(book + 8 + ((p * 2 + o) * 8 + i) * 2);
-                }
-            }
-        }
-        return b;
-    }
-
-    // One half frame from 8 residuals (already scaled); prev = the two samples before.
-    void adpcm_half(const AdpcmBook& b, int p, const int32_t r[8], int32_t prev0, int32_t prev1, int32_t out[8]) {
-        for (int i = 0; i < 8; i++) {
-            int64_t t = (int64_t)b.c[p][0][i] * prev0 + (int64_t)b.c[p][1][i] * prev1;
-            for (int k = 0; k < i; k++) {
-                t += (int64_t)b.c[p][1][i - 1 - k] * r[k];
-            }
-            out[i] = std::clamp<int32_t>((int32_t)(t >> 11) + r[i], -32768, 32767);
-        }
-    }
-
-    // hist: the last two samples (in, then out).
-    void adpcm_decode_frame(const AdpcmBook& b, const uint8_t* f, int32_t hist[2], int32_t out[16]) {
-        const int scale = f[0] >> 4, p = std::min(f[0] & 0xF, 3);
-        for (int half = 0; half < 2; half++) {
-            int32_t r[8];
-            for (int i = 0; i < 8; i++) {
-                int n = (f[1 + half * 4 + i / 2] >> ((i & 1) ? 0 : 4)) & 0xF;
-                r[i] = (n >= 8 ? n - 16 : n) << scale;
-            }
-            adpcm_half(b, p, r, hist[0], hist[1], out + half * 8);
-            hist[0] = out[half * 8 + 6];
-            hist[1] = out[half * 8 + 7];
-        }
-    }
-
-    // The frame (predictor and scale with the least error) closest to target.
-    void adpcm_encode_frame(const AdpcmBook& b, const int32_t target[16], int32_t hist[2], uint8_t f[9]) {
-        int64_t best_err = INT64_MAX;
-        for (int p = 0; p < 4; p++) {
-            for (int scale = 0; scale <= 12; scale++) {
-                int32_t h[2] = { hist[0], hist[1] }, out[16];
-                int nib[16];
-                int64_t err = 0;
-                for (int half = 0; half < 2; half++) {
-                    int32_t r[8] = {};
-                    for (int i = 0; i < 8; i++) {
-                        // The prediction for sample i, given the residuals so far.
-                        int32_t trial[8];
-                        r[i] = 0;
-                        adpcm_half(b, p, r, h[0], h[1], trial);
-                        const double want = double(target[half * 8 + i] - trial[i]) / double(1 << scale);
-                        nib[half * 8 + i] = std::clamp((int)std::lround(want), -8, 7);
-                        r[i] = nib[half * 8 + i] << scale;
-                    }
-                    adpcm_half(b, p, r, h[0], h[1], out + half * 8);
-                    h[0] = out[half * 8 + 6];
-                    h[1] = out[half * 8 + 7];
-                }
-                for (int i = 0; i < 16; i++) {
-                    err += (int64_t)(out[i] - target[i]) * (out[i] - target[i]);
-                }
-                if (err < best_err) {
-                    best_err = err;
-                    f[0] = (uint8_t)(scale << 4 | p);
-                    for (int i = 0; i < 8; i++) {
-                        f[1 + i] = (uint8_t)((nib[2 * i] & 0xF) << 4 | (nib[2 * i + 1] & 0xF));
-                    }
-                }
-            }
-        }
-        int32_t out[16];
-        adpcm_decode_frame(b, f, hist, out);
-    }
-
     // A sample that starts skip_frames into the first game's: those frames
     // are decoded with their history, faded in over fade_frames (raised
     // cosine) and encoded again from silence. Cut in as is, it would start
@@ -305,14 +225,14 @@ namespace {
     // the decoder's history matches and the rest plays as before.
     constexpr uint32_t fade_frames = 8; // 128 samples, 2.9 ms at 44.1 kHz
     void fade_in(uint8_t* sample, uint32_t skip_frames, const uint8_t* book_data) {
-        const AdpcmBook b = read_book(book_data);
+        const btga::vadpcm::Book b = btga::vadpcm::read_book(book_data);
         int32_t hist[2] = { 0, 0 }, pcm[16];
         for (uint32_t f = 0; f < skip_frames; f++) {
-            adpcm_decode_frame(b, sample + f * 9, hist, pcm);
+            btga::vadpcm::decode_frame(b, sample + f * 9, hist, pcm);
         }
         int32_t faded[fade_frames][16];
         for (uint32_t f = 0; f < fade_frames; f++) {
-            adpcm_decode_frame(b, sample + (skip_frames + f) * 9, hist, pcm);
+            btga::vadpcm::decode_frame(b, sample + (skip_frames + f) * 9, hist, pcm);
             for (int i = 0; i < 16; i++) {
                 const double x = std::min(1.0, double(f * 16 + i + 1) / double(fade_frames * 16));
                 faded[f][i] = (int32_t)std::lround(pcm[i] * (0.5 - 0.5 * std::cos(3.14159265358979 * x)));
@@ -320,7 +240,7 @@ namespace {
         }
         int32_t enc_hist[2] = { 0, 0 };
         for (uint32_t f = 0; f < fade_frames; f++) {
-            adpcm_encode_frame(b, faded[f], enc_hist, sample + (skip_frames + f) * 9);
+            btga::vadpcm::encode_frame(b, faded[f], enc_hist, sample + (skip_frames + f) * 9);
         }
     }
 
@@ -435,6 +355,11 @@ void btga::apply_bt1_sounds(uint8_t* rdram, recomp_context*) {
             std::memcpy(bank + loop, bt.loop, 12 + 32);
         }
         bank[basenotes + r.ga] = (uint8_t)((int8_t)bank[basenotes + r.ga] + r.semitones);
+        applied_semitones[r.ga] = r.semitones;
     }
     recomp::set_rom_contents(std::move(rom));
+}
+
+int btga::bt1_sounds_semitones(uint32_t effect) {
+    return (effect < ga_samples) ? applied_semitones[effect] : 0;
 }
