@@ -21,7 +21,10 @@
 namespace RT64 {
     struct FrameGenerationSettings {
         bool enabled = false;
-        // Frames made between two real ones: 1 doubles the frame rate.
+        // Frames made between two real ones: 1 doubles the frame rate. 0 is
+        // adaptive: as many as the display's refresh rate shows, each made
+        // for the moment its refresh shows it (smooth without variable
+        // refresh, at any refresh rate).
         uint32_t generatedFrames = 1;
         // Lossless Scaling's performance mode.
         bool performance = false;
@@ -51,17 +54,16 @@ namespace RT64 {
         RenderFramebuffer *sourceFramebuffer() const;
         RenderTexture *sourceTexture() const;
 
-        // Records taking the game frame in (sourceTexture() in COPY_SOURCE)
-        // and generating; the number of generated frames to show (0 for the
-        // first frame).
-        uint32_t record(RenderCommandList *commandList);
+        // Plans the frames to show for the game frame just drawn into
+        // sourceTexture() (now in COPY_SOURCE), from the display's refresh
+        // rate (0 if unknown) and the game's frame timing, and records taking
+        // it in and generating them. Returns how many frames to present, in
+        // order, and the time to leave between them (0: back to back).
+        uint32_t record(RenderCommandList *commandList, uint32_t refreshRate, std::chrono::nanoseconds &spacing);
 
-        // Records copying generated frame `index` to dst (COPY_DEST, swap chain size).
-        void recordOutput(RenderCommandList *commandList, uint32_t index, RenderTexture *dst);
-
-        // Time between generated frames: the game frame interval measured so
-        // far, divided by the frames shown per game frame. Call once per game frame.
-        std::chrono::nanoseconds markGameFrame(uint32_t framesShown);
+        // Records copying frame `index` of the plan, a generated frame or the
+        // game frame itself, to dst (COPY_DEST, the swap chain's size and format).
+        void recordFrame(RenderCommandList *commandList, uint32_t index, RenderTexture *dst);
 
         // Drops the generator (the GPU must be idle).
         void release();

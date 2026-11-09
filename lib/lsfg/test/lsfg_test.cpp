@@ -3,8 +3,10 @@
 //   lsfg_test <Lossless.dll> [cache file] [performance]
 //
 // Five 256x128 frames go in with a white square moving 40 pixels a frame
-// (x 20, 60, 100...); each frame generated between two should have it about
-// halfway. Prints where it is and exits 0 if each is within 12 pixels.
+// (x 20, 60, 100...); frames are generated between each two at points in
+// time that change per frame (1/4, 1/2 and 3/4, then 0.2 and 0.6), and each
+// should have the square that far along. Prints where it is and exits 0 if
+// each is within 6 pixels.
 #include <volk.h>
 
 #include "lsfg/lsfg.hpp"
@@ -211,8 +213,11 @@ int main(int argc, char** argv) {
     auto t1 = std::chrono::steady_clock::now();
     printf("shaders: %zu in %.2f s\n", shaders.size(), std::chrono::duration<double>(t1 - t0).count());
 
+    // Up to three generated frames, at points in time that change per frame
+    // (as pacing to a display's refresh does): odd frames at 1/4, 1/2, 3/4,
+    // even ones at 0.2 and 0.6.
     lsfg::Settings settings;
-    settings.generated_frames = 1;
+    settings.generated_frames = getenv("LSFG_TEST_PASSES") ? uint32_t(atoi(getenv("LSFG_TEST_PASSES"))) : 3;
     settings.performance = argc > 3 && std::string(argv[3]) == "performance";
     auto generator = lsfg::FrameGenerator::create(physical, device, shaders, settings, { W, H }, error);
     if (!generator) {
@@ -223,13 +228,13 @@ int main(int argc, char** argv) {
     printf("generator (%s): %.2f s\n", settings.performance ? "performance" : "quality",
         std::chrono::duration<double>(t2 - t1).count());
 
-    Buffer staging = make_buffer(W * H * 4);
+    Buffer staging = make_buffer(W * H * 4 * 3);
     Image frame = make_image();
     Image out = make_image();
     const uint32_t positions[] = { 20, 60, 100, 140, 180 };
     bool all_ok = true;
     for (int f = 0; f < 5; f++) {
-        double found = -1;
+        const std::vector<float> timestamps = (f % 2) ? std::vector<float>{ 0.25f, 0.5f, 0.75f } : std::vector<float>{ 0.2f, 0.6f };
         draw(static_cast<uint8_t*>(staging.data), positions[f]);
         VkCommandBuffer cmd = begin();
         layout(cmd, frame.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -239,31 +244,39 @@ int main(int argc, char** argv) {
         vkCmdCopyBufferToImage(cmd, staging.buffer, frame.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
         layout(cmd, frame.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         generator->record_input(cmd, frame.image, { W, H });
-        const bool generated = generator->record_generate(cmd);
+        const bool generated = generator->record_generate(cmd, timestamps);
         if (generated) {
-            layout(cmd, out.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            generator->record_output(cmd, 0, out.image, { 0, 0 }, { W, H });
-            layout(cmd, out.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-            vkCmdCopyImageToBuffer(cmd, out.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.buffer, 1, &region);
+            for (uint32_t i = 0; i < timestamps.size(); i++) {
+                layout(cmd, out.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                generator->record_output(cmd, i, out.image, { 0, 0 }, { W, H });
+                layout(cmd, out.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                VkBufferImageCopy readback = region;
+                readback.bufferOffset = VkDeviceSize(i) * W * H * 4;
+                vkCmdCopyImageToBuffer(cmd, out.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.buffer, 1, &readback);
+            }
         }
         auto s = std::chrono::steady_clock::now();
         submit(cmd);
         printf("frame %d: generated %d, %.1f ms\n", f, generated,
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - s).count());
         if (generated) {
-            found = find(static_cast<const uint8_t*>(staging.data));
-            const double expected = (positions[f - 1] + positions[f]) / 2.0 + SQUARE / 2.0 - 0.5;
-            printf("  square middle: generated %.1f, expected about %.1f\n", found, expected);
-            all_ok = all_ok && found > expected - 12 && found < expected + 12;
-            if (const char* dump = getenv("LSFG_TEST_DUMP")) { // the generated frame, as a PPM
-                FILE* file = fopen(dump, "wb");
-                fprintf(file, "P6 %u %u 255\n", W, H);
-                const uint8_t* p = static_cast<const uint8_t*>(staging.data);
-                for (uint32_t i = 0; i < W * H; i++) {
-                    const uint8_t rgb[3] = { p[i * 4 + 2], p[i * 4 + 1], p[i * 4 + 0] };
-                    fwrite(rgb, 1, 3, file);
+            for (uint32_t i = 0; i < timestamps.size(); i++) {
+                const uint8_t* pixels = static_cast<const uint8_t*>(staging.data) + size_t(i) * W * H * 4;
+                const double found = find(pixels);
+                const double expected = positions[f - 1] + (double(positions[f]) - positions[f - 1]) * timestamps[i] + SQUARE / 2.0 - 0.5;
+                printf("  at %.2f: square middle %.1f, expected about %.1f\n", timestamps[i], found, expected);
+                all_ok = all_ok && found > expected - 6 && found < expected + 6;
+                if (const char* dump = getenv("LSFG_TEST_DUMP")) { // the frame at 1/2, as a PPM
+                    if (timestamps[i] == 0.5f) {
+                        FILE* file = fopen(dump, "wb");
+                        fprintf(file, "P6 %u %u 255\n", W, H);
+                        for (uint32_t p = 0; p < W * H; p++) {
+                            const uint8_t rgb[3] = { pixels[p * 4 + 2], pixels[p * 4 + 1], pixels[p * 4 + 0] };
+                            fwrite(rgb, 1, 3, file);
+                        }
+                        fclose(file);
+                    }
                 }
-                fclose(file);
             }
         }
     }

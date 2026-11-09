@@ -52,6 +52,8 @@ namespace LSFG::Core {
         [[nodiscard]] auto handle() const { return *this->buffer; }
         /// Get the size of the buffer.
         [[nodiscard]] size_t getSize() const { return this->size; }
+        /// Get the buffer's memory (host visible and coherent).
+        [[nodiscard]] VkDeviceMemory getMemory() const { return *this->memory; }
 
         /// Trivially copyable, moveable and destructible
         Buffer(const Buffer&) noexcept = default;

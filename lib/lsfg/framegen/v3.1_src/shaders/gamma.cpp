@@ -71,7 +71,7 @@ Gamma::Gamma(Vulkan& vk, std::array<std::array<Core::Image, 4>, 3> inImgs1,
     // hook up shaders
     for (size_t pass_idx = 0; pass_idx < vk.generationCount; pass_idx++) {
         auto& pass = this->passes.emplace_back();
-        pass.buffer = vk.resources.getBuffer(vk.device,
+        pass.buffer = vk.resources.getPassBuffer(vk.device, pass_idx,
             static_cast<float>(pass_idx + 1) / static_cast<float>(vk.generationCount + 1),
             !this->optImg.has_value());
         for (size_t i = 0; i < 3; i++) {

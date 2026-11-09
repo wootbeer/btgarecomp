@@ -37,7 +37,8 @@ void Buffer::construct(const Core::Device& device, const void* data, VkBufferUsa
     std::optional<uint32_t> memType{};
     for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
         if ((memReqs.memoryTypeBits & (1 << i)) && // NOLINTBEGIN
-            (memProps.memoryTypes[i].propertyFlags &
+            ((memProps.memoryTypes[i].propertyFlags &
+                (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) ==
                 (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
             memType.emplace(i);
             break;

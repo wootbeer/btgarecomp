@@ -53,6 +53,22 @@ namespace LSFG::Pool {
         ///
         /// @throws LSFG::vulkan_error if the sampler cannot be created.
         ///
+        ///
+        /// Get the constant buffer of generation pass `pass` (BattleTanx GA
+        /// port: one per pass and flags, not shared by timestamp, so that
+        /// setPassTimestamp() can move a pass to another point in time).
+        ///
+        Core::Buffer getPassBuffer(
+            const Core::Device& device, size_t pass,
+            float timestamp, bool firstIter = false, bool firstIterS = false);
+
+        ///
+        /// Set the point in time generation pass `pass` makes a frame for
+        /// (0 is the previous frame, 1 the next). The GPU must be done with
+        /// the pass's last frame.
+        ///
+        void setPassTimestamp(const Core::Device& device, size_t pass, float timestamp);
+
         Core::Sampler getSampler(
             const Core::Device& device,
             VkSamplerAddressMode type = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
@@ -62,6 +78,8 @@ namespace LSFG::Pool {
     private:
         std::unordered_map<uint64_t, Core::Buffer> buffers;
         std::unordered_map<uint64_t, Core::Sampler> samplers;
+        std::unordered_map<uint64_t, Core::Buffer> passBuffers; // by pass << 2 | flags
+        std::unordered_map<size_t, float> passTimestamps;
         bool isHdr{};
         float flowScale{};
     };

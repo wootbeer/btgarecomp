@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <mutex>
+#include <vector>
 
 #if !defined(__APPLE__)
 #   include "plume_vulkan.h"
@@ -65,7 +66,21 @@ namespace RT64 {
         // Game frame timing, for spacing the generated frames.
         std::chrono::steady_clock::time_point lastGameFrame;
         double intervalNs = 0.0;
+
+        // This game frame's frames: generated frame i, or -1 for the game frame.
+        std::vector<int> plan;
+        // Adaptive: where the next refresh falls, in game frames from the last one.
+        double adaptivePosition = 0.0;
     };
+
+    namespace {
+        // Adaptive: the most frames made per game frame (refresh rate / game
+        // frame rate; 9 covers 144 Hz down to 16 fps).
+        constexpr uint32_t kAdaptiveMaxFrames = 9;
+        // Adaptive: a refresh this close to the game frame shows the game frame
+        // itself instead of a generated one, in game frames.
+        constexpr double kGameFrameMargin = 0.05;
+    }
 
     FrameGeneration::FrameGeneration() : impl(std::make_unique<Impl>()) {}
 
@@ -158,7 +173,7 @@ namespace RT64 {
 
         if (impl->generator == nullptr) {
             lsfg::Settings settings;
-            settings.generated_frames = std::clamp(impl->settings.generatedFrames, 1U, 7U);
+            settings.generated_frames = (impl->settings.generatedFrames == 0) ? kAdaptiveMaxFrames : std::clamp(impl->settings.generatedFrames, 1U, 7U);
             settings.performance = impl->settings.performance;
             settings.flow_scale = lsfg::default_flow_scale(height);
             std::string error;
@@ -171,6 +186,7 @@ namespace RT64 {
 
             impl->lastGameFrame = {};
             impl->intervalNs = 0.0;
+            impl->adaptivePosition = 0.0;
         }
 
         setStatus(std::string());
@@ -191,43 +207,98 @@ namespace RT64 {
         return impl->source.get();
     }
 
-    uint32_t FrameGeneration::record(RenderCommandList *commandList) {
-#   ifdef RT64_FRAME_GENERATION
-        VkCommandBuffer cmd = static_cast<VulkanCommandList *>(commandList)->vk;
-        VkImage sourceImage = static_cast<VulkanTexture *>(impl->source.get())->vk;
-        impl->generator->record_input(cmd, sourceImage, { impl->width, impl->height });
-        return impl->generator->record_generate(cmd) ? impl->generator->settings().generated_frames : 0;
-#   else
-        (void)(commandList);
-        return 0;
-#   endif
-    }
+    uint32_t FrameGeneration::record(RenderCommandList *commandList, uint32_t refreshRate, std::chrono::nanoseconds &spacing) {
+        spacing = std::chrono::nanoseconds(0);
+        impl->plan.clear();
 
-    void FrameGeneration::recordOutput(RenderCommandList *commandList, uint32_t index, RenderTexture *dst) {
-#   ifdef RT64_FRAME_GENERATION
-        VkCommandBuffer cmd = static_cast<VulkanCommandList *>(commandList)->vk;
-        VkImage dstImage = static_cast<VulkanTexture *>(dst)->vk;
-        impl->generator->record_output(cmd, index, dstImage, { 0, 0 }, { impl->width, impl->height });
-#   else
-        (void)(commandList); (void)(index); (void)(dst);
-#   endif
-    }
-
-    std::chrono::nanoseconds FrameGeneration::markGameFrame(uint32_t framesShown) {
+        // The game's frame interval, averaged. Past 250 ms it's a hitch or a pause, not the frame rate.
         const auto now = std::chrono::steady_clock::now();
         if (impl->lastGameFrame != std::chrono::steady_clock::time_point()) {
             const double interval = double(std::chrono::duration_cast<std::chrono::nanoseconds>(now - impl->lastGameFrame).count());
-            // Past 250 ms it's a hitch or a pause, not the frame rate.
             if (interval < 250'000'000.0) {
                 impl->intervalNs = (impl->intervalNs > 0.0) ? (impl->intervalNs * 0.75 + interval * 0.25) : interval;
             }
         }
 
         impl->lastGameFrame = now;
-        if ((impl->intervalNs <= 0.0) || (framesShown == 0)) {
-            return std::chrono::nanoseconds(0);
+
+#   ifdef RT64_FRAME_GENERATION
+        // The points in time between the last game frame (0) and this one (1) to make frames for.
+        std::vector<float> timestamps;
+        bool showGameFrame = true;
+        const double refreshNs = (refreshRate > 0) ? (1'000'000'000.0 / double(refreshRate)) : 0.0;
+        const bool adaptive = (impl->settings.generatedFrames == 0) && (refreshNs > 0.0) && (impl->intervalNs > 0.0);
+        if (adaptive) {
+            // One frame per refresh: each made for the moment its refresh shows it, with the game frame
+            // itself when a refresh falls on it. Over time that's exactly the refresh rate.
+            const double step = refreshNs / impl->intervalNs;
+            double &position = impl->adaptivePosition;
+            if (position <= 0.0) {
+                position = step;
+            }
+
+            while ((position < (1.0 - kGameFrameMargin)) && (timestamps.size() < kAdaptiveMaxFrames)) {
+                timestamps.push_back(float(position));
+                position += step;
+            }
+
+            showGameFrame = (position <= (1.0 + kGameFrameMargin));
+            if (showGameFrame) {
+                position += step;
+            }
+
+            position = std::max(position - 1.0, 0.0);
+            spacing = std::chrono::nanoseconds(int64_t(refreshNs));
+        }
+        else {
+            // A fixed number of frames, evenly spaced over the game frame.
+            const uint32_t count = (impl->settings.generatedFrames == 0) ? 1 : impl->generator->settings().generated_frames;
+            for (uint32_t i = 0; i < count; i++) {
+                timestamps.push_back(float(i + 1) / float(count + 1));
+            }
+
+            if (impl->intervalNs > 0.0) {
+                spacing = std::chrono::nanoseconds(int64_t(impl->intervalNs / double(count + 1)));
+            }
         }
 
-        return std::chrono::nanoseconds(int64_t(impl->intervalNs / double(framesShown)));
+        VkCommandBuffer cmd = static_cast<VulkanCommandList *>(commandList)->vk;
+        VkImage sourceImage = static_cast<VulkanTexture *>(impl->source.get())->vk;
+        impl->generator->record_input(cmd, sourceImage, { impl->width, impl->height });
+        const bool generated = impl->generator->record_generate(cmd, timestamps);
+        if (generated) {
+            for (uint32_t i = 0; i < timestamps.size(); i++) {
+                impl->plan.push_back(int(i));
+            }
+        }
+
+        // The first frame after the generator is made has nothing before it: only the game frame.
+        if (showGameFrame || impl->plan.empty()) {
+            impl->plan.push_back(-1);
+        }
+
+        if (!generated) {
+            spacing = std::chrono::nanoseconds(0);
+        }
+
+        return uint32_t(impl->plan.size());
+#   else
+        (void)(commandList); (void)(refreshRate);
+        impl->plan.push_back(-1);
+        return 1;
+#   endif
+    }
+
+    void FrameGeneration::recordFrame(RenderCommandList *commandList, uint32_t index, RenderTexture *dst) {
+        if ((index >= impl->plan.size()) || (impl->plan[index] < 0)) {
+            commandList->copyTexture(dst, impl->source.get());
+            return;
+        }
+
+#   ifdef RT64_FRAME_GENERATION
+        VkCommandBuffer cmd = static_cast<VulkanCommandList *>(commandList)->vk;
+        VkImage dstImage = static_cast<VulkanTexture *>(dst)->vk;
+        impl->generator->record_output(cmd, uint32_t(impl->plan[index]), dstImage, { 0, 0 }, { impl->width, impl->height });
+#   endif
     }
 };

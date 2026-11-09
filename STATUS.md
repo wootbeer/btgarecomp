@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 177)
+## Overview (as of round 178)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,63 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 178: Lossless Scaling Adaptive frame rate
+
+**Report** (round 177, Windows):
+- It builds and runs; 2x and 3x look great. 4x jitters and smears on a
+  144 Hz display without FreeSync.
+- Fixes on the way here:
+  - `.gitignore`'s `[Ll]og/` had kept `lib/lsfg/dxbc/util/log/` out; it's
+    excepted now.
+  - MSVC's library doesn't bring in `<array>` and others through other
+    headers as libstdc++ does, so `lib/lsfg/std_includes.h` is force-included
+    into the lsfg targets.
+  - The Load buttons' messages (`recompui::message_box`, a system box with no
+    parent) could open behind the game. They're the frontend's info prompt
+    now, as is Load BattleTanx ROM's.
+
+**Why 4x jitters:** on a fixed 144 Hz refresh, 120 fps can only change on a
+refresh. Four frames in five stay up for one refresh and the fifth for two:
+a hitch 24 times a second. The smearing at 4x is normal: three guesses between
+each pair of real frames.
+
+**Adaptive** (the new default for the setting, renamed Lossless Scaling Frame
+Rate: Adaptive / 2x / 3x / 4x): one frame per display refresh, each made for
+the moment its refresh shows it.
+- `lib/lsfg`:
+  - Each generation pass has its own constant buffers
+    (`ResourcePool::getPassBuffer`), with a timestamp that can be rewritten
+    per frame (`setPassTimestamp`). They were shared by timestamp.
+    `firstIter`/`firstIterS` stay 0 in them, as lsfg-vk's `getBuffer` leaves
+    them.
+  - `Buffer` memory must now be host visible and coherent; it took either.
+  - `record_generate(cmd, timestamps)` makes frames at any points in time.
+  - `lsfg_test` checks frames at 1/4, 1/2, 3/4, then 0.2 and 0.6, with 3 or
+    9 passes. Both modes are within half a pixel, apart from performance
+    mode's large-jump miss.
+- RT64 side (`rt64_frame_generation.cpp`):
+  - `record()` plans each game frame's frames from the refresh rate
+    (`swapChainRate`, which RT64 reads from the monitor at start) and the
+    averaged game frame interval. A running position steps one refresh at
+    a time, in game frames. Each step before the game frame is a generated
+    frame at that point; one within 0.05 of it shows the game frame itself.
+  - At most 9 frames per game frame: 144 Hz down to 16 fps.
+  - Frames are spaced one refresh apart.
+  - Simulated: 144 Hz/30 fps averages 4.80 frames per game frame (4 or 5,
+    evenly spaced across game frames); 60/20 gives 3.00, 144/20 7.20, and
+    120/30 4.00.
+  - 2x/3x/4x as before.
+  - `recordFrame()` copies a planned frame, generated or the game frame.
+    The present patch (0022) uses these.
+- Checked in the sandbox (lavapipe, refresh forced, frame generation started
+  once the game reached its intro so it isn't too slow to get there):
+  - Adaptive planned 4 frames per game frame at "20 Hz", with the timestamps
+    expected.
+  - Showing only generated frames, the screen showed whole in-between frames.
+  - Scene cuts and text appearing in one step smear, as in Lossless Scaling.
+  - In the sandbox, Lossless modes slow the game to a few fps, so screenshots
+    taken in the first minute show the black boot screen. Not a bug.
 
 ## 2026-11-09, round 177: Lossless Scaling frame generation
 

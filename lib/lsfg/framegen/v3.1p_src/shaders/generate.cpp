@@ -41,7 +41,7 @@ Generate::Generate(Vulkan& vk,
     // hook up shaders
     for (size_t i = 0; i < vk.generationCount; i++) {
         auto& pass = this->passes.emplace_back();
-        pass.buffer = vk.resources.getBuffer(vk.device,
+        pass.buffer = vk.resources.getPassBuffer(vk.device, i,
             static_cast<float>(i + 1) / static_cast<float>(vk.generationCount + 1));
         for (size_t j = 0; j < 2; j++) {
             pass.descriptorSet.at(j) = Core::DescriptorSet(vk.device, vk.descriptorPool,
