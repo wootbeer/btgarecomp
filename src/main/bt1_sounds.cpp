@@ -21,15 +21,18 @@
 //   predictor book (both games use order 2 with 4 predictors, so it fits in
 //   place) and, for those that loop, its loop with its state.
 // - Its base note goes up by as many semitones as this game slowed the sample
-//   (23 for most, kReplacements): despite the name, libmus plays a sample
+//   (23, 18 or 12, kReplacements): despite the name, libmus plays a sample
 //   faster the higher that value is (measured: -23 made a replaced effect's
 //   playback ratio 3.7 times lower). So the extra samples play at the same
-//   pitch and length. The mixer can't go past a ratio of 2.0 at 22,050 Hz
-//   output; the effects play at 0.236-0.53 (measured), and the largest shift,
-//   28 semitones, is on ga02, measured at 0.236 (about 1.2 after).
+//   pitch and speed. The mixer can't go past a ratio of 2.0 at 22,050 Hz
+//   output; the effects play at 0.236-0.53 (measured), so 23 semitones up
+//   stays under it for those (ga22 aside, below).
 //   The detune floats (+0x28) aren't used: libmus adds them to the note, and
 //   setting one to 1.0, 4.0 or 12.0 all raised the playback ratio by the same
-//   3.8% (round 168), so whole semitones in the base note it is.
+//   3.8% (round 168). The shifts are whole semitones anyway (round 181).
+// - Where this game's sample starts later in the sound, the first game's
+//   starts that many whole ADPCM frames in (with no decoder history; none of
+//   those loop).
 //
 // Nothing in the game's code changes.
 #include "btga_config.h"
@@ -63,16 +66,17 @@ namespace {
     constexpr uint32_t ga_wave_bank = 0x593A28;
     constexpr uint32_t ga_samples = 76;
     // This game's sample -> the first game's sound (instrument 0 of its only
-    // bank), as matched by ear, and how far this game had slowed it down: the
-    // sample's base note goes up that many semitones, so the first game's
-    // 44.1 kHz sample plays at the same pitch and length.
+    // bank), and how far this game had slowed it down: the sample's base note
+    // goes up that many semitones, so the first game's 44.1 kHz sample plays
+    // at the same pitch and speed.
     //
-    // Most were slowed 23 semitones (2^(23/12) = 3.775, round 159), a group
-    // 18 (2.83). Round 168's pairs came from a contributor's rip
-    // (N64SoundListTool names in the comments: GA = BANK_00_INSTR_<ga, hex>,
-    // BT1 = BANK_00_INSTR_0000_SND_<bt1, hex>), checked by the owner against
-    // each pair's length ratio; the shift is that ratio in whole semitones,
-    // except where the owner picked otherwise by ear (ga25, ga31, ga32).
+    // The shift is exact (round 181): the first game's sample, resampled, lines
+    // up with this game's point by point (0.58-0.995, wrong pairs ~0.15) at
+    // exactly 12, 18 or 23 semitones (2^(n/12) = 2, 2.83, 3.775), and nowhere
+    // else from 1.3x to 6.5x. The samples' length ratios (round 168) were off
+    // where one game had trimmed the sound. The owner matched every pair by ear.
+    // Names in the comments are N64SoundListTool's: GA = BANK_00_INSTR_<ga, hex>,
+    // BT1 = BANK_00_INSTR_0000_SND_<bt1, hex>.
     //
     // Not ga22 (was the first game's sound 26, 23 semitones, round 159): the
     // grenade's bounce plays it at a ratio of 1.414, which the first game's
@@ -82,27 +86,20 @@ namespace {
         uint8_t ga;
         uint8_t bt1;
         int8_t semitones;
+        // ADPCM frames (16 samples, 9 bytes) of the first game's sample to
+        // skip, where this game's starts later in the sound.
+        uint16_t skip_frames = 0;
     };
     constexpr Replacement kReplacements[] = {
-        { 0, 39, 23 }, { 6, 31, 23 }, { 7, 32, 23 }, { 8, 3, 23 }, { 10, 5, 23 }, { 11, 6, 23 },
+        { 0, 39, 23 }, { 2, 0, 23 }, { 6, 31, 23 }, { 8, 3, 23 }, { 10, 5, 23 }, { 11, 6, 23 },
         { 12, 22, 23 }, { 13, 21, 23 }, { 16, 7, 23 }, { 18, 9, 23 }, { 19, 25, 23 }, { 21, 11, 23 },
-        { 26, 28, 23 }, { 28, 30, 23 }, { 30, 20, 23 }, { 33, 13, 23 }, { 34, 14, 23 },
-        { 39, 18, 23 }, { 59, 42, 23 },
-        { 35, 35, 25 }, // round 168: length-matched (4.26), was 23
-        { 36, 15, 19 }, // round 168: was bt23
-        // Round 168.
-        { 2, 0, 28 },   // INSTR_0002 = SND_0000, 5.12
-        { 3, 1, 11 },   // INSTR_0003 = SND_0001, 1.87
-        { 4, 2, 18 },   // INSTR_0004 = SND_0002, 2.82
-        { 9, 4, 20 },   // INSTR_0009 = SND_0004, 3.23
-        { 14, 23, 13 }, // INSTR_000E = SND_0017, 2.12
-        { 15, 24, 18 }, // INSTR_000F = SND_0018, 2.82 (both loop: tank treads)
-        { 17, 8, 18 },  // INSTR_0011 = SND_0008, 2.81
-        { 20, 10, 18 }, // INSTR_0014 = SND_000A, 2.82
-        { 25, 27, 19 }, // INSTR_0019 = SND_001B, 2.91 (18.5; 19 by ear)
-        { 27, 29, 18 }, // INSTR_001B = SND_001D, 2.87
-        { 31, 12, 19 }, // INSTR_001F = SND_000C, 3.09 (19.5; 19 by ear)
-        { 32, 34, 23 }, // INSTR_0020 = SND_0022, 4.93; the owner preferred 23
+        { 26, 28, 23 }, { 28, 30, 23 }, { 30, 20, 23 }, { 32, 34, 23 }, { 33, 13, 23 }, { 34, 14, 23 },
+        { 35, 35, 23 }, { 39, 18, 23 }, { 59, 42, 23 },
+        { 3, 1, 18 },   // the first game's is shorter: this game's has a longer tail
+        { 4, 2, 18 }, { 7, 32, 18 }, { 9, 4, 18 }, { 15, 24, 18 }, { 17, 8, 18 }, { 20, 10, 18 },
+        { 25, 27, 18 }, { 27, 29, 18 }, { 31, 12, 18 }, { 36, 15, 18 },
+        { 40, 37, 18, 292 }, // this game's starts 4,672 samples (0.1 s) into the first game's
+        { 14, 23, 12 },
     };
 
     // The saved file: magic, then the bank and the sample data.
@@ -303,7 +300,7 @@ void btga::apply_bt1_sounds(uint8_t* rdram, recomp_context*) {
     }
     for (const Replacement& r : kReplacements) {
         Bt1Wave bt;
-        if (!find_bt1_wave(ctl, r.bt1, bt) || bt.base + bt.len > bt1_tbl_size) {
+        if (!find_bt1_wave(ctl, r.bt1, bt) || bt.base + bt.len > bt1_tbl_size || (uint32_t)r.skip_frames * 9 >= bt.len) {
             continue;
         }
         uint8_t* wave = bank + read_be32(bank + waves + r.ga * 4);
@@ -315,8 +312,9 @@ void btga::apply_bt1_sounds(uint8_t* rdram, recomp_context*) {
             read_be32(book) != 2 || read_be32(book + 4) != 4 || ((loop != 0) && (bt.loop == nullptr))) {
             continue;
         }
-        write_be32(wave, new_tbl + bt.base - ga_wave_bank);
-        write_be32(wave + 4, bt.len);
+        const uint32_t skip = (uint32_t)r.skip_frames * 9;
+        write_be32(wave, new_tbl + bt.base + skip - ga_wave_bank);
+        write_be32(wave + 4, bt.len - skip);
         std::memcpy(book + 8, bt.book + 8, 2 * 2 * 4 * 8);
         if (loop != 0) {
             std::memcpy(bank + loop, bt.loop, 12 + 32);

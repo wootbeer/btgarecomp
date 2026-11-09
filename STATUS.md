@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 180)
+## Overview (as of round 181)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,52 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-09, round 181: exact pitch shifts for the BattleTanx 1 effects
+
+**Request:** a contributor proposed five more pairs (N64SoundListTool names:
+GA `INSTR_0013`/`0024`/`001A`/`001C`/`0028` = BT1 `SND_0019`/`0019`/`001C`/
+`001E`/`0025`). Three were ours already, the owner kept bt15 for ga36 by ear,
+and wanted firmer proof for ga40 = bt37 than listening.
+
+**Method:** each BT1 sample, band-limited resampled by a ratio swept from 1.3x
+to 6.5x (steps of 0.004), cross-correlated with the GA sample, normalised (1.0
+is identical). ga40 against all 49 BT1 sounds: bt37 0.81, the next 0.18. Wrong
+pairs score about 0.15.
+
+**Finding:** every pair in the table peaks at exactly 12, 18 or 23 semitones
+(match 0.58-0.995). Round 168 set shifts from the samples' length ratios,
+which are off where one game trimmed the sound. Nine were wrong:
+
+| GA | BT1 | was | exact |
+|---|---|---|---|
+| ga02 | bt00 | 28 | 23 |
+| ga03 | bt01 | 11 | 18 |
+| ga07 | bt32 | 23 | 18 |
+| ga09 | bt04 | 20 | 18 |
+| ga14 | bt23 | 13 | 12 |
+| ga25 | bt27 | 19 | 18 |
+| ga31 | bt12 | 19 | 18 |
+| ga35 | bt35 | 25 | 23 |
+| ga36 | bt15 | 19 | 18 |
+
+The owner compared each (GA original, BT1 now, BT1 exact) and picked the
+exact one every time.
+
+**Done** (`src/main/bt1_sounds.cpp`):
+- The nine shifts corrected.
+- ga40 = bt37 added at 18 semitones (34 replaced effects).
+- ga40's GA sample starts 4,672 BT1 samples (0.1 s) into bt37, which the
+  owner heard as an odd start. A replacement can now skip whole ADPCM frames
+  at the start; ga40 skips 292. The decoder starts there with no history.
+- ga03's BT1 sample fades out sooner than GA's (GA's has a longer tail); same
+  start, nothing to change.
+
+**Mixer limit:** every shift went down except ga03 (11 to 18; round 168
+measured it at 0.595, so about 0.89 now) and the new ga40. ga40 would need a
+playback ratio over 0.71 to reach the mixer's 2.0, and the effects measured so
+far play at 0.24-0.53. Not measured in game, since it isn't known what plays
+ga40. The sandbox starts and runs with the option on.
 
 ## 2026-11-09, round 180: Lossless Scaling skips scene cuts
 
