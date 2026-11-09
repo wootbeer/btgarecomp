@@ -107,6 +107,14 @@ exact one every time.
 - ga40's GA sample starts 4,672 BT1 samples (0.1 s) into bt37, which the
   owner heard as an odd start. A replacement can now skip whole ADPCM frames
   at the start; ga40 skips 292. The decoder starts there with no history.
+- Follow-up: the owner was concerned the cut start would click. Measured
+  by decoding what plays: the cut started with a step from silence (first
+  sample 1,280), and its first frame, decoded without the frames before it,
+  was off (1,280 where the whole sound has 83). The first 8 frames after the
+  cut (128 samples, 2.9 ms) are now decoded with their history, faded in
+  (raised cosine) and encoded again from silence when the option applies
+  (`fade_in`). It starts at 0, the re-encode is within about 3% of the faded
+  signal, and every sample after the fade matches the original.
 - ga03's BT1 sample fades out sooner than GA's (GA's has a longer tail); same
   start, nothing to change.
 
