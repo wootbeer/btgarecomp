@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 187)
+## Overview (as of round 188)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,39 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-10, round 188: the main thread no longer spins while it waits
+
+**Report** (GitHub issue 6, Steam Deck): battery life is short for a retro
+game: 1h38m from 46%; with the GPU at 200 MHz and a 3 W TDP limit, a bit
+over 2 h, and then it can't hold 60.
+
+**Found** (sandbox, per-thread CPU with `top -H`): the game's main thread
+("Game 2") used 93% of a core at all times, title screen included. gdb put
+it in the polling loops hooked in rounds 49-65 (`func_8009D3A4` calling
+`func_80079FF0`, `func_8007A0A0`, `func_8007A818`), whose hook,
+`btga_yield_via_priority_drop` (`src/main/scheduler_workaround.cpp`),
+drains the external messages and hands off, then returns at once: the loop
+called it back to back. On the N64 the CPU spun there too; on a PC or a
+handheld that's a core at full power.
+
+**Fix:** what those loops wait for is set by another game thread, which only
+becomes ready when an external message (VI, AI, SP...) is delivered; the
+hand-off already lets any thread that's ready run. So when the hook is
+called again within 2 ms of its last call (the loop is still waiting), it
+first sleeps until the next external message arrives
+(`ultramodern::wait_for_external_message_timed`, at most 1 ms), then drains
+and hands off as before. The first call of a wait doesn't sleep, so a flag
+the hand-off clears is seen at once.
+
+**Result** (sandbox): the main thread went from 93% of a core to 2.8% on
+the title screen and about 3% in a Tank Wars match. The game boots, goes
+through the menus and plays a match as before. The rest of the sandbox's
+CPU use is lavapipe drawing on the CPU, which a real GPU does instead.
+
+Also worth telling Deck players: RT64 draws every in-between frame at full
+resolution, so Framerate Original (the game's own rate) instead of Display,
+and a lower resolution or no MSAA, cut the GPU's share.
 
 ## 2026-11-10, round 187: lib/lsfg's two Vulkan validation faults
 

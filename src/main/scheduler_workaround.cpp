@@ -33,6 +33,7 @@
 // handoff despite not being strictly higher priority. Both steps are
 // necessary; either alone was proven insufficient by debugger observation.
 
+#include <chrono>
 #include <cstdint>
 
 #include "ultramodern/ultramodern.hpp"
@@ -62,10 +63,27 @@ void dequeue_external_messages(uint8_t* rdram);
 // starvation once one built up. dequeue_external_messages drains the
 // entire queue in one pass instead of one entry, which can't starve this
 // way regardless of relative production rates.
+//
+// Round 188 (power use, GitHub issue 6): the loops called this back to back,
+// so the main thread spun a whole CPU core while it waited (on the N64 the
+// CPU spun there too). What the loops wait for comes from another game
+// thread, which only becomes ready when an external message (VI, AI, ...)
+// is delivered, and the hand-off below already lets any thread that was
+// ready run. So when this is called again right after the last call (the
+// loop is still waiting), it first sleeps until the next external message
+// arrives, at most 1 ms, instead of spinning. The first call of a wait
+// doesn't sleep, so a flag that the hand-off clears is seen at once.
 extern "C" void btga_yield_via_priority_drop(uint8_t* rdram) {
+    static thread_local std::chrono::steady_clock::time_point last_call{};
+    const auto now = std::chrono::steady_clock::now();
+    if (now - last_call < std::chrono::milliseconds(2)) {
+        ultramodern::wait_for_external_message_timed(rdram, 1);
+    }
+
     dequeue_external_messages(rdram);
 
     int32_t saved_pri = osGetThreadPri(rdram, 0);
     osSetThreadPri(rdram, 0, 0);
     osSetThreadPri(rdram, 0, saved_pri);
+    last_call = std::chrono::steady_clock::now();
 }
