@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 188)
+## Overview (as of round 189)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.9).
+and higher framerates. Betas are public (0.1.0 to 0.1.10).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,25 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-10, round 189: 0.1.10
+
+Version 0.1.10 (`version_string` in `src/main/main.cpp`). PC and Linux; the
+Android branch gets it with the Android update.
+
+**Release scan:** no testing switches or debug prints left from rounds
+187-188 (round 188's frame counter in ultramodern's osViSwapBuffer was
+removed; the runtime's working tree is clean), no lib patch changes since
+0.1.9, and no ROM, ROM-derived or Lossless Scaling files tracked.
+
+**New since 0.1.9:**
+- The game's main thread sleeps while it waits instead of spinning a CPU
+  core: about 3% of a core instead of 90%+, for battery life on handhelds
+  such as the Steam Deck (round 188, GitHub issue 6). Played by the owner on
+  Windows.
+- Lossless Scaling frame generation: every shader input holds a real image
+  and the scene-cut thumbnail's view is legal, so it no longer relies on
+  the driver tolerating either; frames unchanged (round 187).
 
 ## 2026-11-10, round 188: the main thread no longer spins while it waits
 
