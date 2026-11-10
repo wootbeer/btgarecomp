@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 186)
+## Overview (as of round 187)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,34 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-10, round 187: lib/lsfg's two Vulkan validation faults
+
+**Found by:** Concept of Love (JSRF), which took lib/lsfg as it is, ran it
+under the Khronos validation layer on lavapipe with a player's
+Lossless.dll.
+
+**Faults** (both lsfg-vk's, kept by our port):
+- Gamma's and Delta's first pass has no level before it, so its optional
+  sampled-image bindings (`optImg`, `optImg1-3`) were written with a null
+  view, and every dispatch then used them (VUID-VkWriteDescriptorSet-
+  descriptorType-02997, VUID-vkCmdDispatch-None-08114). That needs
+  `nullDescriptor` (VK_EXT_robustness2), which the device doesn't enable;
+  Direct3D, Lossless Scaling's own API, allows null views. The shader
+  skips those bindings (firstIter in its constants), but Vulkan still wants
+  a valid image there.
+- The scene-cut thumbnail had transfer usage only, but every `Core::Image`
+  makes a view (VUID-VkImageViewCreateInfo-image-04441).
+
+**Change** (lib/lsfg): such a Gamma or Delta binds a blank image of its
+own size (RGBA16F) instead, cleared to zero on its first dispatch
+(`Utils::clearImage`), which is what a Direct3D null view reads as. The
+thumbnail is SAMPLED too.
+
+Checked in Concept of Love's sandbox: generated frames of a moving textured
+picture are byte-identical before and after, quality and performance at 2x
+and 3x, and the validation layer reports nothing. lib/lsfg is identical in
+both repos again (apart from README.md and rt64/).
 
 ## 2026-11-09, round 186: 0.1.9
 
