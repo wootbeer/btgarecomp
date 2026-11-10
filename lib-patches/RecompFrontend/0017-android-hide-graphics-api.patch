@@ -1,0 +1,15 @@
+--- a/recompui/src/config/ui_config_tab_graphics.cpp
++++ b/recompui/src/config/ui_config_tab_graphics.cpp
+@@ -357,7 +357,12 @@ namespace recompui {
+                 "Selects the graphics API to use. Takes effect the next time the game starts.",
+                 graphics_api_options,
+                 ultramodern::renderer::GraphicsApi::Auto,
++#if defined(__ANDROID__)
++                // Vulkan is the only graphics API on Android: kept for the code that reads it, not shown.
++                true
++#else
+                 false
++#endif
+             );
+ 
+             config.add_enum_option(

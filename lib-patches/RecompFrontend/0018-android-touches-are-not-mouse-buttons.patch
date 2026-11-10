@@ -1,0 +1,106 @@
+--- a/recompinput/include/recompinput/input_state.h
++++ b/recompinput/include/recompinput/input_state.h
+@@ -50,6 +50,11 @@ namespace recompinput {
+     void add_mouse_deltas(float delta_x, float delta_y);
+     // A mouse button pressed (SDL_BUTTON_LEFT etc.), for the next poll.
+     void add_mouse_click(uint8_t button);
++#if defined(__ANDROID__)
++    // A real mouse's button went down or up. On Android SDL's mouse state also holds the
++    // clicks it makes from touches, so the held buttons are tracked from the events instead.
++    void set_mouse_button_held(uint8_t button, bool held);
++#endif
+     // Mouse inputs for the wheel's notches, bound like buttons (input_id of an
+     // InputType::Mouse field, past SDL's buttons).
+     constexpr uint8_t mouse_wheel_up = 30;
+--- a/recompinput/src/input_events.cpp
++++ b/recompinput/src/input_events.cpp
+@@ -230,6 +230,13 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
+         }
+         break;
+     case SDL_EventType::SDL_MOUSEMOTION:
++#if defined(__ANDROID__)
++        // Android turns touches into mouse events for the menus; they don't move the mouse stick.
++        if (event->motion.which == SDL_TOUCH_MOUSEID) {
++            queue_if_enabled(event);
++            break;
++        }
++#endif
+         if (!recompinput::game_input_disabled()) {
+             SDL_MouseMotionEvent* motion_event = &event->motion;
+             recompinput::add_mouse_deltas(motion_event->xrel, motion_event->yrel);
+@@ -237,6 +244,15 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
+         queue_if_enabled(event);
+         break;
+     case SDL_EventType::SDL_MOUSEBUTTONDOWN:
++#if defined(__ANDROID__)
++        // A touch made into a click (for the menus) isn't a mouse button: tapping the screen
++        // would otherwise press whatever left click is bound to.
++        if (event->button.which == SDL_TOUCH_MOUSEID) {
++            queue_if_enabled(event);
++            break;
++        }
++        recompinput::set_mouse_button_held(event->button.button, true);
++#endif
+         // A mouse button can be bound like a key.
+         if (binding::is_binding() && binding::get_scanning_device() == InputDevice::Keyboard) {
+             binding::set_scanned_input({ InputType::Mouse, event->button.button });
+@@ -257,6 +273,14 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
+     case SDL_EventType::SDL_DROPCOMPLETE:
+         recompui::drop_files(DropState.files_dropped);
+         break;
++#if defined(__ANDROID__)
++    case SDL_EventType::SDL_MOUSEBUTTONUP:
++        if (event->button.which != SDL_TOUCH_MOUSEID) {
++            recompinput::set_mouse_button_held(event->button.button, false);
++        }
++        queue_if_enabled(event);
++        break;
++#endif
+     case SDL_EventType::SDL_CONTROLLERBUTTONUP:
+         // Always queue button up events to avoid missing them during binding.
+         recompui::queue_event(*event);
+--- a/recompinput/src/input_state.cpp
++++ b/recompinput/src/input_state.cpp
+@@ -28,6 +28,10 @@ static struct {
+     // shorter than a frame still counts).
+     uint32_t mouse_buttons = 0;
+     std::atomic<uint32_t> mouse_clicks = 0;
++#if defined(__ANDROID__)
++    // Real mouse buttons held (set_mouse_button_held).
++    std::atomic<uint32_t> mouse_held = 0;
++#endif
+     std::mutex pending_input_mutex;
+     std::array<float, 2> pending_mouse_delta{};
+     // All the mouse's motion so far, in pixels (under pending_input_mutex).
+@@ -40,7 +44,11 @@ static struct {
+ void recompinput::poll_inputs() {
+     InputState.keys = SDL_GetKeyboardState(&InputState.numkeys);
+     InputState.keymod = SDL_GetModState();
++#if defined(__ANDROID__)
++    InputState.mouse_buttons = InputState.mouse_held.load() | InputState.mouse_clicks.exchange(0);
++#else
+     InputState.mouse_buttons = SDL_GetMouseState(nullptr, nullptr) | InputState.mouse_clicks.exchange(0);
++#endif
+     static bool first_poll = true;
+ 
+     {
+@@ -417,6 +425,19 @@ void recompinput::add_mouse_click(uint8_t button) {
+     }
+ }
+ 
++#if defined(__ANDROID__)
++void recompinput::set_mouse_button_held(uint8_t button, bool held) {
++    if (button >= 1 && button <= 31) {
++        if (held) {
++            InputState.mouse_held.fetch_or(SDL_BUTTON(button));
++        }
++        else {
++            InputState.mouse_held.fetch_and(~SDL_BUTTON(button));
++        }
++    }
++}
++#endif
++
+ void recompinput::get_mouse_motion_total(double* x, double* y) {
+     std::lock_guard lock{ InputState.pending_input_mutex };
+     *x = InputState.mouse_motion_total[0];

@@ -31,6 +31,9 @@ Touch controls show during a match and hide while a gamepad is in use; touch the
 ## Building  
 See [BUILDING.md](BUILDING.md). For Android, see [android/README.md](android/README.md).
   
+## Sound Packs  
+Replace the game's sound effects with your own. See [SOUND_PACKS.md](SOUND_PACKS.md).
+  
 ## Issues and Limitations
 
 Known:  

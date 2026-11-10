@@ -77,7 +77,7 @@ namespace btga {
 
 static const std::string program_name = "BattleTanx: Global Assault Recompiled";
 static const std::u8string program_id = u8"btgarecomp";
-static const std::string version_string = "0.1.6";
+static const std::string version_string = "0.1.10";
 
 template <typename... Ts>
 [[noreturn]] static void exit_error(const char* fmt, Ts... args) {
@@ -347,7 +347,7 @@ static ultramodern::input::connected_device_info_t get_connected_device_info(int
 #if defined(__ANDROID__)
 // Player 1 also gets the on-screen touch controls, unless one of the game's menus has the input.
 static bool get_n64_input_with_touch(int player_index, uint16_t* buttons_out, float* x_out, float* y_out) {
-    const bool got = recompinput::profiles::get_n64_input(player_index, buttons_out, x_out, y_out);
+    const bool got = btga::get_n64_input_with_mouse(player_index, buttons_out, x_out, y_out);
     if ((player_index == 0) && !recompinput::game_input_disabled()) {
         btga::android::add_touch_input(buttons_out, x_out, y_out);
     }
@@ -395,7 +395,7 @@ std::vector<recomp::GameEntry> supported_games = {
         // exactly this reason.
         .entrypoint_address = (gpr)(int32_t)0x80071000u,
         .entrypoint = recomp_entrypoint,
-        .on_init_callback = nullptr,
+        .on_init_callback = btga::apply_bt1_sounds,
     },
 };
 
@@ -439,6 +439,12 @@ int main(int argc, char** argv) {
         { recompinput::InputField::controller_analog(SDL_CONTROLLER_AXIS_TRIGGERRIGHT, true) });
     recompinput::set_default_mapping_for_controller(recompinput::GameInput::R,
         { recompinput::InputField::controller_analog(SDL_CONTROLLER_AXIS_TRIGGERLEFT, true) });
+    // Keyboard defaults: the frontend's keys, plus the main gun (Z) on the left mouse button and
+    // R on the right one (round 164).
+    recompinput::set_default_mapping_for_keyboard(recompinput::GameInput::Z,
+        { recompinput::InputField::keyboard(SDL_SCANCODE_Q), recompinput::InputField{ recompinput::InputType::Mouse, SDL_BUTTON_LEFT } });
+    recompinput::set_default_mapping_for_keyboard(recompinput::GameInput::R,
+        { recompinput::InputField::keyboard(SDL_SCANCODE_R), recompinput::InputField{ recompinput::InputType::Mouse, SDL_BUTTON_RIGHT } });
 
     recomp::Version project_version{};
     if (!recomp::Version::from_string(version_string, project_version)) {
@@ -471,6 +477,7 @@ int main(int argc, char** argv) {
     for (const auto& game : supported_games) {
         recomp::register_game(game);
     }
+    btga::register_sound_packs();
 
 #if defined(__ANDROID__)
     btga::android::import_picked_rom(supported_games[0].game_id);
@@ -492,10 +499,16 @@ int main(int argc, char** argv) {
 #if defined(__ANDROID__)
     btga::config::add_touch_options(recompui::config::create_config_tab("Touch Controls", "touch_controls", false));
 #endif
-    recompui::config::create_sound_tab();
+    {
+        recomp::config::Config& sound = recompui::config::create_sound_tab();
+        btga::config::add_bt1_sounds_option(sound);
+        btga::config::add_sfx_reverb_options(sound);
+        btga::config::add_sound_channels_option(sound);
+    }
     btga::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
     recompui::config::finalize();
+    btga::init_mouse_stick();
 
     // Read from the just-loaded config; takes effect on the next launch if
     // changed in the menu.
@@ -531,7 +544,7 @@ int main(int argc, char** argv) {
 #if defined(__ANDROID__)
         .get_input = get_n64_input_with_touch,
 #else
-        .get_input = recompinput::profiles::get_n64_input,
+        .get_input = btga::get_n64_input_with_mouse,
 #endif
         .set_rumble = recompinput::set_rumble,
         .get_connected_device_info = get_connected_device_info,

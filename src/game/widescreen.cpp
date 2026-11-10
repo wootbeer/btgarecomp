@@ -258,7 +258,7 @@ extern "C" void btga_hud_element(uint8_t* rdram, recomp_context* ctx) {
     uint8_t op = MEM_BU(0, element);
     const bool markers = op == kOpWidget && (uint32_t)MEM_W(8, element) == kTankMarkerWidget;
     if (markers) {
-        btga::markers::widget_begin(rdram);
+        btga::markers::widget_begin(rdram, ctx);
     }
     if (!anchoring_active(rdram)) {
         return;
@@ -418,4 +418,13 @@ extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
     dl.cmd(0x64000033, 0x2);        // gEXSetRectAspect(G_EX_ASPECT_ADJUST)
 #endif
     MEM_W(0x24, frame) = (int32_t)(uint32_t)dl.head;
+}
+
+// func_800C877C (src/game/marker_interp.cpp, round 166).
+extern "C" void btga_arrow_projection_call(uint8_t* rdram, recomp_context* ctx) {
+    btga::markers::projection_call(rdram, ctx);
+}
+
+extern "C" void btga_arrow_projection_stored(uint8_t* rdram, recomp_context* ctx) {
+    btga::markers::projection_stored(rdram, ctx);
 }

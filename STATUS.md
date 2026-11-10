@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 157)
+## Overview (as of round 189)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.6).
+and higher framerates. Betas are public (0.1.0 to 0.1.10).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,1113 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-10, round 189: 0.1.10
+
+Version 0.1.10 (`version_string` in `src/main/main.cpp`). PC and Linux; the
+Android branch gets it with the Android update.
+
+**Release scan:** no testing switches or debug prints left from rounds
+187-188 (round 188's frame counter in ultramodern's osViSwapBuffer was
+removed; the runtime's working tree is clean), no lib patch changes since
+0.1.9, and no ROM, ROM-derived or Lossless Scaling files tracked.
+
+**New since 0.1.9:**
+- The game's main thread sleeps while it waits instead of spinning a CPU
+  core: about 3% of a core instead of 90%+, for battery life on handhelds
+  such as the Steam Deck (round 188, GitHub issue 6). Played by the owner on
+  Windows.
+- Lossless Scaling frame generation: every shader input holds a real image
+  and the scene-cut thumbnail's view is legal, so it no longer relies on
+  the driver tolerating either; frames unchanged (round 187).
+
+## 2026-11-10, round 188: the main thread no longer spins while it waits
+
+**Report** (GitHub issue 6, Steam Deck): battery life is short for a retro
+game: 1h38m from 46%; with the GPU at 200 MHz and a 3 W TDP limit, a bit
+over 2 h, and then it can't hold 60.
+
+**Found** (sandbox, per-thread CPU with `top -H`): the game's main thread
+("Game 2") used 93% of a core at all times, title screen included. gdb put
+it in the polling loops hooked in rounds 49-65 (`func_8009D3A4` calling
+`func_80079FF0`, `func_8007A0A0`, `func_8007A818`), whose hook,
+`btga_yield_via_priority_drop` (`src/main/scheduler_workaround.cpp`),
+drains the external messages and hands off, then returns at once: the loop
+called it back to back. On the N64 the CPU spun there too; on a PC or a
+handheld that's a core at full power.
+
+**Fix:** what those loops wait for is set by another game thread, which only
+becomes ready when an external message (VI, AI, SP...) is delivered; the
+hand-off already lets any thread that's ready run. So once back-to-back
+calls (under 1 ms apart) have gone on for 2 ms, each further call first
+sleeps until the next external message arrives
+(`ultramodern::wait_for_external_message_timed`, at most 1 ms), then drains
+and hands off as before. Shorter runs never sleep: `func_800A1384`'s inner
+copy calls the hook up to 32 times in a normal pass (round 53), and a flag
+the hand-off clears is seen at once. (The first version slept from the
+second back-to-back call, which could have added up to ~31 ms to that
+copy; it measured the same, but this can't.)
+
+**Result** (sandbox, frames swapped per second counted in osViSwapBuffer
+over 5 s windows, through boot, menus and a Tank Wars match): before, the
+main thread at 90-93% of a core, 30 frames a second; after, 3.4%, 30 frames
+a second, the same windows within a frame. The game boots, goes through the
+menus and plays a match as before. Untouched: the hook still drains every
+message and hands off on every call (the round 52 and 65 fixes), and
+nothing else (the heap, round 150; the other crash fixes) involves it.
+Played by the owner on Windows afterwards: fine. The rest of the sandbox's
+CPU use is lavapipe drawing on the CPU, which a real GPU does instead.
+
+Also worth telling Deck players: RT64 draws every in-between frame at full
+resolution, so Framerate Original (the game's own rate) instead of Display,
+and a lower resolution or no MSAA, cut the GPU's share.
+
+## 2026-11-10, round 187: lib/lsfg's two Vulkan validation faults
+
+**Found by:** Concept of Love (JSRF), which took lib/lsfg as it is, ran it
+under the Khronos validation layer on lavapipe with a player's
+Lossless.dll.
+
+**Faults** (both lsfg-vk's, kept by our port):
+- Gamma's and Delta's first pass has no level before it, so its optional
+  sampled-image bindings (`optImg`, `optImg1-3`) were written with a null
+  view, and every dispatch then used them (VUID-VkWriteDescriptorSet-
+  descriptorType-02997, VUID-vkCmdDispatch-None-08114). That needs
+  `nullDescriptor` (VK_EXT_robustness2), which the device doesn't enable;
+  Direct3D, Lossless Scaling's own API, allows null views. The shader
+  skips those bindings (firstIter in its constants), but Vulkan still wants
+  a valid image there.
+- The scene-cut thumbnail had transfer usage only, but every `Core::Image`
+  makes a view (VUID-VkImageViewCreateInfo-image-04441).
+
+**Change** (lib/lsfg): such a Gamma or Delta binds a blank image of its
+own size (RGBA16F) instead, cleared to zero on its first dispatch
+(`Utils::clearImage`), which is what a Direct3D null view reads as. The
+thumbnail is SAMPLED too.
+
+Checked in Concept of Love's sandbox: generated frames of a moving textured
+picture are byte-identical before and after, quality and performance at 2x
+and 3x, and the validation layer reports nothing. lib/lsfg is identical in
+both repos again (apart from README.md and rt64/).
+
+## 2026-11-09, round 186: 0.1.9
+
+Version 0.1.9 (`version_string` in `src/main/main.cpp`). It's PC only; the
+Android branch gets it next.
+
+**Release scan:** no testing switches or debug prints left from rounds
+171-185 (the two `getenv` switches in the source predate 0.1.8), and no ROM,
+ROM-derived or Lossless Scaling files tracked. Lib patches new since 0.1.8:
+RT64 0022 (frame generation), plume 0005 (Vulkan memory model),
+RecompFrontend 0016 (Graphics API option); applied to clean copies of RT64,
+plume and RecompFrontend, all patches reproduce the working trees exactly.
+The Windows package now also ships lsfg-vk's, DXVK's and the SPIR-V headers'
+license notices (`tools/package-windows.ps1`).
+
+**New since 0.1.8**, confirmed by the owner:
+- The Rattler's cannon stays on its hull at higher frame rates (rounds
+  171-173).
+- Sound Channels option (round 174).
+- The grenade's bounce plays again with BattleTanx 1 Sound Effects on
+  (round 175).
+- Graphics API option (round 176).
+- Lossless Scaling frame generation, from the player's own Lossless.dll:
+  2x/3x/4x, Quality/Performance, screen changes shown without morphing, and
+  frames paced by display refreshes (rounds 176-184). It adds about one game
+  frame of input delay; fast turns still smear around the tank, as in the
+  Lossless Scaling app.
+- BattleTanx 1 Sound Effects: exact pitch for nine effects and one more
+  effect, INSTR_0028 (round 181).
+- Sound packs: custom sound effects as mods, see SOUND_PACKS.md (round 185).
+
+## 2026-11-09, round 185: sound packs
+
+**Request:** custom sound packs, like texture packs, so players can use
+whatever effects they want; the BattleTanx 1 option stays. Music is out of
+scope (players can play their own).
+
+**Format** (`src/main/sound_packs.cpp`, its header comment is the spec):
+- A .zip in the mods folder (no mod.json needed; named after the file), or a
+  folder with a mod.json like any mod, holding `btga_audio.json` (marks it as
+  a sound pack) and `sfx/BANK_00_INSTR_xxxx.wav/.ogg/.mp3`, N64SoundListTool's
+  names (xxxx = the effect's index in the sound table, hex, 0000-004B).
+- Packs are a mod content type (`btga_audio.json`) with a "zip" container,
+  so they're listed in the Mods tab with on/off toggles. They apply when the
+  game starts (after the BT1 option, before the game reads its sound table);
+  where two replace one effect, the one higher in the list wins.
+- `btga_audio.json` overrides, all optional: `semitones` (fractions too),
+  `volume`, `loop_start`/`loop_end` (file samples).
+
+**Speed:** N64SoundListTool writes all of this game's effects at 22,050 Hz
+(read from its source: the PtrTablesV2 bank reader sets 22050 and its game
+list has no override for this game; it also labels BT1's 44.1 kHz samples
+22,050). So a file plays relative to that: at 22,050 Hz, at the original's
+speed. Files are resampled (windowed sinc) to that, so none plays faster
+than the original did (the mixer's 2.0 limit), and the base note is the
+original's (a BT1 shift on that effect is undone).
+
+**Samples:** the game's sample player only decodes VADPCM (n_alAdpcmPull has
+no raw 16-bit path), so each sound is encoded: `src/main/vadpcm.cpp` has the
+encoder and decoder (moved from bt1_sounds.cpp) and a codebook designer (4
+second-order predictors, generalized Lloyd from one least-squares predictor).
+Re-encoding every effect resampled 3%, its codebooks score 28.1 dB against
+the game's own 28.2 dB (Nintendo's tool).
+
+**Loops:** only effects that loop in the game can loop (the bank has no room
+for new loop structures). The loop is the manifest's, else the WAV's smpl
+chunk or the Ogg's LOOPSTART/LOOPEND/LOOPLENGTH tags, else the whole file,
+rounded to 16-sample frames. The loop state is the decoded frame holding
+the loop start: checked on the game's looping effects (ga15, 37, 42, 75 match
+exactly).
+
+**Decoders:** WAV (8/16/24/32-bit PCM, 32-bit float, any channels, mixed to
+mono), Ogg Vorbis (stb_vorbis from RT64's contrib, `src/main/stb_vorbis.cpp`),
+MP3 (dr_mp3 0.7.2, `lib/dr_libs`, public domain / MIT-0).
+
+**Tested** (sandbox): a zip of 76 tones and a folder pack of every format
+(u8 11,025 Hz WAV with a manifest loop, 24-bit stereo 32 kHz WAV, float WAV,
+48 kHz MP3 with semitones 3.5 and volume 0.5, 44.1 kHz Ogg with loop tags,
+and a broken file). Both load; the folder pack, higher in the list, wins its
+five effects and reports the broken file. Decoded, each comes out at the
+expected pitch exactly (e.g. 700 Hz + 3.5 semitones = 856.9 Hz) at 29-36 dB,
+with the expected loop points. In the menus and Tank Wars, the game reads
+sample data from past the 8 MB ROM, where the packs' sounds are.
+
+Confirmed on Windows by the owner: the test tone pack replaces the effects
+in game.
+
+For the Android update: the new sources are picked up by the glob; it needs
+`lib/dr_libs` on the include path.
+
+## 2026-11-09, round 184: Lossless Scaling frames paced by display refreshes
+
+**Report:** screen transitions are right now, better than the Lossless
+Scaling app. The turret still jitters at 2x, also with the display at
+120 Hz; the app, run over the game (our RT64 mode, Original), jitters too
+but much less.
+
+**Why** (most likely; not reproducible here, the sandbox has no real
+display): the swap chain is FIFO (vsync), and the generated frames were
+presented on a timer (the game frame interval's moving average split
+evenly). A timed present shows at whichever refresh comes next, and the
+timer isn't locked to the display, so a present near a refresh's edge
+stays up a refresh more or less than its neighbours. Even at 120 Hz, where
+2x divides evenly, each game frame's four refreshes could come out 1+3 or
+3+1 instead of 2+2. In a pan that fast (150 px per game frame) that's a
+judder.
+
+**Change** (RT64 present queue, patch 0022): where the device has present
+wait (as RT64's own pacing uses), a game frame's interval is counted in
+whole refreshes (moving average x refresh rate, rounded), split evenly over
+the generated frames and the game frame, and each is presented again for
+each refresh of its share, waiting for each present to show before the
+next. When a newer game frame is already waiting, the game frame's
+remaining refreshes are cut so no delay builds up. Without present wait, or
+with fewer refreshes than frames, it's timed as before. At 144 Hz, 2x is
+still 2.4 refreshes a frame and can't be even.
+
+The sandbox runs 2x for 90 s without errors (timed path: no present wait).
+The turret's smear in the generated frames is separate: Lossless Scaling's
+motion estimate, not pacing.
+
+## 2026-11-09, round 183: Lossless Scaling cuts from black; the turret clip
+
+**Report:** two clips at 2x (round 180 or later): the screen changes, and
+the turret turning.
+
+**Screen changes:** cuts to the title screen (0.28) came out clean. Cuts
+from black to a picture that's mostly black too still had a warped frame:
+black to the 3DO logo (video frame 13) and black to Game Setup (388). Those
+change the thumbnail's cells by only 0.03-0.09. `scene_cut()` now also
+counts 0.02 or more as a cut when either frame's mean brightness is under
+0.03 (nearly black). On the owner's clips that catches both, and game play
+never comes near it: its darkest frame is 0.16.
+
+**Turret clip** (60 fps recording, phase correlation of each frame with the
+last): turning, the background moves about 70-76 px per displayed frame
+at 1080p, 150 px (8% of the width) per game frame, in equal pairs
+(generated, then real). So the generated frames are in the right place and
+evenly spaced, apart from one repeated frame and some 64/72 px stretches.
+What shows:
+- The generated frames smear the tank's edges and the barrel, where the
+  background comes out from behind the tank: Lossless Scaling has only the
+  pictures, not the game's motion.
+- 2x is 60 fps on the owner's 144 Hz display without variable refresh, so
+  frames stay up 2 or 3 refreshes (13.9 or 20.8 ms) unevenly, which judders
+  in a pan this fast. A recording can't show that. Suggested test: the
+  display at 120 Hz, where 2x and 4x divide evenly.
+
+## 2026-11-09, round 182: Lossless Scaling skips the frame after a cut too
+
+**Report** (Windows, 2x): screen changes are better than before round 180
+but not perfect. The tank turret's jitter feels worse.
+
+**Cuts:** lsfg's `beta` pass reads the features of the last three real
+frames (`alpha`'s outputs, frame count % 3), not two. The frames generated
+after the frame following a cut still draw on the picture before it. Now
+`lsfg::FrameGenerator::scene_cut()` is true for the cut frame and the one
+after, and the RT64 side shows both without generated frames. It's in the
+library so other hosts get it.
+
+**Turret:** not from round 180. Measured on the owner's 60 fps gameplay
+clips (recorded before Lossless Scaling, every second frame as the game's 30
+fps, thumbnails built as the GPU blits them): the scene difference stays at
+or under 0.05 through turret turns and driving, against the 0.15 threshold.
+The one higher value, 0.115, was Windows' Alt-Tab overlay. So the cut check
+doesn't fire in play, and nothing else in rounds 180-181 changes generation.
+The barrel smear was reported before round 180: Lossless Scaling's motion
+estimate is weak on thin rotating objects. Not resolved.
+
+## 2026-11-09, round 181: exact pitch shifts for the BattleTanx 1 effects
+
+**Request:** a contributor proposed five more pairs (N64SoundListTool names:
+GA `INSTR_0013`/`0024`/`001A`/`001C`/`0028` = BT1 `SND_0019`/`0019`/`001C`/
+`001E`/`0025`). Three were ours already, the owner kept bt15 for ga36 by ear,
+and wanted firmer proof for ga40 = bt37 than listening.
+
+**Method:** each BT1 sample, band-limited resampled by a ratio swept from 1.3x
+to 6.5x (steps of 0.004), cross-correlated with the GA sample, normalised (1.0
+is identical). ga40 against all 49 BT1 sounds: bt37 0.81, the next 0.18. Wrong
+pairs score about 0.15.
+
+**Finding:** every pair in the table peaks at exactly 12, 18 or 23 semitones
+(match 0.58-0.995). Round 168 set shifts from the samples' length ratios,
+which are off where one game trimmed the sound. Nine were wrong:
+
+| GA | BT1 | was | exact |
+|---|---|---|---|
+| ga02 | bt00 | 28 | 23 |
+| ga03 | bt01 | 11 | 18 |
+| ga07 | bt32 | 23 | 18 |
+| ga09 | bt04 | 20 | 18 |
+| ga14 | bt23 | 13 | 12 |
+| ga25 | bt27 | 19 | 18 |
+| ga31 | bt12 | 19 | 18 |
+| ga35 | bt35 | 25 | 23 |
+| ga36 | bt15 | 19 | 18 |
+
+The owner compared each (GA original, BT1 now, BT1 exact) and picked the
+exact one every time.
+
+**Done** (`src/main/bt1_sounds.cpp`):
+- The nine shifts corrected.
+- ga40 = bt37 added at 18 semitones (34 replaced effects).
+- ga40's GA sample starts 4,672 BT1 samples (0.1 s) into bt37, which the
+  owner heard as an odd start. A replacement can now skip whole ADPCM frames
+  at the start; ga40 skips 292. The decoder starts there with no history.
+- Follow-up: the owner was concerned the cut start would click. Measured
+  by decoding what plays: the cut started with a step from silence (first
+  sample 1,280), and its first frame, decoded without the frames before it,
+  was off (1,280 where the whole sound has 83). The first 8 frames after the
+  cut (128 samples, 2.9 ms) are now decoded with their history, faded in
+  (raised cosine) and encoded again from silence when the option applies
+  (`fade_in`). It starts at 0, the re-encode is within about 3% of the faded
+  signal, and every sample after the fade matches the original.
+- ga03's BT1 sample fades out sooner than GA's (GA's has a longer tail); same
+  start, nothing to change.
+
+**Mixer limit:** every shift went down except ga03 (11 to 18; round 168
+measured it at 0.595, so about 0.89 now) and the new ga40. ga40 would need a
+playback ratio over 0.71 to reach the mixer's 2.0, and the effects measured so
+far play at 0.24-0.53. Not measured in game, since it isn't known what plays
+ga40. The sandbox starts and runs with the option on.
+
+## 2026-11-09, round 180: Lossless Scaling skips scene cuts
+
+**Report** (video, Lossless Scaling): going from one screen to another
+(menus, intro, cutscene cuts) shows a warping transition, where it should
+just change. The owner doesn't want RT64's interpolation in front of it.
+
+**Why:** LSFG makes frames between the last game frame and the new one by
+estimating motion. When the new frame is another picture altogether, there's
+no motion to find, and the generated frames morph one picture into the other.
+
+**Done:**
+- `lsfg::FrameGenerator::record_input()` also blits each frame into a 64x36
+  thumbnail and copies it to host visible memory. `scene_difference()`
+  averages it in 8x6 cells and returns the mean change from the previous
+  frame's, 0 (the same) to 1 (black to white).
+- The present queue already waits for the GPU after recording generation, so
+  it reads the difference then. At 0.15 or more (`kSceneCutDifference`,
+  `lib/lsfg/rt64/rt64_frame_generation.cpp`) the game frame is shown alone,
+  with no generated frames, and the old picture stays up until it.
+
+**Measured** (sandbox, lavapipe, the game at ~4 fps, so motion per frame is
+about 7 times a real 30 fps's): still frames ~0.001; driving median 0.008,
+95th percentile 0.085, one frame 0.29 on a sharp turn; the intro's cuts 0.17
+to 0.29. At 30 fps gameplay should stay well under the threshold; if a fast
+turn does reach it, that frame shows without generated frames (a one-frame
+step), not a warp.
+
+## 2026-11-09, round 179: back to round 177's frame generation
+
+**Report** (round 178, 144 Hz, no FreeSync):
+- Adaptive warped heavily ("like being on acid").
+- 3x jittered and warped at times, where round 177's hadn't.
+- 2x seemed better before; round 177 was better overall apart from 4x.
+- For comparison, the owner had used the Lossless Scaling app with LSFG 3.1,
+  fixed 3x, default settings.
+
+**Done:** round 178's code is reverted. `lib/lsfg`, the RT64 patch, the RT64
+side and the settings match round 177's last commit (eabdd6e): per-pass
+buffers, timestamped generation, Adaptive and the Frame Rate rename are gone.
+The setting is Lossless Scaling Multiplier again, 2x/3x/4x, default 2x.
+
+Round 178 changed three things fixed modes go through, none of which should
+have changed their result: per-pass constant buffers instead of ones shared
+by timestamp, host visible *and* coherent buffer memory instead of either,
+and measuring the game frame interval before the GPU work instead of after.
+Not found which, if any, the owner saw. 4x's judder on a 144 Hz display
+without variable refresh stands (120 fps on 144 Hz).
+
+## 2026-11-09, round 178: Lossless Scaling Adaptive frame rate
+
+**Report** (round 177, Windows):
+- It builds and runs; 2x and 3x look great. 4x jitters and smears on a
+  144 Hz display without FreeSync.
+- Fixes on the way here:
+  - `.gitignore`'s `[Ll]og/` had kept `lib/lsfg/dxbc/util/log/` out; it's
+    excepted now.
+  - MSVC's library doesn't bring in `<array>` and others through other
+    headers as libstdc++ does, so `lib/lsfg/std_includes.h` is force-included
+    into the lsfg targets.
+  - The Load buttons' messages (`recompui::message_box`, a system box with no
+    parent) could open behind the game. They're the frontend's info prompt
+    now, as is Load BattleTanx ROM's.
+
+**Why 4x jitters:** on a fixed 144 Hz refresh, 120 fps can only change on a
+refresh. Four frames in five stay up for one refresh and the fifth for two:
+a hitch 24 times a second. The smearing at 4x is normal: three guesses between
+each pair of real frames.
+
+**Adaptive** (the new default for the setting, renamed Lossless Scaling Frame
+Rate: Adaptive / 2x / 3x / 4x): one frame per display refresh, each made for
+the moment its refresh shows it.
+- `lib/lsfg`:
+  - Each generation pass has its own constant buffers
+    (`ResourcePool::getPassBuffer`), with a timestamp that can be rewritten
+    per frame (`setPassTimestamp`). They were shared by timestamp.
+    `firstIter`/`firstIterS` stay 0 in them, as lsfg-vk's `getBuffer` leaves
+    them.
+  - `Buffer` memory must now be host visible and coherent; it took either.
+  - `record_generate(cmd, timestamps)` makes frames at any points in time.
+  - `lsfg_test` checks frames at 1/4, 1/2, 3/4, then 0.2 and 0.6, with 3 or
+    9 passes. Both modes are within half a pixel, apart from performance
+    mode's large-jump miss.
+- RT64 side (`rt64_frame_generation.cpp`):
+  - `record()` plans each game frame's frames from the refresh rate
+    (`swapChainRate`, which RT64 reads from the monitor at start) and the
+    averaged game frame interval. A running position steps one refresh at
+    a time, in game frames. Each step before the game frame is a generated
+    frame at that point; one within 0.05 of it shows the game frame itself.
+  - At most 9 frames per game frame: 144 Hz down to 16 fps.
+  - Frames are spaced one refresh apart.
+  - Simulated: 144 Hz/30 fps averages 4.80 frames per game frame (4 or 5,
+    evenly spaced across game frames); 60/20 gives 3.00, 144/20 7.20, and
+    120/30 4.00.
+  - 2x/3x/4x as before.
+  - `recordFrame()` copies a planned frame, generated or the game frame.
+    The present patch (0022) uses these.
+- Checked in the sandbox (lavapipe, refresh forced, frame generation started
+  once the game reached its intro so it isn't too slow to get there):
+  - Adaptive planned 4 frames per game frame at "20 Hz", with the timestamps
+    expected.
+  - Showing only generated frames, the screen showed whole in-between frames.
+  - Scene cuts and text appearing in one step smear, as in Lossless Scaling.
+  - In the sandbox, Lossless modes slow the game to a few fps, so screenshots
+    taken in the first minute show the black boot screen. Not a bug.
+
+## 2026-11-09, round 177: Lossless Scaling frame generation
+
+**Request:** round 176's plan, written so other ports and projects can take it
+over easily, without costing speed. Input latency as low as possible.
+
+**Library** (`lib/lsfg/`, README there):
+- lsfg-vk v1.0.0's frame generation (MIT), reworked:
+  - runs on the host's Vulkan device and records into its command buffer;
+  - owns its images (no Linux file descriptors);
+  - uses plain barriers, so `synchronization2` isn't needed.
+- DXVK v2.6.2's DXBC compiler (zlib), trimmed to return SPIR-V.
+- `include/lsfg/lsfg.hpp`, which knows nothing of RT64:
+  - `load_shaders` reads the 48 shaders out of `Lossless.dll` (RCDATA
+    255-302), translates them with lsfg-vk's binding renumbering, and caches
+    them by the DLL's hash;
+  - `FrameGenerator` covers creation, `record_input`, `record_generate` and
+    `record_output`, with blits to and from any image;
+  - `check_device` says whether the GPU has the features needed.
+- `test/lsfg_test.cpp` (CMake option `LSFG_BUILD_TEST`) sends a square moving
+  40 pixels a frame through its own device. On lavapipe, quality and
+  performance modes put it within half a pixel of halfway in each generated
+  frame. The performance mode alone missed a single 80-pixel jump: its
+  coarser motion estimate, not a bug (lsfg-vk records the same passes).
+
+**RT64:**
+- `lib-patches/plume/0005-vulkan-memory-model.patch` enables
+  `vulkanMemoryModel` where supported. The translated shaders declare the
+  VulkanMemoryModel capability. `shaderStorageImageWriteWithoutFormat` was
+  already on (plume enables every core feature).
+- `lib-patches/rt64/0022-frame-generation.patch` adds
+  `threadPresentGenerated()` to the present queue. It runs only for a new
+  game frame when RT64 isn't interpolating, and not for repeats (same
+  present ID, a paused game or a menu) or paused presents. It:
+  1. draws the VI output into the generator's source image, copies it in and
+     generates, in one submission;
+  2. releases the workload mutex and notifies the present ID, so the game
+     goes on;
+  3. presents each generated frame, then the game frame (copied from the
+     source), with RecompFrontend's draw hook (the menu) and the inspector on
+     each. They're spaced evenly over the game frame interval (an average,
+     ignoring gaps over 250 ms). The first one goes up at once, so the added
+     delay is the game frame interval times n/(n+1).
+- `lib/lsfg/rt64/rt64_frame_generation.cpp` (compiled into RT64 from our
+  CMake) holds the settings (`RT64::setFrameGeneration`, any thread), the
+  generator and its source image (rebuilt on a size change), and the timing.
+  It reports why it isn't running (no DLL, not Vulkan, unsupported GPU) in
+  `RT64::getFrameGenerationStatus()` and on stderr. It's off on macOS.
+
+**Settings** (`src/main/frame_generation_config.cpp`, Graphics tab, carries over
+to other RecompFrontend ports):
+- **Frame Generation:** RT64 / Lossless Scaling, with a **Load
+  Lossless.dll** button. The button translates the chosen file first (a
+  wrong one gets a message and replaces nothing), then copies it to
+  `<app folder>/lossless_scaling/Lossless.dll`, with the cache next to it.
+- **Lossless Scaling Multiplier:** 2x / 3x / 4x.
+- **Lossless Scaling Mode:** Quality / Performance.
+- Choosing Lossless Scaling sets the Graphics API to Vulkan (from the next
+  start) and Framerate to Original. Framerate is greyed out while it's on;
+  the multiplier and mode while it's off.
+- The flow scale follows Lossless Scaling's suggestion: 1 up to 1080p,
+  1080/height above.
+
+**Checked in the sandbox** (lavapipe):
+- In Tank Wars, each game frame went out as 2 presents.
+- With the game frame left out (a temporary switch), the screen showed whole,
+  sharp generated frames.
+- RT64 mode is as before.
+- The options and button show on the Graphics tab.
+- Not checked: Windows (clang-cl) builds, speed and smoothness on a real GPU,
+  and the Load Lossless.dll dialog.
+
+## 2026-11-09, round 176: Graphics API option; Lossless Scaling frame generation, first steps
+
+**Request:** frame generation from Lossless Scaling as an alternative to
+RT64's interpolation ("RT64 / Lossless Scaling"), using the player's own
+`Lossless.dll`, with input latency kept as low as possible. Vulkan only, so
+show RT64's Graphics API option (snprecomp already does). Android later, in
+the Android chat.
+
+**Graphics API** (`lib-patches/RecompFrontend/0016-show-graphics-api.patch`):
+the frontend has the option (Auto, D3D12 on Windows, Vulkan, Metal on macOS)
+but marked always hidden. Now shown; read once when RT64 starts.
+
+**Lossless Scaling plan** (from lsfg-vk v1.0.0, MIT, the Linux Vulkan layer
+GameHub uses on Android):
+- The owner's DLL (SHA-1 7a4ffe80...) has 202 DXBC shaders as RCDATA,
+  including all 48 lsfg-vk loads (IDs 255-302). Neither the DLL nor anything
+  from it goes in the repo or a release.
+- The shaders are turned into SPIR-V with DXVK's DXBC compiler. lsfg-vk's copy
+  of it (`PancakeTAS/dxbc`) is gone, so it's taken from DXVK v2.6.2 (zlib):
+  `src/dxbc`, `src/spirv` and a few `src/util` headers, with DXVK's logger, its
+  device-based options and its shader object replaced (the compiler returns
+  the SPIR-V). This builds; running it on the DLL is waiting on the owner's go
+  ahead (the sandbox stops running programs built from outside code).
+- lsfg-vk's frame generation library makes its own Vulkan device and shares
+  images over Linux file descriptors. It's to record into RT64's own command
+  lists on RT64's device instead: no second device, nothing Linux-only. Its
+  shaders need `vulkanMemoryModel` and its barriers `synchronization2`, which
+  RT64's device (Vulkan 1.2) doesn't enable; plume is to enable them where
+  supported.
+- In RT64's present (`rt64_present_queue.cpp`), with Lossless on: the VI
+  output goes to an image of its own, frame generation makes 1-3 frames
+  between it and the last one, those are presented spaced over the game
+  frame, then the real one; the menu is drawn on each.
+
+## 2026-11-08, round 175: the grenade's bounce with the BattleTanx 1 effects
+
+**Report:** Sound Channels seems fine so far. The grenade's bounce sound is
+missing with BattleTanx 1 Sound Effects on, and back with it off.
+
+**Found** (Tank Wars, the game's All Weapons code, enemies off; A fires the
+special weapon, B picks the next one): the grenade plays ga47 (launch), ga22
+twice (the bounces), then ga10 (explosion). ga22 was replaced by the first
+game's sound 26 (round 159, 23 semitones). The two are the same sound (their
+loudness over time matches), but the resampler's ratio (voice +0x44, read in
+`n_alResamplePull` before its clamp at `0x801011C0`) was:
+- off: 1.4142 (ga22, half an octave up for the bounce);
+- on: 2.0, the mixer's limit. The 44.1 kHz sample would need 1.414 x 3.775
+  = 5.3, so it played about 17 semitones low and 2.7 times long.
+
+In a fight with enemies on and every weapon fired, 14 different replaced
+effects played and none reached 2.0. The bounce is the only one found
+played that high.
+
+**Fix** (`src/main/bt1_sounds.cpp`): ga22 is no longer replaced; the
+grenade keeps this game's bounce. Nothing else was seen using ga22.
+
+## 2026-11-08, round 174: Sound Channels
+
+**Report:** round 173 fixed the Rattler's cannon; the M1A1 is good too.
+
+**Request** (a player, via the owner): more sound channels. "Whenever
+there's a lot of chaos going on; sounds will just refuse to play."
+
+**Cause.** The game starts libmus (MusInitialize, `func_800FAFBC`) once at
+boot from `func_80097560`, with a musConfig at sp+0x10: 42 channels, a
+0x3EBC0-byte heap at `0x801B45D8`, 0x100 synth updates, 0x1000 RSP commands,
+58 DMA buffers of 0x800. The synth gets one voice per channel
+(`func_800FF560`). Music and effects share them. `__MusIntStartEffect`
+(`func_800FD8B8`) takes a free channel, or else the playing one with the
+lowest priority if it's below the new effect's, or else drops the effect.
+In Tank Wars, driving and firing, all 42 were busy the whole time.
+
+**Feature** (`src/game/sound_channels.cpp`, Sound tab, takes effect at the
+next start): Original (42), 64, 96, 128 or 256. Before the MusInitialize
+call (hook at `0x80097608`), the count goes up; updates, RSP commands and
+DMA buffers grow in proportion; the heap moves to unused memory above 8 MB
+(`0x80800000`, 2 MB; the audio microcode reads anywhere in the first
+16 MB). The old heap had 27 KB free, too little to grow in place.
+
+**Checked in the sandbox** (Tank Wars, driving and firing):
+- Busy channels at most: 42 of 42 at Original, 108 of 128, 124 of 256.
+- libmus heap used: 0x38220 at Original, 0x97C00 at 128, 0x125FF0 at 256.
+- The audio output at 256 has the same level as at Original (no silence
+  or garbage). Not listened to.
+
+**Android:** the heap is above 8 MB, like the draw-limit buffers (round
+161), so it needs the same check there.
+
+**Grenade bounce:** see round 175.
+
+## 2026-11-08, round 173: the Rattler's cannon is its own part, drawn two ways
+
+**Report** (round 172's test switch, `BTGA_TURRET_TEST` 1 to 4):
+- `1` (turret rotation not interpolated): the Rattler is good in turns but
+  still jumps over hills; the M1A1's turret jitters badly in turns.
+- `2` (turret not interpolated): the same for the Rattler; the M1A1's turret
+  jitters moving forward and turning.
+- `3` (turret has no ID): the same for the Rattler; the M1A1's turret gets
+  its occasional jitter from before.
+- `4` (turret and hull not interpolated): both tanks jitter badly.
+
+So the jumping part isn't the turret: with the turret not interpolated at
+all, the Rattler's cannon still jumped.
+
+**Cause.** The cannon is another extra part, built in the scratch matrix
+`0x8021B478` (the barrels spin about 30 degrees a frame while firing). It
+had no tank ID, so it was named by the shared scratch address, and the ID
+passed from tank to tank, as round 169 found for `0x8021B500` and
+`0x8021B548`. It's drawn two ways:
+- by `func_800AE184`, like the hull and turret (one tank at a time in
+  mission 1);
+- by `func_80092C38` at `0x80094590`, through the generic model drawer
+  `func_800AD9A8` (frame `0x88`). That frame holds the part's matrix (the
+  caller's `$s0`, at `0x58`) and the tank (`$s3`, at `0x64`). Its stack
+  arguments mark the call: `0x18` is the caller's sp + `0x1E8`, and `0x1C`
+  is 1.
+
+**Fix** (`src/game/interpolation_ids.cpp`): `0x8021B478` is an extra part,
+with IDs tank + 11 + 8 * k, and both drawers name the tank. In the sandbox
+(mission 1 as the Rattler, turning and firing), 1,500 of 1,500 cannon
+matrices got tank IDs (about 80% before). The largest change between frames
+was the barrels' 30-degree spin, which interpolates, so round 171's snap
+didn't fire.
+
+**Removed** round 172's test switch (`BTGA_TURRET_TEST`); turrets are back
+as in round 171.
+
+**Not done:** about 10% of hull and 6% of turret matrices still have no tank
+ID in play. Most come through the same `func_800AD9A8` call, built in the
+hull or turret scratch for another part of the model (`$s0` isn't the
+scratch). Some come from another caller. That may be the M1A1's occasional
+turret jitter. It wasn't changed here, so the cannon can be tested on its own.
+
+## 2026-11-08, round 172: Rattler cannon still swinging; a test switch
+
+**Report** (video, round 171's build): still happening.
+
+**Video:** in a bounce over a bump (frames 122-125 at 60 fps), the cannon
+rises above the hull, shifted right and tilted. It's worst on 122 and 124,
+but off on 123 and 125 too. So it isn't only round 171's half-turn flip.
+
+**Checked in the sandbox** (mission 1 as the Rattler; nothing wrong found):
+- Every tank-part matrix load in the walker was tagged with its own ID
+  (62,000 loads, none untagged).
+- Hull and turret matrices are rigid (scale 1, orthogonal) and share their
+  position. Their up vectors agree to 0.99.
+- No display list drawn under a tank ID has a `G_MTX` or `G_POPMTX` inside,
+  so the cannon has no nested matrix.
+- The only builds without a tank object come from `func_800947C4`, the
+  Change Tank screen's ghost tank.
+- The sandbox can't show in-between frames reliably, so the swing itself
+  hasn't been seen here.
+
+**Test switch** (TEMPORARY, `src/game/interpolation_ids.cpp`):
+`BTGA_TURRET_TEST` in the environment changes how tank turrets (IDs tank +
+3, recorded as they're queued) are interpolated, to narrow it down on the
+owner's PC:
+- `1`: rotation not interpolated.
+- `2`: not interpolated at all.
+- `3`: no ID (automatic matching).
+- `4`: as 2, and hulls too.
+
+Remove it once it has done its job.
+
+## 2026-11-08, round 171: the Rattler's cannon swinging off on in-between frames
+
+**Report** (video, 0.1.8, above the original frame rate): the Rattler's
+cannon still jitters, especially in turns.
+
+**Video:**
+- On two in-between frames in a row (347 and 349 at 60 fps), the cannon is
+  thrown left and tilted.
+- The game's own frames around them (346, 348, 350) look right.
+- Round 169's extra-part IDs are not involved: the Rattler's cannon is its
+  turret (`0x8021B2E8`, ID tank + 3), and the Rattler has no extra parts.
+
+**Findings** (sandbox, mission 1 as the Rattler, picked on the Change Tank
+screen with All Tanks All Levels; logged every part the tank drawer builds):
+- Each tank part is built once a frame with its own ID, and no ID jumps
+  between tanks.
+- The turret's matrix carries its own world-space aim at the hull's
+  position, not the hull's rotation times a local one.
+- No turret turned more than 60 degrees in a frame in that run. The jump
+  wasn't reproduced, and the sandbox can't show in-between frames reliably.
+
+**Reasoning:** the same swing on two in-between frames in a row, with the
+real frames correct, fits a turret turning about half a turn and back. The
+round, many-barrelled cannon looks the same at both angles on the game's
+frames, and RT64 blends through the angle between.
+
+**Change** (`src/game/interpolation_ids.cpp`): every tank part (odd ID) has
+its rotation compared with the last frame's. If it turned more than 45
+degrees, its matrix group skips rotation for that frame. Position and scale
+are still interpolated, so it takes its new angle as it is, as round 156's
+sprites do. In the sandbox that happened 18 times in 10,000 checks, all at
+the level start (tanks placed), none in ordinary turns. Needs the owner's
+check in a Rattler.
+
+## 2026-11-08, round 170: 0.1.8
+
+Version 0.1.8 (`version_string` in `src/main/main.cpp`). It's PC only; the
+Android branch gets it later.
+
+**Release scan:** no testing switches or debug prints left from rounds
+168-169, no ROM or ROM-derived files tracked, and no lib patch changes
+since 0.1.7.
+
+**New since 0.1.7**, confirmed by the owner:
+- BattleTanx 1 Sound Effects replaces 34 effects instead of 22 (round 168).
+  The 12 new pairs come from a contributor's matches. Each replaced effect
+  now has its own pitch shift, and ga36 uses a different BattleTanx 1 sound.
+- The Rattler's cannon no longer floats off its hull at higher frame rates.
+  The same goes for other tanks' extra parts (round 169).
+
+## 2026-11-08, round 169: the Rattler's cannon floating off its hull
+
+**Report** (a video from the owner, above the original frame rate): the
+Rattler's cannon sometimes jumps while moving.
+
+**Video:** for about two game frames the cannon floats above the hull,
+tilted, then drops back into place.
+
+**Cause:**
+- `func_800AE184` draws a tank's parts from shared scratch matrices. Round
+  136 named the hull (`0x8021B2A0`) and turret (`0x8021B2E8`) by the tank
+  object (`object | 1`, `object | 3`).
+- Some tanks also draw extra parts from two more scratch matrices,
+  `0x8021B500` and `0x8021B548`. Each is several meshes under one Mtx, and
+  some are built twice in a frame. The Rattler's cannon is among them.
+- Those parts kept the scratch address as their ID. Whenever two such tanks
+  were drawn, it fell back to automatic matching. When only one was, that
+  tank's part had the ID.
+- So the ID moved from tank to tank between frames, and RT64 blended one
+  tank's cannon toward another's.
+- Logged in Tank Wars: 4 of the 10 tank objects drew these parts.
+
+**Fix** (`src/game/interpolation_ids.cpp`): the extra parts are named by the
+tank as well: `object + 5` (`0x8021B500`) or `object + 7` (`0x8021B548`),
+`+ 8 * k` for the k-th one that tank builds from it that frame. These are
+odd like the other tank IDs, below the next tank (0x4CC on). The same checks
+as the hull and turret apply (the drawer's own argument at `0x4C` of its
+frame).
+
+**Sandbox:** over a Tank Wars run, the extra parts were queued 4,519 times,
+all with per-tank IDs, and no ID was shared by two Mtx in a frame. The
+blending itself can't be seen here (no rendering above the game's rate).
+
+## 2026-11-08, round 168: more BattleTanx 1 sound effects (contributor's matches)
+
+**Request:** a contributor matched sounds from N64SoundListTool rips. The
+owner listened through a pack of his 21 pairs and confirmed all of them.
+
+**Names:** his rips call this game's effects `BANK_00_INSTR_<n>_SND_0000` and
+the first game's `BANK_00_INSTR_0000_SND_<n>`, both in hex. That's this
+game's table order (76 entries at ROM `0x58FAE0`, none skipped or repeated)
+and the first game's sound order in its effects bank (`0x215620`; its music
+bank is at `0x298D60`). 8 of his pairs were exactly ours.
+
+**Finding:** our matches are all this game's sample slowed 23 semitones
+(3.77 times the samples). Six of his pairs are a steady 2.82, 18 semitones,
+which is why the first pack (built for 23) made them sound "close but not
+quite". The owner listened to each at both speeds and picked the
+length-matched one for all but ga32.
+
+**Change** (`src/main/bt1_sounds.cpp`): each replacement carries its own
+shift, the length ratio in whole semitones (or 23 for ga32). From 22 to 34
+replaced effects:
+- New: ga02 (28 semitones), ga03 (11), ga04 (18), ga09 (20), ga14 (13),
+  ga15 (18, loops like its partner), ga17 (18), ga20 (18), ga25 (19),
+  ga27 (18), ga31 (19), ga32 (23).
+- Changed: ga36 is now bt15 (19) instead of bt23 (bt23 goes to ga14);
+  ga35 is now 25 semitones instead of 23, the owner's length-matched pick.
+- The detune floats (+0x28) were tried for fractional shifts and dropped:
+  libmus adds them to the note, but 1.0, 4.0 and 12.0 all gave the same
+  3.8% rise. The fractional ratios (2.91, 3.09, 3.23) are most likely
+  trimmed samples rather than odd shifts.
+
+**Sandbox** (Tank Wars, playback ratios at `n_alResamplePull`): ga02 0.236
+to 1.19, ga03 0.315 to 0.595, ga20 0.315 to 0.89, ga35 0.375 to 1.59, ga36
+0.315 to 0.94. The highest is 1.59, under the mixer's 2.0. Needs the owner's
+ears in game.
+
+ga25 and ga31 fell between two whole semitones (18.5 and 19.5). The owner
+compared each at both pitches against the original and picked 19 for both.
+
+## 2026-11-07, round 167: 0.1.7
+
+Version 0.1.7 (`version_string` in `src/main/main.cpp`), PC only; the
+Android branch gets it later.
+
+**Release scan:**
+- No testing switches or debug prints left from rounds 158-166.
+- No ROM or ROM-derived files tracked. The first game's sound effects stay
+  in the user's app folder.
+- No build-machine or personal paths.
+- Lib patches since 0.1.6: RecompFrontend 0014 (option buttons, round 159)
+  and 0015 (mouse bindings and capture, rounds 163-164).
+
+**New since 0.1.6**, confirmed by the owner except where noted:
+
+- Graphics tab:
+  - **Fog** On / Off (round 158).
+  - **Draw Distance** Original / Far / Very Far / Map Edge (rounds 158,
+    160-161). Campaign camera sequences no longer reset it, and the farther
+    settings get room in the per-frame draw buffers. Very Far and Map Edge
+    were confirmed by the owner, with no blinking.
+- Sound tab:
+  - **BattleTanx 1 Sound Effects**, with a Load BattleTanx ROM button
+    (round 159).
+  - **Sound Effects Reverb** and its amount (round 162).
+- Mouse:
+  - Mouse buttons (side buttons too) and the scroll wheel can be bound on
+    the Controls tab, with left click on the main gun and right click on R
+    by default (rounds 163-164).
+  - **Mouse Stick** on the General tab (Off / Turn / Full, with
+    sensitivity), steady in hard turns (round 164).
+- Explosion fire and smoke no longer flash on in-between frames (round 165).
+- Radar arrows follow their tanks through camera turns instead of trailing
+  a frame behind (round 166). The owner calls it good enough: in a fast
+  waggle the arrows, smoothed as screen positions, still drift slightly
+  from the tanks, which are smoothed in 3D.
+- The "Maximum Visibility" GameShark code is removed from the Hacks tab.
+  It patched RSP microcode that RT64 doesn't run (round 158).
+
+**Not checked yet:**
+- 2-player split screen with the new options and the arrows.
+- All Tanks All Levels through the late missions (round 150).
+
+## 2026-11-07, round 166: radar arrows a frame behind the camera
+
+**Report:** the arrows are smooth, but when the camera waggles they lag and
+then settle into place.
+
+**Cause:**
+
+- `func_800C8B74`, during the frame's update (from `func_80091768` at
+  `0x80092468`, for a tank with radar, flag `0x200` at +0x1E0), fills the
+  arrow table at `0x803A5990` (+ view * 0x100 + slot * 8: x - 4, y - 7,
+  flags). It goes through `func_800C877C`, which projects each tank with
+  `func_800ACCB4(position, out, a2, view)`.
+- That runs before the frame's camera moves, so in a turn each arrow sat
+  where its tank had been on screen a frame earlier.
+- Sandbox (Tank Wars, radar flag forced on for the test, steady turn): the
+  arrows sat about 70 pixels beside their tanks.
+- At 30 fps this was a small offset during turns. Interpolated, the arrows
+  visibly trailed their tanks and caught up once the camera stopped.
+
+**Fix** (`src/game/marker_interp.cpp`, hooks in `func_800C877C` before
+`0x800C89F0` and `0x800C8A40`):
+
+- Each projection's inputs (the position copied, the view) are kept with the
+  table entry they wrote.
+- When the arrow widget starts (the frame is being drawn, every view's
+  camera final), each is projected again with `func_800ACCB4`, which only
+  reads that view's matrices. The entry gets the new position.
+- An entry that no longer holds what was written for it, or no longer
+  projects, is left as it was.
+
+**Sandbox:** standing still, re-projection moves the arrows by about 0-1
+units (out of the game's 320-unit width). In a turn it moves them 13-58
+units back onto their tanks, and screenshots mid-turn show each arrow over
+its tank.
+
+## 2026-11-07, round 165: explosion flashes from mismatched sprite pairs
+
+**Report** (a video from the owner, 60 fps, Refresh Rate above 30):
+explosions still flash between their sprites.
+
+**Video:** frame by frame, the big fireballs are continuous. Small burning
+bits on a wreck show on one displayed frame and are gone on the next, at the
+display rate. So it's the in-between frames, not the game's own.
+
+**Findings** (temporary probe on round 155's sprite pairing, Tank Wars):
+
+- No sprite has a negative size (no mirroring).
+- Sprites are never paired across kinds: the second queue's group key
+  (entry +0 in `$s4`, the material func_8007B498 groups by) never differs
+  within a pair.
+- But about 2% of pairs change size more than 2.5 times between frames, and
+  4% more than 2 times. A growing fireball changes 1.2-1.7 times a frame.
+- Those are puffs dying and new, small ones starting where they were. The
+  pairing joined them, and RT64 showed a puff swelling or shrinking through
+  the in-between frames.
+
+**Fix** (`src/game/interpolation_ids.cpp`): a sprite pairs only with a
+previous one within 2 times its width and height (`kSpriteSizeRatio`). The
+rest get a new ID and snap. Needs a check on a PC at a high refresh rate,
+since the sandbox can't render above the game's rate.
+
+## 2026-11-07, round 164: steadier Mouse Stick; default mouse binds
+
+**Report:** mouse support works well, but the tank wobbles when turning
+hard with Mouse Stick on Turn. With a controller or the keyboard it's
+smooth.
+
+**Cause:** the stick was the motion since the game's last controller read.
+Motion reaches the game in bursts, once per pass of the window's event
+loop, and those passes don't line up with the game's reads. In a hard turn
+the stick alternated read by read between full and partial or empty.
+
+**Fix:**
+- The frontend keeps a running total of the mouse's motion
+  (`get_mouse_motion_total` in `lib-patches/RecompFrontend/0015`, replacing
+  `get_mouse_deltas_raw`).
+- Mouse Stick turns the change over the last 80 ms into a speed: 750 pixels
+  a second is full deflection at 100%, as before.
+- A hard turn now stays at full stick from read to read.
+- The sandbox renders too slowly to judge the smoothness (its events arrive
+  every few frames), so it needs a check on a PC.
+
+**Default mouse binds** (request): the keyboard defaults gain the left
+mouse button on Z (main gun) and the right one on R (secondary), set in
+`src/main/main.cpp` with `set_default_mapping_for_keyboard`. Saved bindings
+are kept, so they apply to a new setup or Reset to Defaults. Sandbox: left
+clicks fired the main gun (ammo 100 to 96). R couldn't be checked there,
+because no special weapon had been picked up.
+
+## 2026-11-07, round 163: mouse support (bindable buttons, Mouse Stick)
+
+**Request:** basic mouse support. It doesn't need direct aiming like
+snprecomp's, but it should be bindable, probably with the mouse as the
+stick, and the side buttons should be bindable too.
+
+**Bindings** (`lib-patches/RecompFrontend/0015-mouse-bindings-and-capture.patch`):
+
+- snprecomp's 0008 (mouse buttons bound like keys on the Controls tab:
+  left, middle, right and the side buttons X1/X2).
+- snprecomp's 0001 (a game callback that captures the mouse while the game
+  runs with no menu open).
+- Two additions:
+  - The scroll wheel's notches can be bound too (inputs 30 and 31, up and
+    down), each a press for one controller read. The game polls
+    (`poll_inputs`) once per controller read, so a notch is never missed.
+  - `get_mouse_deltas_raw`, the motion without the unrelated
+    mouse-sensitivity option.
+
+**Mouse Stick** (General tab, `src/main/mouse_stick.cpp`): Off (default) /
+Turn / Full, with a sensitivity slider (5-300%).
+
+- Turn adds the mouse's left-right motion since the last controller read to
+  player 1's stick X. At 100%, 25 pixels is full deflection.
+- Full also drives with up-down motion (up is forward).
+- While it's on, the mouse is captured in the window during play. Opening
+  the menu frees it.
+- It's the input callback (`btga::get_n64_input_with_mouse`) wrapping
+  recompinput's `get_n64_input`.
+
+**Sandbox:** with Turn on in Tank Wars, 15-pixel moves gave stick X 0.60.
+The button and wheel bindings weren't clicked through here (no way to
+drive the Controls tab's binding prompt), so they need a check on a PC.
+Default bindings are unchanged.
+
+## 2026-11-07, round 162: Sound Effects Reverb option
+
+**Request:** reverb like the Turok Rage Wars port's Weapon Reverb, kept
+slight.
+
+**Findings** (temporary probes):
+
+- The synth is set up by `func_800FE778`, this game's own copy of
+  `n_alSynNew`. The `n_alSynNew` at `0x80102350` is never called. Its config
+  has fxType 6, a custom room at `0x801266B8` (4 sections, length 4000).
+- Each voice's FX mix (0-127) arrives as a parameter update, which
+  `n_alEnvmixerPull` turns into dry and wet amounts at `0x801003C0`. The
+  voice-start path at `0x801001A8` is never used.
+- In Tank Wars, the music's voices (samples past the music bank at ROM
+  `0x61A698`) send 20-50. The effects (samples from `0x593A28`) mostly
+  send 0, with a few at 10-50.
+
+**Option** (`src/game/sfx_reverb.cpp`, `src/main/game_config.cpp`): Sound
+Effects Reverb (off by default) and an amount slider (default 30%). It works
+as Turok's Weapon Reverb: the slider adds up to 30% of 127 to a voice's FX
+mix, here for every sound-effect voice. A voice counts as a sound effect if
+its wave table's base is in the effects' sample data, or past the end of the
+8 MB ROM (the first game's effects, round 159). The music is left as it is.
+
+Sandbox: with the option on at 30%, the effects' mix updates go from 0 to
+11. Needs the owner's ears.
+
+## 2026-11-07, round 161: Very Far and Map Edge draw distances
+
+**Request:** a draw distance beyond Far, or out to the edge of the map.
+
+**Options:** Draw Distance is now Original / Far (x3) / Very Far (x6) /
+Map Edge (`src/game/view_distance.cpp`). Map Edge sets every store of the
+draw distance to 45,000, and the others are capped there. The ceiling: the
+scenery cull (`func_800AF978`, passing the square on to `func_800AB980`) and
+`func_800E2F9C` / `func_800E3460` (the square times 0.92) square the
+distance in a 32-bit int, which overflows past 46,340. Nothing else limits
+it: the far plane goes to `guPerspective` (`0x80109090`) as a float, and
+the scenery region list (`func_800ABE6C`, 256 slots on the stack) held at
+most 5 regions.
+
+**Limits it ran into** (temporary probes, mission 1's start at Map Edge):
+
+- The display-list buffer. The queue writers stopped at `base + 0xADE0`
+  with 24 bytes to spare and dropped the rest of the queue (round 120's
+  limit).
+- Mesh-draw items reached 1,745 of 2,288 (dropped once full).
+- Mesh entries (92 of 300) and the matrix buffer (0x1280 of 0xC000) were
+  fine.
+
+**Fix** (`src/game/draw_limits.cpp`):
+
+- Both display-list buffers move to unused memory at `0x80C40000`,
+  `0x40000` bytes each. This is round 120's relocation, reverted in round
+  121 because that flicker turned out to be RT64's.
+- With the draw distance above Original, latched once a frame at the pool
+  reset (`func_8007B03C`):
+  - the cut-off becomes `0x30000` (hooks before `0x8007B6E8` and
+    `0x8007B984`);
+  - the item pool moves to `0x80C00000` with room for `0x2000` items
+    (hooks before `0x8007B258` and `0x8007B3A8`).
+- At Original the game keeps its own limits.
+
+**Sandbox:**
+
+- Map Edge, mission 1: no draws dropped, about 150 KB of buffer to spare,
+  items peaked at 1,680.
+- Original: the same headroom as before (about 32 KB), no drops.
+- Tank Wars at Map Edge shows the whole arena.
+- The governor still trims the distance by 50 a second under 20 fps (the
+  sandbox's software renderer is that slow).
+
+## 2026-11-07, round 160: Far draw distance survives campaign camera scripts
+
+**Report:** with Draw Distance on Far, things still visibly draw in.
+
+**Findings** (temporary hooks, since removed):
+
+- In Tank Wars, Far works. The farthest object the visibility test
+  (`func_800AA664`, distance against the draw distance plus the object's
+  radius) let through was about 7,525 units, against 4,396 on Original.
+- Campaign camera scripts (`func_800D25E0`) also write the draw distance
+  at 0x8023A060. A shot stores its own value (0x800D289C), and the end of
+  the script stores 5000 (0x800D28B0). So once a mission's opening camera
+  sequence ran, Far was back to the original 5000 for the rest of the
+  mission. Tank Wars and mission 1 have no such script, which is why
+  round 158's checks didn't catch it.
+
+**Fix:** the same hook as the scene start (`btga_scene_draw_distance`, x3
+when Far is on) now also runs before both camera-script stores
+(`battletanxga.us.rev0.toml`). Nothing changes with Original.
+
+**Limits:** scenery culling squares the distance in a 32-bit int, so it
+must stay under about 46,000 (on Far, the scripts' 5000 becomes 15,000). The
+governor still lowers the distance by 50 a second while the game runs
+under 20 fps.
+
+Needs a check in a mission that opens with a camera sequence.
+
+## 2026-11-07, round 159: BattleTanx 1 Sound Effects option
+
+**Request** (issue #3): the first game's sound effects, which sound better.
+
+**Findings** (the owner's BattleTanx (USA) ROM, in the sandbox only):
+
+- This game's effects are libmus's `ptr_bank_t` ("N64 PtrTablesV2") at ROM
+  0x58FAE0 (76 samples; music's is at 0x61A698), DMA'd as is at boot, with
+  sample data from 0x593A28 (found from the 0x800-byte sample DMAs). The
+  first game uses libultra's sound player instead: an `ALBankFile` at
+  0x215620 (49 sounds, one instrument) with sample data at 0x100000.
+- Both are VADPCM with order-2, 4-predictor books. Decoded and compared
+  (envelopes, then spectrograms over 150 Hz-5.2 kHz), many of this game's
+  effects are the first game's resampled down by exactly 2^(23/12) = 3.775:
+  44.1 kHz to about 11.7 kHz.
+- The owner listened through a pack (each effect beside its three best
+  candidates) and confirmed 22 pairs; the rest stay as they are.
+- Measured at the mixer (`n_alResamplePull`, temporary): the effects play
+  at ratios 0.236-0.53 of the 22,050 Hz output (plus 1.0 for the first few
+  pulls of a voice, before libmus sets its pitch).
+
+**Feature** (`src/main/bt1_sounds.cpp`, as snprecomp's Spanish voices):
+**BattleTanx 1 Sound Effects** on the Sound tab with a **Load BattleTanx
+ROM** button (`lib-patches/RecompFrontend/0014-option-buttons.patch`,
+snprecomp's 0006 rebased onto our 0011-0013). The button checks the ROM
+(fingerprints of the bank and sample data) and keeps both in
+`battletanx1_sounds.bin` in the app folder. At game start (the game
+entry's `on_init_callback`), with the option on, the sample data is added
+past the end of the ROM and, for each confirmed pair, the effects table's
+wave table gets the first game's base, length, book and (for the two that
+loop) loop with its state, and the base-note byte goes **up** 23: libmus
+plays a sample faster the higher it is (the first try, -23, made the
+ratios 3.7 times lower). No game code changes.
+
+Sandbox: the replaced effects now play at 1.19-1.41 (3.775 times their old
+ratios, under the mixer's 2.0 limit), the others are unchanged; a match's
+recorded mix has twice the energy above 6 kHz. By sample loudness most
+pairs are within 1.5 dB; ga26, ga28, ga00 and ga34 are 3-6 dB quieter in
+the first game's version. Needs the owner's ears in game.
+
+## 2026-11-07, round 158: Fog and Draw Distance options
+
+**Request** (issue #3): a way to turn the fog off.
+
+Two options at the end of the Graphics tab, both defaulting to the game's
+own behaviour (`src/game/view_distance.cpp`, `src/main/game_config.cpp`):
+
+- **Fog** On / Off. `func_8007A250` sets the fog once a frame with the
+  game's only `G_MOVEWORD G_MW_FOG`, 0x64009D00 = `gSPFogPosition(995,
+  1000)`. Off replaces the word with 0 (multiplier and offset 0) at
+  0x8007A688, so no vertex gets any fog.
+- **Draw Distance** Original / Far. The int at 0x8023A060 is the draw
+  distance and sets the far plane (and so where the fog sits; round 110).
+  `func_8009AE38` resets it at each scene start (3400 / 2866 / 1800 by
+  layout) and the governor `func_80099FE8` adds 50 a second up to 5000.
+  Far triples the scene-start value at 0x8009AF4C; the governor leaves
+  values over 5000 alone (it only lowers them under 20 fps).
+
+With the fog off and the original distance, things at the edge pop in
+instead of fading; the option's text suggests pairing it with Far.
+
+Also: the Hacks tab's "Maximum Visibility" GameShark code is removed. It
+writes 0x800F9522, inside the RSP graphics microcode (the words there are
+vector instructions), which RT64 doesn't run, so it never did anything.
+
+Sandbox (mission 1's opening view, all four combinations): fog off clears
+the haze on the distant hangars and tower; Far moves the fog out (draw
+distance 10200). The main queue stays at about 470 of its 2288 records and
+the display list keeps over 32 KB free, as with the original distance.
 
 ## 2026-11-05, round 157: 0.1.6
 

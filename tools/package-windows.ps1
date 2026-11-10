@@ -10,7 +10,7 @@
 #
 # Output: dist\BattleTanxGARecompiled-<version>-windows.zip containing the exe,
 # its DLLs, the assets folder (loaded relative to the working directory, which
-# is the exe's folder when launched from Explorer), README, license, and the
+# is the exe's folder when launched from Explorer), README, the sound pack guide, license, and the
 # third-party license notices (licenses\).
 # Uses its own build folder (build-release) so a Debug dev build is untouched.
 param(
@@ -57,7 +57,7 @@ foreach ($file in @("BattleTanxGARecompiled.exe", "SDL2.dll", "dxil.dll", "dxcom
     Copy-Item (Join-Path $BuildDir $file) $stage
 }
 Copy-Item "assets" $stage -Recurse
-Copy-Item "README.md", "COPYING" $stage
+Copy-Item "README.md", "SOUND_PACKS.md", "COPYING" $stage
 
 # License notices for the third-party code built into the exe or shipped
 # beside it. Each library's own file, gathered under licenses\.
@@ -87,6 +87,10 @@ $licenses = [ordered]@{
     "GamepadMotionHelpers"  = "lib\RecompFrontend\lib\GamepadMotionHelpers\LICENSE"
     "SlotMap"               = "lib\SlotMap\README.md"
     "DirectXShaderCompiler" = "licenses\DirectXShaderCompiler.txt"
+    # Lossless Scaling frame generation (lib\lsfg): lsfg-vk's passes, DXVK's shader compiler, SPIR-V headers.
+    "lsfg-vk"               = "lib\lsfg\LICENSE-lsfg-vk.md"
+    "DXVK"                  = "lib\lsfg\LICENSE-dxvk.txt"
+    "SPIRV-Headers"         = "lib\rt64\src\contrib\re-spirv\external\SPIRV-Headers\LICENSE"
 }
 foreach ($entry in $licenses.GetEnumerator()) {
     if (Test-Path $entry.Value) {

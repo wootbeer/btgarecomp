@@ -1,6 +1,7 @@
 // Game-specific options on the General tab: which pak each controller holds,
-// and local multiplayer; the screen filter and bloom on the Graphics tab; and on
-// Android the Touch Controls tab. See include/btga_config.h.
+// and local multiplayer; the screen filter, bloom, fog and draw distance on
+// the Graphics tab; and on Android the Touch Controls tab.
+// See include/btga_config.h.
 #include "btga_config.h"
 #include "btga_android.h"
 
@@ -60,6 +61,38 @@ void btga::config::add_general_options(recomp::config::Config& general) {
         false
     );
 
+    general.add_enum_option(
+        "mouse_stick",
+        "Mouse Stick",
+        "Moves player 1's analog stick with the mouse. <b>Turn</b> uses left-right motion only, to turn "
+        "while the keys or a controller drive; <b>Full</b> also drives with up-down motion. The mouse is "
+        "held in the window while you play; open the menu to free it."
+        "<br/><br/>"
+        "Mouse buttons, the side buttons and the scroll wheel can be bound on the Controls tab.",
+        { {0u, "Off", "Off"}, {1u, "Turn", "Turn"}, {2u, "Full", "Full"} },
+        0u
+    );
+    general.add_number_option(
+        "mouse_stick_sensitivity",
+        "Mouse Stick Sensitivity",
+        "How far the stick moves for the mouse's motion.",
+        5, 300, 1, 0, true, 100
+    );
+    general.add_option_disable_dependency("mouse_stick_sensitivity", "mouse_stick", 0u);
+
+    // Also called when the saved settings load.
+    static int mouse_mode = 0;
+    static double mouse_sensitivity = 100.0;
+    general.add_option_change_callback("mouse_stick",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            mouse_mode = (int)std::get<uint32_t>(value);
+            btga::set_mouse_stick(mouse_mode, mouse_sensitivity);
+        });
+    general.add_option_change_callback("mouse_stick_sensitivity",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            mouse_sensitivity = std::get<double>(value);
+            btga::set_mouse_stick(mouse_mode, mouse_sensitivity);
+        });
 }
 
 #if defined(__ANDROID__)
@@ -134,6 +167,25 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
         bloom_options,
         RT64::Bloom::Off
     );
+    graphics.add_enum_option(
+        "fog",
+        "Fog",
+        "<b>Off</b> clears the haze over distant scenery. The game only draws so far, so with the fog off, "
+        "things at that edge pop in instead of fading in. Pair it with a <b>Far</b> draw distance.",
+        { {1u, "On", "On"}, {0u, "Off", "Off"} },
+        1u
+    );
+    graphics.add_enum_option(
+        "draw_distance",
+        "Draw Distance",
+        "<b>Far</b> draws scenery and tanks about three times as far away, <b>Very Far</b> six times, and "
+        "<b>Map Edge</b> as far as the game can. The fog moves out with it. Farther settings draw more each "
+        "frame, so they're heavier on slower PCs. Takes effect when a level starts.",
+        { {0u, "Original", "Original"}, {1u, "Far", "Far"}, {2u, "VeryFar", "Very Far"}, {3u, "MapEdge", "Map Edge"} },
+        0u
+    );
+
+    btga::config::add_frame_generation_options(graphics);
 
     // Also called when the saved settings load.
     graphics.add_option_change_callback("screen_filter",
@@ -143,6 +195,63 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
     graphics.add_option_change_callback("bloom",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             RT64::setBloom(static_cast<RT64::Bloom>(std::get<uint32_t>(value)));
+        });
+    graphics.add_option_change_callback("fog",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            btga::set_fog_enabled(std::get<uint32_t>(value) != 0);
+        });
+    graphics.add_option_change_callback("draw_distance",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            btga::set_draw_distance(static_cast<int>(std::get<uint32_t>(value)));
+        });
+}
+
+void btga::config::add_sfx_reverb_options(recomp::config::Config& sound) {
+    sound.add_bool_option(
+        "sfx_reverb",
+        "Sound Effects Reverb",
+        "Adds a little of the game's own reverb to the sound effects. The music already has some and "
+        "stays as it is.",
+        false
+    );
+    sound.add_number_option(
+        "sfx_reverb_amount",
+        "Sound Effects Reverb Amount",
+        "How much reverb Sound Effects Reverb adds.",
+        0, 100, 1, 0, true, 30
+    );
+    std::vector<recomp::config::ConfigValueVariant> reverb_off = { false };
+    sound.add_option_disable_dependency("sfx_reverb_amount", "sfx_reverb", reverb_off);
+
+    // Also called when the saved settings load.
+    static bool reverb_on = false;
+    static double reverb_amount = 30.0;
+    sound.add_option_change_callback("sfx_reverb",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            reverb_on = std::get<bool>(value);
+            btga::set_sfx_reverb(reverb_on, reverb_amount);
+        });
+    sound.add_option_change_callback("sfx_reverb_amount",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            reverb_amount = std::get<double>(value);
+            btga::set_sfx_reverb(reverb_on, reverb_amount);
+        });
+}
+
+void btga::config::add_sound_channels_option(recomp::config::Config& sound) {
+    sound.add_enum_option(
+        "sound_channels",
+        "Sound Channels",
+        "How many sounds can play at once, music included. The game has 42, and in a big fight new "
+        "sound effects are dropped when they're all in use. More channels let them play. "
+        "Takes effect the next time the game starts.",
+        { {42u, "Original", "Original"}, {64u, "64", "64"}, {96u, "96", "96"}, {128u, "128", "128"}, {256u, "256", "256"} },
+        42u
+    );
+    // Also called when the saved settings load.
+    sound.add_option_change_callback("sound_channels",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            btga::set_sound_channels(static_cast<int>(std::get<uint32_t>(value)));
         });
 }
 

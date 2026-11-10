@@ -1,0 +1,206 @@
+diff --git a/recompinput/include/recompinput/input_events.h b/recompinput/include/recompinput/input_events.h
+index 5f4420f..d456f31 100644
+--- a/recompinput/include/recompinput/input_events.h
++++ b/recompinput/include/recompinput/input_events.h
+@@ -5,4 +5,13 @@
+ namespace recompinput {
+     void handle_events();
+     void purge_deferred_controller_profiles();
++
++    // How the mouse behaves while the game runs with no menu open, if the game
++    // decides rather than the mouse sensitivity option.
++    enum class GameMouse {
++        Default,  // as the mouse sensitivity option says
++        Captured, // hidden and held in the window (relative motion only)
++        Hidden,   // hidden over the window, free to move
++    };
++    void set_game_mouse_callback(GameMouse (*callback)());
+ }
+diff --git a/recompinput/include/recompinput/input_state.h b/recompinput/include/recompinput/input_state.h
+index 1961e29..e81a677 100644
+--- a/recompinput/include/recompinput/input_state.h
++++ b/recompinput/include/recompinput/input_state.h
+@@ -48,5 +48,14 @@ namespace recompinput {
+     void remove_controller_state(SDL_JoystickID joystick_id);
+     void add_rotation_deltas(SDL_JoystickID joystick_id, float rot_x, float rot_y);
+     void add_mouse_deltas(float delta_x, float delta_y);
++    // A mouse button pressed (SDL_BUTTON_LEFT etc.), for the next poll.
++    void add_mouse_click(uint8_t button);
++    // Mouse inputs for the wheel's notches, bound like buttons (input_id of an
++    // InputType::Mouse field, past SDL's buttons).
++    constexpr uint8_t mouse_wheel_up = 30;
++    constexpr uint8_t mouse_wheel_down = 31;
++    // All the mouse's motion so far, in pixels, without the mouse sensitivity
++    // option: sample it over time for the mouse's speed.
++    void get_mouse_motion_total(double* x, double* y);
+     void add_mouse_wheel_delta(int32_t delta);
+ }
+diff --git a/recompinput/src/input_events.cpp b/recompinput/src/input_events.cpp
+index c76a1dc..94710de 100644
+--- a/recompinput/src/input_events.cpp
++++ b/recompinput/src/input_events.cpp
+@@ -117,7 +117,19 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
+     case SDL_EventType::SDL_MOUSEWHEEL:
+     {
+         SDL_MouseWheelEvent* wheel_event = &event->wheel;
+-        recompinput::add_mouse_wheel_delta(wheel_event->y * (wheel_event->direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1));
++        int32_t wheel_y = wheel_event->y * (wheel_event->direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1);
++        // A wheel notch can be bound like a key: a press for one controller read.
++        if (wheel_y != 0) {
++            uint8_t wheel_input = wheel_y > 0 ? recompinput::mouse_wheel_up : recompinput::mouse_wheel_down;
++            if (binding::is_binding() && binding::get_scanning_device() == InputDevice::Keyboard) {
++                binding::set_scanned_input({ InputType::Mouse, wheel_input });
++                break;
++            }
++            if (!recompinput::game_input_disabled()) {
++                recompinput::add_mouse_click(wheel_input);
++            }
++        }
++        recompinput::add_mouse_wheel_delta(wheel_y);
+     }
+     queue_if_enabled(event);
+     break;
+@@ -224,6 +236,17 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
+         }
+         queue_if_enabled(event);
+         break;
++    case SDL_EventType::SDL_MOUSEBUTTONDOWN:
++        // A mouse button can be bound like a key.
++        if (binding::is_binding() && binding::get_scanning_device() == InputDevice::Keyboard) {
++            binding::set_scanned_input({ InputType::Mouse, event->button.button });
++            break;
++        }
++        if (!recompinput::game_input_disabled()) {
++            recompinput::add_mouse_click(event->button.button);
++        }
++        queue_if_enabled(event);
++        break;
+     case SDL_EventType::SDL_DROPBEGIN:
+         DropState.files_dropped.clear();
+         break;
+@@ -246,6 +269,12 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
+     return false;
+ }
+ 
++static recompinput::GameMouse (*game_mouse_callback)() = nullptr;
++
++void set_game_mouse_callback(recompinput::GameMouse (*callback)()) {
++    game_mouse_callback = callback;
++}
++
+ void handle_events() {
+     SDL_Event cur_event;
+     static bool started = false;
+@@ -260,6 +289,18 @@ void handle_events() {
+ 
+         // Hide the cursor based on its enable state, but override visibility to false if the cursor is locked.
+         bool cursor_visible = recompui::get_cursor_visible();
++        if (game_mouse_callback != nullptr && !recompinput::game_input_disabled() && ultramodern::is_game_started()) {
++            switch (game_mouse_callback()) {
++                case recompinput::GameMouse::Captured:
++                    cursor_locked = true;
++                    break;
++                case recompinput::GameMouse::Hidden:
++                    cursor_visible = false;
++                    break;
++                default:
++                    break;
++            }
++        }
+         if (cursor_locked) {
+             cursor_visible = false;
+         }
+diff --git a/recompinput/src/input_state.cpp b/recompinput/src/input_state.cpp
+index 03ed871..efdc236 100644
+--- a/recompinput/src/input_state.cpp
++++ b/recompinput/src/input_state.cpp
+@@ -24,8 +24,14 @@ static struct {
+     std::unordered_map<SDL_JoystickID, ControllerState> controller_states;
+ 
+     std::array<float, 2> mouse_delta{};
++    // Mouse buttons held at the last poll, and pressed since it (a click
++    // shorter than a frame still counts).
++    uint32_t mouse_buttons = 0;
++    std::atomic<uint32_t> mouse_clicks = 0;
+     std::mutex pending_input_mutex;
+     std::array<float, 2> pending_mouse_delta{};
++    // All the mouse's motion so far, in pixels (under pending_input_mutex).
++    std::array<double, 2> mouse_motion_total{};
+ 
+     InputArray<float> cur_rumble{};
+     InputArray<bool> rumble_active{};
+@@ -34,6 +40,7 @@ static struct {
+ void recompinput::poll_inputs() {
+     InputState.keys = SDL_GetKeyboardState(&InputState.numkeys);
+     InputState.keymod = SDL_GetModState();
++    InputState.mouse_buttons = SDL_GetMouseState(nullptr, nullptr) | InputState.mouse_clicks.exchange(0);
+     static bool first_poll = true;
+ 
+     {
+@@ -230,8 +237,7 @@ float recompinput::get_input_analog(int controller_num, const InputField& field)
+     case InputType::ControllerAnalog:
+         return controller_axis_state(controller_num, field.input_id, true);
+     case InputType::Mouse:
+-        // TODO mouse support
+-        return 0.0f;
++        return (field.input_id >= 1 && field.input_id <= 31 && (InputState.mouse_buttons & SDL_BUTTON(field.input_id))) ? 1.0f : 0.0f;
+     case InputType::None:
+         return false;
+     }
+@@ -261,8 +267,7 @@ bool recompinput::get_input_digital(int controller_num, const InputField& field)
+         // TODO adjustable threshold
+         return controller_axis_state(controller_num, field.input_id, true) >= recompinput::axis_digital_threshold;
+     case InputType::Mouse:
+-        // TODO mouse support
+-        return false;
++        return field.input_id >= 1 && field.input_id <= 31 && (InputState.mouse_buttons & SDL_BUTTON(field.input_id)) != 0;
+     case InputType::None:
+         return false;
+     }
+@@ -406,10 +411,24 @@ void recompinput::add_rotation_deltas(SDL_JoystickID joystick_id, float rot_x, f
+     state.pending_rotation_delta[1] += rot_y;
+ }
+ 
++void recompinput::add_mouse_click(uint8_t button) {
++    if (button >= 1 && button <= 31) {
++        InputState.mouse_clicks.fetch_or(SDL_BUTTON(button));
++    }
++}
++
++void recompinput::get_mouse_motion_total(double* x, double* y) {
++    std::lock_guard lock{ InputState.pending_input_mutex };
++    *x = InputState.mouse_motion_total[0];
++    *y = InputState.mouse_motion_total[1];
++}
++
+ void recompinput::add_mouse_deltas(float delta_x, float delta_y) {
+     std::lock_guard lock{ InputState.pending_input_mutex };
+     InputState.pending_mouse_delta[0] += delta_x;
+     InputState.pending_mouse_delta[1] += delta_y;
++    InputState.mouse_motion_total[0] += delta_x;
++    InputState.mouse_motion_total[1] += delta_y;
+ }
+ void recompinput::add_mouse_wheel_delta(int32_t delta) {
+     InputState.mouse_wheel_pos.fetch_add(delta);
+diff --git a/recompinput/src/input_types.cpp b/recompinput/src/input_types.cpp
+index c6786e6..0ead9bf 100644
+--- a/recompinput/src/input_types.cpp
++++ b/recompinput/src/input_types.cpp
+@@ -260,6 +260,17 @@ std::string recompinput::InputField::to_string() const {
+         return controller_axis_to_string(input_id);
+     case InputType::Keyboard:
+         return keyboard_input_to_string((SDL_Scancode)input_id);
++    case InputType::Mouse:
++        switch (input_id) {
++            case SDL_BUTTON_LEFT: return PF_MOUSE_LEFT;
++            case SDL_BUTTON_MIDDLE: return PF_MOUSE_MIDDLE;
++            case SDL_BUTTON_RIGHT: return PF_MOUSE_RIGHT;
++            case SDL_BUTTON_X1: return PF_MOUSE_4;
++            case SDL_BUTTON_X2: return PF_MOUSE_5;
++            case recompinput::mouse_wheel_up: return PF_MOUSE_SCROLL_UP;
++            case recompinput::mouse_wheel_down: return PF_MOUSE_SCROLL_DOWN;
++            default: return "Mouse " + std::to_string(input_id);
++        }
+     default:
+         return recompinput::unknown_device_input;
+     }

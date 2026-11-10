@@ -25,10 +25,12 @@
 // order (G_EX_ORDER_LINEAR). Anything without a stable owner keeps RT64's
 // automatic matching.
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "recomp.h"
@@ -46,6 +48,13 @@ namespace {
     struct Generation {
         std::unordered_map<uint32_t, uint32_t> mtx_source;
         std::unordered_map<uint32_t, uint32_t> source_uses;
+        // A tank's extra parts (round 169): tank object + scratch slot -> the
+        // Mtx built from that scratch for it this frame, in order.
+        std::unordered_map<uint32_t, std::vector<uint32_t>> extra_parts;
+        // Tank parts (odd IDs) -> their rotation this frame, rows normalized
+        // (round 171), and the ones that turned too far since the last frame.
+        std::unordered_map<uint32_t, std::array<float, 9>> rotations;
+        std::unordered_set<uint32_t> snap_rotation;
     };
     Generation generations[2];
     int current = 0;
@@ -121,17 +130,35 @@ namespace {
     // had the tagged components too while the tanks were untagged, but forcing interpolation on
     // whatever automatic matching pairs flickered explosions on the in-between frames (gone at
     // Original), and their sprites changing size and shape every frame are just what AUTO stops.
+    // A tank part that turned more than this in one game frame (round 171).
+    constexpr float kTankSnapCos = 0.7071f; // 45 degrees
+
+    // Whether this ID's rotation jumped this frame: then only its position and
+    // scale are interpolated, the rotation taken as it is.
+    bool snaps_rotation(uint32_t id) {
+        if ((id & 1) == 0 || id == kIdAuto) {
+            return false;
+        }
+        for (const Generation& gen : generations) {
+            if (gen.snap_rotation.count(id) != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     uint32_t matrix_group_params(uint32_t id, bool push) {
-        constexpr uint32_t kInterpolate = 1, kAuto = 2;
+        constexpr uint32_t kInterpolate = 1, kAuto = 2, kSkip = 0;
         const bool tagged = (id != kIdAuto);
         const uint32_t motion = tagged ? kInterpolate : kAuto;
+        const uint32_t rotation = snaps_rotation(id) ? kSkip : motion;
         const uint32_t order = tagged ? 0u : 1u; // G_EX_ORDER_LINEAR for IDs, AUTO for the automatic group
         const uint32_t params =
             (push ? 1u : 0u) |       // push
             (0u << 1) |              // proj: modelview
             (1u << 2) |              // mode: decompose
             (motion << 3) |          // position
-            (motion << 5) |          // rotation
+            (rotation << 5) |        // rotation
             (motion << 7) |          // scale
             (motion << 9) |          // skew
             (motion << 11) |         // perspective
@@ -169,13 +196,54 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     // loops over the tank objects (0x4CC apart, from 0x801AD128) in $s3; the drawer saves
     // that at 0x84 of its frame, which sits right above ours (0x40). The scratch matrix,
     // its own argument, is at 0x4C there -- checked, so another caller is left alone.
-    if ((float_source == 0x8021B2A0u) || (float_source == 0x8021B2E8u)) {
+    //
+    // Round 169: some tanks have extra parts, built in more scratch matrices (0x8021B500 and
+    // 0x8021B548; round 173 added 0x8021B478, the Rattler's multi-barrel cannon), each several
+    // meshes under one Mtx and sometimes built twice a frame. Named by their scratch address
+    // alone, a part had an ID only on frames when no other tank drew one, so the ID moved from
+    // tank to tank and RT64 blended one tank's part toward another's. They are named by the
+    // tank too, and by the order the tank builds them in the frame. With tank IDs they also get
+    // round 171's rotation snap.
+    const bool hull_or_turret = (float_source == 0x8021B2A0u) || (float_source == 0x8021B2E8u);
+    const bool extra_part = (float_source == 0x8021B500u) || (float_source == 0x8021B548u) ||
+                            (float_source == 0x8021B478u);
+    if (hull_or_turret || extra_part) {
         const gpr drawer_sp = ctx->r29 + 0x40;
+        uint32_t object = 0;
         if ((uint32_t)MEM_W(0x4C, drawer_sp) == float_source) {
-            const uint32_t object = (uint32_t)MEM_W(0x84, drawer_sp);
-            if ((object >= 0x80000000u) && (object < 0x80800000u) && ((object & 3) == 0)) {
-                // Odd, so never the address of an Mtx or float matrix used as an ID.
+            object = (uint32_t)MEM_W(0x84, drawer_sp);
+        }
+        else if (extra_part && ((uint32_t)MEM_W(0x58, drawer_sp) == float_source) &&
+                 ((uint32_t)MEM_W(0xA0, drawer_sp) == (uint32_t)drawer_sp + 0x88u + 0x1E8u) &&
+                 ((uint32_t)MEM_W(0xA4, drawer_sp) == 1u)) {
+            // Round 173: most tanks' extra parts come the other way, from func_80092C38 at
+            // 0x80094590 through the generic model drawer func_800AD9A8 (frame 0x88). It is
+            // given the part's matrix from the caller's $s0 and saves that at 0x58, and the
+            // tank ($s3) at 0x64; its stack arguments (0x18: the caller's sp + 0x1E8, 0x1C: 1)
+            // mark the call. In mission 1 only one tank at a time came through func_800AE184; the
+            // rest came this way, so their parts had no tank ID.
+            object = (uint32_t)MEM_W(0x64, drawer_sp);
+        }
+        if ((object >= 0x80000000u) && (object < 0x80800000u) && ((object & 3) == 0)) {
+            // Odd, so never the address of an Mtx or float matrix used as an ID; all
+            // below the next tank (0x4CC on).
+            if (hull_or_turret) {
                 source = object | ((float_source == 0x8021B2A0u) ? 1u : 3u);
+            }
+            else {
+                // IDs tank + 5, 7 and 11 (0x8021B478, round 173), each + 8 * k.
+                const uint32_t slot = (float_source == 0x8021B500u) ? 5u : (float_source == 0x8021B548u) ? 7u : 11u;
+                std::vector<uint32_t>& built = generations[current].extra_parts[object + slot];
+                size_t k = 0;
+                while (k < built.size() && built[k] != mtx) {
+                    k++;
+                }
+                if (k == built.size()) {
+                    built.push_back(mtx);
+                }
+                if (k < 16) {
+                    source = object + slot + 8u * (uint32_t)k;
+                }
             }
         }
     }
@@ -209,6 +277,40 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     if (source != 0) {
         gen.mtx_source[mtx] = source;
         gen.source_uses[source]++;
+        // Round 171: a tank part whose rotation jumps in one frame. The Rattler's cannon (its
+        // turret) showed it: on two in-between frames in a row it swung off sideways, tilted,
+        // while the frames around them were right -- its turret turning about half a turn
+        // and back, which a round, many-barrelled cannon hides on the game's own frames, and
+        // RT64 blended through the angle between. Such a part takes its new rotation as it
+        // is (position and scale still smoothed), as the sprites do (round 156).
+        if ((source & 1) != 0 && float_source != 0 && gen.rotations.count(source) == 0) {
+            std::array<float, 9> rot;
+            for (int row = 0; row < 3; row++) {
+                float len = 0.0f;
+                for (int col = 0; col < 3; col++) {
+                    const uint32_t bits = (uint32_t)MEM_W(0x10 * row + 4 * col, (gpr)(int32_t)float_source);
+                    std::memcpy(&rot[row * 3 + col], &bits, sizeof(float));
+                    len += rot[row * 3 + col] * rot[row * 3 + col];
+                }
+                len = std::sqrt(len);
+                for (int col = 0; col < 3; col++) {
+                    rot[row * 3 + col] = (len > 1e-6f) ? rot[row * 3 + col] / len : 0.0f;
+                }
+            }
+            gen.rotations[source] = rot;
+            const Generation& last = generations[current ^ 1];
+            auto prev = last.rotations.find(source);
+            if (prev != last.rotations.end()) {
+                // cos of the angle between: (trace(Rprev^T R) - 1) / 2
+                float trace = 0.0f;
+                for (int i = 0; i < 9; i++) {
+                    trace += prev->second[i] * rot[i];
+                }
+                if ((trace - 1.0f) * 0.5f < kTankSnapCos) {
+                    gen.snap_rotation.insert(source);
+                }
+            }
+        }
     }
 }
 
@@ -222,6 +324,9 @@ void btga_interp_new_frame() {
     current ^= 1;
     generations[current].mtx_source.clear();
     generations[current].source_uses.clear();
+    generations[current].extra_parts.clear();
+    generations[current].rotations.clear();
+    generations[current].snap_rotation.clear();
 }
 
 // func_800A1FDC, around each object's draw call (0x800A20F8 and after it): the
@@ -300,14 +405,23 @@ extern "C" void btga_interp_queue_end(uint8_t* rdram, recomp_context*) {
 // Position and size are interpolated, and the angle when it changed by less
 // than 45 degrees (round 156: wreckage spins steadily; a fireball can get a
 // new angle every frame, and turning through those showed in the first game).
+//
+// Round 165: a sprite also pairs only with one about its own size (within
+// kSpriteSizeRatio either way). Fire and smoke puffs die and new ones start
+// small where they were, and pairing the two showed a puff swelling or
+// shrinking through the in-between frames: the flashes in explosions. In Tank
+// Wars about 2% of pairs changed size more than 2.5 times in a frame, against
+// 1.2-1.7 times for a growing fireball.
 namespace {
     constexpr uint32_t kSpriteIdBase = 0x5F000000u; // clear of addresses and the arrows' IDs
     constexpr float kSpritePairDistance = 64.0f;
+    constexpr float kSpriteSizeRatio = 2.0f;
     constexpr size_t kSpriteViews = 4;
 
     struct Sprite {
         float x, y, z;
         float vx, vy, vz;
+        float width, height;
         bool moved; // seen in the frame before too
         uint16_t angle;
         bool turn_smoothly;
@@ -324,7 +438,13 @@ namespace {
         return value;
     }
 
-    const Sprite& pair_sprite(size_t view, float x, float y, float z, uint16_t angle) {
+    bool similar_size(float a, float b) {
+        a = std::fabs(a);
+        b = std::fabs(b);
+        return a <= b * kSpriteSizeRatio && b <= a * kSpriteSizeRatio;
+    }
+
+    const Sprite& pair_sprite(size_t view, float x, float y, float z, float width, float height, uint16_t angle) {
         std::vector<Sprite>& prev = sprites_prev[view];
         int best = -1;
         float best_dist = 0.0f;
@@ -333,12 +453,15 @@ namespace {
             const float dx = p.x + p.vx - x, dy = p.y + p.vy - y, dz = p.z + p.vz - z;
             const float d = dx * dx + dy * dy + dz * dz;
             const float room = p.moved ? kSpritePairDistance : 2.0f * kSpritePairDistance;
+            if (!similar_size(p.width, width) || !similar_size(p.height, height)) {
+                continue;
+            }
             if (d <= room * room && (best < 0 || d < best_dist)) {
                 best = (int)i;
                 best_dist = d;
             }
         }
-        Sprite s{ x, y, z, 0.0f, 0.0f, 0.0f, false, angle, false, 0 };
+        Sprite s{ x, y, z, 0.0f, 0.0f, 0.0f, width, height, false, angle, false, 0 };
         if (best >= 0) {
             const Sprite& p = prev[best];
             s.vx = x - p.x;
@@ -403,10 +526,12 @@ extern "C" void btga_interp_sprite_load(uint8_t* rdram, recomp_context* ctx) {
     const float x = read_float(rdram, record + 0xC);
     const float y = read_float(rdram, record + 0x10);
     const float z = read_float(rdram, record + 0x14);
-    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+    const float width = read_float(rdram, record + 0x18);
+    const float height = read_float(rdram, record + 0x1C);
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(width) || !std::isfinite(height)) {
         return;
     }
-    const Sprite& sprite = pair_sprite(view, x, y, z, (uint16_t)MEM_HU(0xA, record));
+    const Sprite& sprite = pair_sprite(view, x, y, z, width, height, (uint16_t)MEM_HU(0xA, record));
     if (!sprite_group_pushed) {
         write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
         write_cmd(rdram, 0x6400000Cu, sprite.id);

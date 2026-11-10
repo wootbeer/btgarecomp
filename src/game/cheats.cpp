@@ -229,7 +229,9 @@ namespace {
         e.push_back(gs("gs_all_tanks", "All Tanks All Levels", "Every tank, in every level of every campaign.",
             { "50001370", "0000", "81124BD6", "FFFF", "50001370", "0000", "81124BDA", "FFFF" }));
         e.push_back(gs_hook("gs_rapid_fire", "Rapid Fire", "Might only fire so many times each level.", "8008E7F0 0001", RapidFire));
-        e.push_back(gs("gs_max_visibility", "Maximum Visibility", "", { "800F9522", "0001" }));
+        // Not listed: "Maximum Visibility" (800F9522 0001) patches the RSP
+        // graphics microcode, which RT64 doesn't run, so it does nothing here.
+        // The Graphics tab's Fog and Draw Distance cover it (view_distance.cpp).
         e.push_back(gs_hook("gs_stinger", "Stinger Weapons", "Weapons now sting, better move fast.", "8008C394 0001", StingerWeapons));
         e.push_back(gs_hook("gs_move_after_level", "Move After Beating A Level", "Press <b>B</b> to end the level.", "8009C624 0001", MoveAfterLevel));
         e.push_back(gs_hook("gs_chain_pumps", "Chain Reaction Pumps",

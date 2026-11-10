@@ -615,3 +615,20 @@ PC unchanged. The Android-only nuke-flash gEXSetRectAspect affects rectangles on
 arrows are triangles, so it doesn't reach them. No lib-patch or CMake changes. To try on the device
 at a Refresh Rate above 30: radar arrows (Hacks > Radar Pickups in Tank Wars), explosions' wreckage,
 fire and smoke, and that tanks, decals, the intro and the nuke flash are no worse.
+
+Merged main 0.1.10 (rounds 158-188; versionCode 4): Fog and Draw Distance, BattleTanx 1 sound
+effects, Sound Effects Reverb, Sound Channels, mouse support, sound packs, Lossless Scaling frame
+generation (lib/lsfg) and the main thread sleeping instead of spinning (round 188, which should
+help battery too). All shared with PC unchanged, with these Android additions:
+- Lossless Scaling is built for Android as well (plume's Vulkan, as on Windows and Linux): players
+  can load their own Lossless.dll through the file picker, as on PC. Untried on a phone GPU.
+- RecompFrontend 0017 hides the Graphics API option that round 176 shows (Vulkan only here).
+- RecompFrontend 0018: SDL makes every touch a mouse click for the menus, and round 164 binds left
+  click to Z by default, so a tap that missed the touch controls fired the main gun. Touch-made mouse
+  events no longer count as mouse buttons or mouse motion; a real mouse's held buttons are tracked
+  from its events, as SDL's own mouse state also holds the touch-made clicks.
+- Patch numbers: main added plume 0005 and rt64 0022, so the Android ones moved after them: plume
+  0008 (read-only depth, was 0005; applies the same after 0005-0007), rt64 0024 and 0025 (were 0022,
+  0023).
+- BattleTanx 1 sounds (Load BattleTanx ROM) use the game's file dialog, the system picker here, and
+  sound packs install like mods (Install Mods).
