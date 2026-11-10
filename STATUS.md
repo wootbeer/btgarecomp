@@ -103,7 +103,8 @@ main thread at 90-93% of a core, 30 frames a second; after, 3.4%, 30 frames
 a second, the same windows within a frame. The game boots, goes through the
 menus and plays a match as before. Untouched: the hook still drains every
 message and hands off on every call (the round 52 and 65 fixes), and
-nothing else (the heap, round 150; the other crash fixes) involves it. The rest of the sandbox's
+nothing else (the heap, round 150; the other crash fixes) involves it.
+Played by the owner on Windows afterwards: fine. The rest of the sandbox's
 CPU use is lavapipe drawing on the CPU, which a real GPU does instead.
 
 Also worth telling Deck players: RT64 draws every in-between frame at full
