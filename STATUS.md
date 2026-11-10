@@ -87,16 +87,23 @@ handheld that's a core at full power.
 
 **Fix:** what those loops wait for is set by another game thread, which only
 becomes ready when an external message (VI, AI, SP...) is delivered; the
-hand-off already lets any thread that's ready run. So when the hook is
-called again within 2 ms of its last call (the loop is still waiting), it
-first sleeps until the next external message arrives
+hand-off already lets any thread that's ready run. So once back-to-back
+calls (under 1 ms apart) have gone on for 2 ms, each further call first
+sleeps until the next external message arrives
 (`ultramodern::wait_for_external_message_timed`, at most 1 ms), then drains
-and hands off as before. The first call of a wait doesn't sleep, so a flag
-the hand-off clears is seen at once.
+and hands off as before. Shorter runs never sleep: `func_800A1384`'s inner
+copy calls the hook up to 32 times in a normal pass (round 53), and a flag
+the hand-off clears is seen at once. (The first version slept from the
+second back-to-back call, which could have added up to ~31 ms to that
+copy; it measured the same, but this can't.)
 
-**Result** (sandbox): the main thread went from 93% of a core to 2.8% on
-the title screen and about 3% in a Tank Wars match. The game boots, goes
-through the menus and plays a match as before. The rest of the sandbox's
+**Result** (sandbox, frames swapped per second counted in osViSwapBuffer
+over 5 s windows, through boot, menus and a Tank Wars match): before, the
+main thread at 90-93% of a core, 30 frames a second; after, 3.4%, 30 frames
+a second, the same windows within a frame. The game boots, goes through the
+menus and plays a match as before. Untouched: the hook still drains every
+message and hands off on every call (the round 52 and 65 fixes), and
+nothing else (the heap, round 150; the other crash fixes) involves it. The rest of the sandbox's
 CPU use is lavapipe drawing on the CPU, which a real GPU does instead.
 
 Also worth telling Deck players: RT64 draws every in-between frame at full

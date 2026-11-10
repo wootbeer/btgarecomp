@@ -69,14 +69,21 @@ void dequeue_external_messages(uint8_t* rdram);
 // CPU spun there too). What the loops wait for comes from another game
 // thread, which only becomes ready when an external message (VI, AI, ...)
 // is delivered, and the hand-off below already lets any thread that was
-// ready run. So when this is called again right after the last call (the
-// loop is still waiting), it first sleeps until the next external message
-// arrives, at most 1 ms, instead of spinning. The first call of a wait
-// doesn't sleep, so a flag that the hand-off clears is seen at once.
+// ready run. So once back-to-back calls (under 1 ms apart) have gone on for
+// 2 ms -- the loop is really waiting -- each further call first sleeps until
+// the next external message arrives, at most 1 ms, instead of spinning.
+// Shorter runs never sleep: func_800A1384's inner copy calls this up to 32
+// times in a normal pass (round 53), and a flag the hand-off clears is seen
+// at once.
 extern "C" void btga_yield_via_priority_drop(uint8_t* rdram) {
-    static thread_local std::chrono::steady_clock::time_point last_call{};
+    // Calls less than 1 ms apart are one wait; once a wait has gone on for
+    // 2 ms, each further call first sleeps until the next external message.
+    static thread_local std::chrono::steady_clock::time_point last_call{}, wait_start{};
     const auto now = std::chrono::steady_clock::now();
-    if (now - last_call < std::chrono::milliseconds(2)) {
+    if (now - last_call > std::chrono::milliseconds(1)) {
+        wait_start = now;
+    }
+    else if (now - wait_start >= std::chrono::milliseconds(2)) {
         ultramodern::wait_for_external_message_timed(rdram, 1);
     }
 
