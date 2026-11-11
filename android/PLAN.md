@@ -646,3 +646,6 @@ help battery too). All shared with PC unchanged, with these Android additions:
   by a thread polling `exited` every 50 ms, and BTGA's main() ends the process straight after
   recomp::start() returns (no 3-second watchdog, unlike SnP), usually first. main() now calls
   btga::android::quitting() before _Exit, which removes it at once.
+- rt64 0026 tried on the Retroid (log: "paced by the swap chain's queue (refresh rate 120 Hz)"): the
+  jitter stayed at 120 Hz and 60 Hz got heavy warping. Removed; Android is back to timed presents.
+  Lossless Scaling stays an option there, but RT64's own interpolation is the smoother choice on it.
