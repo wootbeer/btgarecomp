@@ -28,6 +28,11 @@
 extern std::atomic_bool exited;
 
 namespace {
+    // The marker file that says the game is running (LogFiles.java); set by startup().
+    std::string running_marker;
+}
+
+namespace {
     // log.txt stops growing past this; what's wrong usually shows early, or ends in a crash
     // report (crash_log.txt).
     constexpr long max_log_bytes = 8 * 1024 * 1024;
@@ -187,15 +192,23 @@ void btga::android::startup() {
     }
 
     // A quit, not a crash: no "closed unexpectedly" at the next start (LogFiles.java). The
-    // marker goes as soon as quitting starts, as the game's threads aren't always joined after.
+    // marker goes as soon as quitting starts, in case the game's threads hang after; quitting()
+    // removes it too, as the process usually ends before this thread's next look.
     if (internal_path != nullptr) {
-        std::thread([marker = std::string(internal_path) + "/running"]() {
+        running_marker = std::string(internal_path) + "/running";
+        std::thread([]() {
             // Polled: quit() stores the flag without notifying waiters.
             while (!exited.load()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
-            std::remove(marker.c_str());
+            std::remove(running_marker.c_str());
         }).detach();
+    }
+}
+
+void btga::android::quitting() {
+    if (!running_marker.empty()) {
+        std::remove(running_marker.c_str());
     }
 }
 

@@ -642,3 +642,7 @@ help battery too). All shared with PC unchanged, with these Android additions:
   presents, which judder. rt64 0026 (Android only): without present wait on a FIFO swap chain, the
   frames are still split over the game frame's refreshes, presented back to back and paced by the
   swap chain's queue. The log names the pacing used ("[RT64] Frame generation paced by ...").
+- A false "The game closed unexpectedly" after quitting normally: the running marker was only removed
+  by a thread polling `exited` every 50 ms, and BTGA's main() ends the process straight after
+  recomp::start() returns (no 3-second watchdog, unlike SnP), usually first. main() now calls
+  btga::android::quitting() before _Exit, which removes it at once.

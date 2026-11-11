@@ -586,6 +586,9 @@ int main(int argc, char** argv) {
     });
 
     NFD_Quit();
+#if defined(__ANDROID__)
+    btga::android::quitting();
+#endif
 
     // The game's threads are never joined by the runtime and may still be
     // blocked on (or spinning over) runtime state when recomp::start

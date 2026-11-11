@@ -30,5 +30,10 @@ namespace btga::android {
     // Builds the launcher menu: recompui's default one plus Change ROM
     // (src/android/android_launcher.cpp). Call before recomp::start().
     void register_launcher();
+
+    // The game quit (not crashed): removes the marker LogFiles.java reads at the next start as a
+    // crash. Call once recomp::start() returns; the process ends straight after, often before
+    // startup()'s own watch for the quit has looked.
+    void quitting();
 }
 #endif
