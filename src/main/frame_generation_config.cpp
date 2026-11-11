@@ -71,6 +71,7 @@ namespace {
 
     void load_dll() {
         recompui::file::open_file_dialog([](bool success, const std::filesystem::path& path) {
+            fprintf(stderr, "[Lossless Scaling] File dialog closed: %s\n", success ? path.string().c_str() : "nothing chosen");
             if (!success) {
                 return;
             }
@@ -113,6 +114,7 @@ namespace {
                 return;
             }
             show_message("Lossless.dll", "Translating Lossless.dll's shaders. This can take a while; a message shows when it's done.");
+            fprintf(stderr, "[Lossless Scaling] Translating on a thread of its own\n");
             std::thread([load]() {
                 load();
                 loading = false;
