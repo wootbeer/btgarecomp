@@ -10,6 +10,7 @@
 #include <dxbc/dxbc_reader.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -234,6 +235,8 @@ namespace lsfg {
                     error = "This DLL doesn't have Lossless Scaling's frame generation shaders. Choose Lossless.dll from Lossless Scaling's folder.";
                     return false;
                 }
+                // Progress on stderr: a slow device takes a while here (the game's log shows how far).
+                fprintf(stderr, "[lsfg] Translating shader %u (%zu done)\n", id, translated.size());
                 try {
                     found = translated.emplace(id, translate(it->second)).first;
                 }

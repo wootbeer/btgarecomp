@@ -11,9 +11,13 @@
 // needs only recompui, RT64's frame generation header and lib/lsfg.
 #include "btga_config.h"
 
+#include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <thread>
 
 #include "recompui/config.h"
 #include "recompui/recompui.h"
@@ -74,25 +78,48 @@ namespace {
             (void)(path);
             show_message("Lossless Scaling", "Lossless Scaling frame generation isn't available on macOS.");
 #else
-            lsfg::ShaderSet shaders;
-            std::string error;
-            std::error_code ec;
-            std::filesystem::create_directories(dll_path().parent_path(), ec);
-            std::filesystem::remove(cache_path(), ec);
-            // Translate from the chosen file first, so a wrong one doesn't replace a good copy.
-            if (!lsfg::load_shaders(path, cache_path(), shaders, error)) {
-                show_message("Lossless.dll", "This file can't be used: " + error);
-                return;
-            }
-            if (!std::filesystem::equivalent(path, dll_path(), ec)) {
-                std::filesystem::copy_file(path, dll_path(), std::filesystem::copy_options::overwrite_existing, ec);
-                if (ec) {
-                    show_message("Lossless.dll", "Failed to copy Lossless.dll into the app folder.");
+            // Translates from the chosen file first, so a wrong one doesn't replace a good copy.
+            auto load = [path]() {
+                fprintf(stderr, "[Lossless Scaling] Loading %s\n", path.string().c_str());
+                const auto start = std::chrono::steady_clock::now();
+                lsfg::ShaderSet shaders;
+                std::string error;
+                std::error_code ec;
+                std::filesystem::create_directories(dll_path().parent_path(), ec);
+                std::filesystem::remove(cache_path(), ec);
+                const bool loaded = lsfg::load_shaders(path, cache_path(), shaders, error);
+                fprintf(stderr, "[Lossless Scaling] Shaders %s after %lld ms%s%s\n", loaded ? "translated" : "failed",
+                    (long long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count(),
+                    loaded ? "" : ": ", error.c_str());
+                if (!loaded) {
+                    show_message("Lossless.dll", "This file can't be used: " + error);
                     return;
                 }
+                if (!std::filesystem::equivalent(path, dll_path(), ec)) {
+                    std::filesystem::copy_file(path, dll_path(), std::filesystem::copy_options::overwrite_existing, ec);
+                    if (ec) {
+                        show_message("Lossless.dll", "Failed to copy Lossless.dll into the app folder.");
+                        return;
+                    }
+                }
+                apply();
+                show_message("Lossless.dll", "Lossless.dll is ready. Set Frame Generation to Lossless Scaling to use it.");
+            };
+#if defined(__ANDROID__)
+            // A phone takes much longer to translate the shaders; on the menu's thread the screen
+            // stayed black throughout. Translate on a thread of its own, one load at a time.
+            static std::atomic_bool loading = false;
+            if (loading.exchange(true)) {
+                return;
             }
-            apply();
-            show_message("Lossless.dll", "Lossless.dll is ready. Set Frame Generation to Lossless Scaling to use it.");
+            show_message("Lossless.dll", "Translating Lossless.dll's shaders. This can take a while; a message shows when it's done.");
+            std::thread([load]() {
+                load();
+                loading = false;
+            }).detach();
+#else
+            load();
+#endif
 #endif
         });
     }

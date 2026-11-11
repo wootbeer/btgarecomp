@@ -632,3 +632,7 @@ help battery too). All shared with PC unchanged, with these Android additions:
   0023).
 - BattleTanx 1 sounds (Load BattleTanx ROM) use the game's file dialog, the system picker here, and
   sound packs install like mods (Install Mods).
+- Load Lossless.dll on the Retroid: the screen stayed black after picking the file (cause not yet
+  known). The shaders were translated on the menu's thread, which can't draw meanwhile; on Android
+  that now runs on a thread of its own with a "Translating" message, and the log says how far it
+  got ([Lossless Scaling] and [lsfg] lines). PC unchanged apart from those log lines.
