@@ -649,3 +649,7 @@ help battery too). All shared with PC unchanged, with these Android additions:
 - rt64 0026 tried on the Retroid (log: "paced by the swap chain's queue (refresh rate 120 Hz)"): the
   jitter stayed at 120 Hz and 60 Hz got heavy warping. Removed; Android is back to timed presents.
   Lossless Scaling stays an option there, but RT64's own interpolation is the smoother choice on it.
+- Still "closed unexpectedly" at each launch on the Retroid after that: installing a new build (as
+  Android Studio's Run does) kills the process with no warning while the game is open, which looks
+  just like a crash. The marker now holds the install's time (lastUpdateTime) and only one from this
+  same install counts as a crash.

@@ -47,7 +47,10 @@ final class LogFiles {
      */
     static boolean startRun(Context context) {
         File dir = context.getFilesDir();
-        boolean crashed = new File(dir, RUNNING_MARKER).exists();
+        // Installing an update ends the process too, with no warning while the game is in use (as
+        // Android Studio's Run does): a marker from an earlier install of the app isn't a crash.
+        File marker = new File(dir, RUNNING_MARKER);
+        boolean crashed = marker.exists() && installTime(context).equals(readText(marker));
         rotate(new File(dir, LOG), new File(dir, PREVIOUS_LOG));
         rotate(new File(dir, CRASH_LOG), new File(dir, PREVIOUS_CRASH_LOG));
         new File(dir, RUNNING_MARKER).delete();
@@ -63,10 +66,27 @@ final class LogFiles {
 
     /** The game is in the foreground: a crash from here on leaves the marker behind. */
     static void markRunning(Context context) {
-        try {
-            new File(context.getFilesDir(), RUNNING_MARKER).createNewFile();
+        try (OutputStream out = new FileOutputStream(new File(context.getFilesDir(), RUNNING_MARKER))) {
+            write(out, installTime(context));
         } catch (IOException e) {
             Log.w(TAG, "Couldn't create the running marker", e);
+        }
+    }
+
+    /** When this install of the app was made, to tell its markers from an earlier install's. */
+    private static String installTime(Context context) {
+        try {
+            return Long.toString(context.getPackageManager().getPackageInfo(context.getPackageName(), 0).lastUpdateTime);
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
+    private static String readText(File file) {
+        try {
+            return new String(java.nio.file.Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return "";
         }
     }
 
