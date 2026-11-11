@@ -636,3 +636,9 @@ help battery too). All shared with PC unchanged, with these Android additions:
   known). The shaders were translated on the menu's thread, which can't draw meanwhile; on Android
   that now runs on a thread of its own with a "Translating" message, and the log says how far it
   got ([Lossless Scaling] and [lsfg] lines). PC unchanged apart from those log lines.
+- Load Lossless.dll then worked on the Retroid. Lossless Scaling on it: smearing on hard turret turns
+  (Lossless Scaling's own, at a 30 fps base; PC has it too) and more jitter than on PC, worse at
+  60 Hz than at 120. Android has no present wait, so round 184's refresh pacing fell back to timed
+  presents, which judder. rt64 0026 (Android only): without present wait on a FIFO swap chain, the
+  frames are still split over the game frame's refreshes, presented back to back and paced by the
+  swap chain's queue. The log names the pacing used ("[RT64] Frame generation paced by ...").
