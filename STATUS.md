@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 192)
+## Overview (as of round 193)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,39 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-12, round 193: RT64's simulated F3D depth clip off
+
+**From the BattleTanx port** (wootbeer/btrecomp, commit 0c79066, its lib
+patch 0011): distant scenery flashed at the fog line while driving, with
+interpolation off and in Original too; it now matches an emulator.
+
+**Applies here:** the game sets the same fog, `gSPFogPosition(995, 1000)`
+(the 0x64009D00 word at 0x8007A688, `btga_fog_word` only zeroes it when Fog
+is off), and RT64's `RasterPS.hlsl` still discards every pixel past depth
+1022/1024 (`simulateDepthClipF3D = true`, copying F3D's clipping; the game
+runs F3DEX 2.07). At 0.998 the fog is only about 60% thick, so distant
+scenery was cut while still visible, and small camera moves took it back and
+forth across the cut; with Fog off the cut was a sharp edge. Rounds 115-117
+found the same interaction (and round 117 doubled the far plane and re-fit
+the fog), but round 122 traced that flicker to RT64's Expand decomposition
+(patch 0001) and the workaround didn't stay; the clip itself was never
+changed. This also may be part of issue 7 (buildings flickering with an
+extended draw distance).
+
+**Change** (`lib-patches/rt64/0023-no-f3d-depth-clip.patch`):
+`simulateDepthClipF3D = false`, with a comment why. No other patch touches
+`RasterPS.hlsl`. Distant geometry now fades fully into the fog (up to the
+far plane, which the game sets at its draw distance) instead of being cut
+0.2% short of it. This follows emulators rather than the N64's microcode
+quirk.
+
+**Checked:** the configure resets RT64 and applies every patch with the new
+one (the stamp changed); a clean copy of RT64 with all patches applied
+matches the working tree. The game builds (the shaders rebuild) and mission 1
+plays; at Map Edge with Fog off the far scenery draws cleanly to the
+horizon, nothing new appears. The owner needs `cmake -S . -B build` (or the
+usual configure line) before building.
 
 ## 2026-11-12, round 192: a turn margin on the view cone, for in-between frames
 
