@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 193)
+## Overview (as of round 194)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,32 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-12, round 194: Draw Distance's far plane and distant tank models checked (no change)
+
+**From the BattleTanx port** (wootbeer/btrecomp, commits 1f22e9d and
+617ec4b), where its Draw Distance (ported from here) had two problems:
+
+1. **The far plane and fog didn't follow the setting** there: its scene
+   function rebuilt the projections only when the distance differed from
+   a copy, and the level start stored both from one register.
+   Here: the gameplay projection reads `0x8023A060` directly
+   (`func_800A72C0` at camera setup, `func_800A7664` when the governor
+   `func_80099FE8` changes it; the governor only touches values under 5000,
+   so Far and above are built once, at camera setup). Logged with a gdb
+   breakpoint on `guPerspectiveF` in mission 1: Original builds far 3400 and
+   then 3450, 3500 ... as the governor raises it; Far builds 10200 (3 x
+   3400; 10150 and 10100 as the governor trims under 20 fps in the sandbox).
+   So Far does move the far plane and the fog. Doesn't apply.
+2. **Distant tanks lost their textures** there: past 1700 units tanks use
+   an untextured model, which the fog used to hide.
+   Here: the tank drawer `func_800AE184` (and `func_800AE4D0`) also pick
+   models at squared distances 300 / 1000 / 1700 (floats at `0x80072EE8` and
+   `0x80072EF8`; data at RAM 0x80070000 + ROM offset). With all three
+   tank thresholds forced to 1 (temporary), every tank used its farthest
+   model: simpler (a plain turret) but textured, decal included. So distant
+   tanks just get less detailed, as on the N64. Raising the thresholds would
+   only cost draws. No change.
 
 ## 2026-11-12, round 193: RT64's simulated F3D depth clip off
 
