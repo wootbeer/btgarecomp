@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 191)
+## Overview (as of round 192)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,42 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-12, round 192: a turn margin on the view cone, for in-between frames
+
+**From the BattleTanx port** (wootbeer/btrecomp, commit 558ae85): ground
+popped in at the left and right screen edges while turning at higher frame
+rates. The game culls each frame against the angle it's about to draw, with
+almost no room to spare; RT64's in-between frames turn the camera part of
+the way to the next game frame but draw the newer frame's objects, so the
+side the camera turns away from showed ground that frame hadn't drawn, until
+the next game frame popped it in. The original game never shows an angle it
+didn't cull for. Not reported here, but it's the same mechanism (round 98's
+cull factor k at camera+0x168: 2.29 for 1 player, 1.12 for the 2-player
+halves), and it may be what issue 7's reporter sees as buildings flickering.
+
+**Change** (`src/game/widescreen.cpp`, `btga_widen_cull`): the full-width
+views' k is divided by `kTurnMargin` = 1.3 as well as the Expand factor, in
+Original too (the Expand factor is then 1). About 8 degrees more per side,
+more than one game frame of turning. 4-player quadrants keep the game's cone
+(RT64 doesn't widen them either).
+
+**Safe:** the cull record (`0x802194B4`, stride 0x28) is read by the drawing
+code (`func_800AA..`-`func_800AF..`: scenery cull, model drawers) and by
+`func_80097EE4` / `func_80097FB4`, which read only the camera position (+0x0,
++0x4); k scales the direction fields, so only what's drawn changes.
+
+**Measured** (sandbox, Expand, Original Draw Distance, temporary probes;
+margin 1.0 against 1.3):
+- 1 player, mission 1, driving and turning: mesh draws peak 722 / 729 of
+  2,288, main list 0x5C20 / 0x5F48 of the 0xADE0 cut-off.
+- 2 players (Tank Wars, round 191's 4-port setup): 638 / 653, 0x51B0 /
+  0x5A78.
+- No limit hit; both runs played normally (the 1.3 run finished mission 1).
+
+The popping itself can't be shown in the sandbox (it can't run faster than
+the game). Owner's check: turn left and right at Display rate and watch the
+bottom corners; raise the margin a little if fast turns still pop.
 
 ## 2026-11-12, round 191: 4-player display lists checked (BattleTanx's freeze doesn't apply)
 

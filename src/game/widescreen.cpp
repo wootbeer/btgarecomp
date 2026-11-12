@@ -13,6 +13,18 @@
 // the 2-player halves, 2.2 for quadrants; roughly 1 / tan of the half
 // horizontal field of view). Every consumer tests |k * lateral| < forward,
 // so dividing k by RT64's widening factor widens all of them at once.
+//
+// Round 192 (from the BattleTanx port, its commit 558ae85): k is also divided
+// by kTurnMargin, in Original too. RT64's in-between frames (Framerate above
+// the game's) turn the camera part of the way to the next game frame but
+// draw the newer frame's objects, so while turning, the side the camera turns
+// away from showed ground the game hadn't drawn, popping in at the next game
+// frame. 1.3 is about 8 degrees more per side, more than a game frame of
+// turning. Only the full-width views get it (as the Expand widening), so
+// 4-player quadrants keep the game's cone. The record's other readers outside
+// the drawing code (func_80097EE4, func_80097FB4) only read the camera
+// position (+0x0, +0x4), which k doesn't touch.
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 
@@ -26,6 +38,9 @@ namespace {
 
     // Camera fields (camera structs at 0x80235F00, stride 0x250).
     constexpr int kCameraViewportDl = 0x118;
+
+    // Room for frame interpolation's in-between frames while turning (round 192).
+    constexpr float kTurnMargin = 1.3f;
 
     // Segment 1 viewport display lists whose viewport spans the full screen
     // width -- the only ones RT64 widens: full screen, and the top and
@@ -44,15 +59,16 @@ float btga::get_widescreen_scale() {
 }
 
 // Hooked in func_800AC9E8 right after each `lwc1 $f0, 0x168($s0)` (the cull
-// factor k), with the camera in $s0.
+// factor k), with the camera in $s0. Full-width views: k / (widen factor *
+// turn margin); the widen factor is 1 in Original.
 extern "C" void btga_widen_cull(uint8_t* rdram, recomp_context* ctx) {
-    float scale = btga::get_widescreen_scale();
+    const float scale = std::max(btga::get_widescreen_scale(), 1.0f);
     gpr camera = ctx->r16;
-    if (scale <= 1.0f || camera == 0) {
+    if (camera == 0) {
         return;
     }
     if (is_full_width_viewport((uint32_t)MEM_W(kCameraViewportDl, camera))) {
-        ctx->f0.fl /= scale;
+        ctx->f0.fl /= scale * kTurnMargin;
     }
 }
 
