@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 190)
+## Overview (as of round 191)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,50 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-12, round 191: 4-player display lists checked (BattleTanx's freeze doesn't apply)
+
+**Request:** BattleTanx (wootbeer/btrecomp, issue 1, commit 944460f) froze
+in 4-player matches: its main display list buffer (0x8000) has no length
+check, a 4-player frame used ~0x5660, its interpolation tags pushed it to
+0x81B0, and it overran into the next buffer (the frames' start lists), so
+the two frames' lists called each other and RT64 looped (10 GB+ on D3D12, a
+crash on Vulkan). Check Global Assault, change nothing if it has room or
+checks the length.
+
+**Frame slots** (`func_80079CB8`, graphics state 0x801293E0 + 0x90 + 0x10 *
+slot, two slots):
+
+| Field | List | Game's buffer | Size |
+|---|---|---|---|
+| +0x0 | start list | 0x80157E80 + 0x100 * slot | 0x100 |
+| +0x4 | main list | 0x801420C0 + 0xAEE0 * slot | 0xAEE0 |
+| +0x8 | second list | 0x801418C0 + 0x400 * slot | 0x400 |
+| +0xC | Mtx pool | 0x801298C0 + 0xC000 * slot | 0xC000 |
+
+**Length checks:** the main list's writers, the draw walker `func_8007B65C`
+and the sprite walker `func_8007B8EC`, stop at base + a cut-off (0xADE0,
+0x100 short of the end). Since round 161 both main lists are 0x40000-byte
+buffers at 0x80C40000 at every Draw Distance, with the cut-off 0xADE0 at
+Original and 0x30000 above it; our tags stop 0x400 before the cut-off
+(`btga_interp_matrix_load`). So past the cut-off there are 0x35000 bytes
+(Original) or 0x10000 (extended) for what follows.
+
+**Measured** (sandbox, temporary probes: four ports reported connected and
+port 1's input mirrored to all four, so PLAYERS 4 and four human players;
+Tank Wars, Convoy, Arizona - Truck Stop; the main list sampled at the
+walkers' ends):
+- Original Draw Distance: peak 0x8810 with our tags, 0x63E8 without (tags
+  about +40%), under the 0xADE0 cut-off.
+- Map Edge: peak 0xE130, inside the 0x40000 buffer and under the 0x30000
+  cut-off (it would have passed the game's own 0xAEE0 without round 161).
+- Mtx pool: peak 0x2C40 of 0xC000.
+- Memory over 3 minutes of a 4-player match at Map Edge: 727 to 736 MB,
+  level; the match kept running.
+
+**Result:** no change. Global Assault's main list is bigger, its writers
+check the length, and it already has round 161's larger buffers. No
+CHANGELOG.md in this repo; the round is logged here.
 
 ## 2026-11-12, round 190: building flicker and the Annihilator (not reproduced)
 
