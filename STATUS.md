@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 189)
+## Overview (as of round 190)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,38 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-12, round 190: building flicker and the Annihilator (not reproduced)
+
+**Reports** (GitHub): issue 7, some buildings flicker in plain sight with an
+extended draw distance, especially on the Europe maps; issue 4 reopened, the
+Annihilator's turret and guns flicker briefly when firing. Both most likely
+with frame interpolation on.
+
+**Annihilator:** not reachable here: it isn't in mission 1's Change Tank list
+with All Tanks All Levels on, Tank Wars has no tank select, and the Hacks
+code only renames "Tank Boss A". Checked the likeliest cause instead, a
+tank building its hull or turret matrix twice in a frame when firing (only
+extra parts get an ID per copy; a second hull/turret Mtx would share the
+ID, and `id_for` drops a shared ID to automatic matching): driving and
+firing the Rattler, Goliath and M1A1 in mission 1, 0 of about 460,000
+hull/turret queues hit an ID already used that frame. So it's specific to
+the Annihilator's model.
+
+**Buildings** (Tank Wars, Paris - Eiffel Tower, Very Far and Map Edge, fog off;
+the sandbox needs Framerate Manual 60, since Xvfb reports refresh 0 and
+Display then makes no in-between frames):
+- Standing still at six headings: no buildings change between frames.
+- Draw limits: mesh items peaked at 1,303 of 8,192 (round 161's pools).
+- Interpolation IDs: almost every loaded matrix has an ID (at most 71 per
+  100 frames left automatic), and none of 11,000-15,000 tagged loads per 60
+  frames jumped more than 400 units under the same ID (the matrices are
+  world transforms, so a standing building's doesn't change), apart from the
+  tanks moved to their spawn points at the start.
+
+Not found. Needs the reporter's map, Draw Distance, Fog and Framerate
+settings, ideally a clip. Round 115's mechanism (RT64 discards depth past
+1022/1024; the game's fog hides that edge) remains a candidate with Fog off.
 
 ## 2026-11-10, round 189: 0.1.10
 
