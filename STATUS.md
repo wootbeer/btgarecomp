@@ -129,6 +129,12 @@ plays; at Map Edge with Fog off the far scenery draws cleanly to the
 horizon, nothing new appears. The owner needs `cmake -S . -B build` (or the
 usual configure line) before building.
 
+**Owner's test** (Windows, after round 194): the building flicker on the
+Houses of Parliament mission (issue 7; seen before at Framerate Original
+too, so not interpolation) didn't show this time. Most likely this round:
+the flickering building sat at the fog line. To confirm with the issue's
+reporter in the next release.
+
 ## 2026-11-12, round 192: a turn margin on the view cone, for in-between frames
 
 **From the BattleTanx port** (wootbeer/btrecomp, commit 558ae85): ground
