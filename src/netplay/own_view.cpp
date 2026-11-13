@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "recomp.h"
+#include "recompui/renderer.h"
 #include "ultramodern/renderer_context.hpp"
 
 #include "btga_netplay.h"
@@ -513,7 +514,17 @@ namespace {
             changed.clear();
         }
         void send_dummy_workload(uint32_t fb_address) override { inner->send_dummy_workload(fb_address); }
-        void update_screen() override { inner->update_screen(); }
+        void update_screen() override {
+            // Netplay waiting for another player: the last frame again, with
+            // the message over it (the game sends none of its own meanwhile).
+            auto* rt64 = btga::netplay::screen_held() ? dynamic_cast<recompui::renderer::RT64Context*>(inner.get()) : nullptr;
+            if (rt64 != nullptr) {
+                rt64->update_screen_held();
+            }
+            else {
+                inner->update_screen();
+            }
+        }
         void shutdown() override { inner->shutdown(); }
         uint32_t get_display_framerate() const override { return inner->get_display_framerate(); }
         float get_resolution_scale() const override { return inner->get_resolution_scale(); }

@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 201)
+## Overview (as of round 202)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,18 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-13, round 202: netplay, "Waiting for player N..." during a stall
+
+While the game waits for another player's input (`screen_held()` in
+`src/netplay/session.cpp`), nothing new is drawn, so the message overlay never
+reached the screen. RecompFrontend patch 0017 (the Rage Wars port's 0016)
+adds `RT64Context::update_screen_held()`: it shows the last frame again with
+the UI drawn over it. `OwnViewContext::update_screen` (`own_view.cpp`) calls
+it while the screen is held. Tested by stopping the joiner (SIGSTOP) for 4 s
+in a two-player match: the host showed "Waiting for player 2..." over the
+held frame, and once the joiner went on, the two stayed in sync (4319 frames,
+all the same).
 
 ## 2026-11-13, round 201: netplay, each PC its own player's view
 
