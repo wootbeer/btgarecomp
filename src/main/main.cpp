@@ -324,7 +324,11 @@ static bool get_input(int controller_num, uint16_t* buttons, float* x, float* y)
 
 static ultramodern::input::connected_device_info_t get_connected_device_info(int controller_num) {
     size_t ports = 1;
-    if (!recompinput::players::is_single_player_mode()) {
+    if (btga::netplay::session_players() > 0) {
+        // Online: one per player in the session, each driven over the network.
+        ports = (size_t)btga::netplay::session_players();
+    }
+    else if (!recompinput::players::is_single_player_mode()) {
         ports = std::max<size_t>(1, recompinput::players::get_number_of_assigned_players());
     }
     if (controller_num < 0 || (size_t)controller_num >= ports) {
@@ -460,7 +464,6 @@ int main(int argc, char** argv) {
         recomp::register_game(game);
     }
     btga::register_sound_packs();
-    btga::netplay::startup();
 
     recompinput::players::set_single_player_mode(true);
 
@@ -486,9 +489,18 @@ int main(int argc, char** argv) {
     recompui::config::finalize();
     btga::init_mouse_stick();
 
+    // Netplay's testing switches (and its session, once the launcher can
+    // start one): after the settings are loaded, before the game runs.
+#ifndef BTGA_BUILD_ID
+#define BTGA_BUILD_ID "unknown"
+#endif
+    btga::netplay::startup((version_string + " " + BTGA_BUILD_ID).c_str());
+
     // Read from the just-loaded config; takes effect on the next launch if
     // changed in the menu.
-    if (btga::config::get_local_multiplayer()) {
+    // Online, this PC's controls are its own player's (netplay puts them on
+    // the right port).
+    if (btga::config::get_local_multiplayer() && !btga::netplay::session_active()) {
         recompinput::players::set_single_player_mode(false);
     }
 
@@ -561,6 +573,7 @@ int main(int argc, char** argv) {
     // returns, so running static destructors/atexit handlers underneath
     // them can crash on quit -- exit directly instead (same approach as
     // other N64Recomp projects' main()).
+    btga::netplay::quitting();
     fflush(stdout);
     fflush(stderr);
     std::_Exit(EXIT_SUCCESS);

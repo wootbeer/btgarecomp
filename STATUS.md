@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 197)
+## Overview (as of round 198)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,79 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-13, round 198: netplay, a two-player match over the network
+
+The Rage Wars port's netplay (wootbeer/trwrecomp `src/main/netplay.cpp`,
+its rounds 134-185) ported to `src/netplay/session.cpp`, still reached only
+through `include/btga_netplay.h`. Started for now by testing switches:
+`BTGA_NETPLAY=host:<udp port>` / `join:<address>:<udp port>`
+(`BTGA_NETPLAYERS`, `BTGA_NICKNAME`, `BTGA_NETDELAY`); the launcher screen,
+join codes on screen and chat on screen are next.
+
+**How it plays:** both PCs run the game in deterministic mode. At each sweep
+of the game's controller reads (`osContGetReadData`, port 0's call) this
+PC's player's read (its own controls and mouse, as player 1's) goes out for
+the sweep 3 on (the input delay; Auto or the host's), and every port's read
+for this sweep comes back, waited for if need be; the other ports get them.
+A hash of the game's memory every 120 sweeps finds a desync. Online, every
+session port reports a controller and none a pak (`get_connected_device_info`,
+`get_accessory`), and this PC's controls are its own player's.
+
+**Left out of the port:** Controller Pak sharing (Rage Wars had it off too).
+Online nobody has a pak, so nothing is read from or written to anyone's
+saves, and no pak data goes over the network. The game's "No Controller Pak
+found" prompt is answered by itself: when its text pointer (0x8011F834)
+becomes "No Controller Pak found" or "Still no Controller Pak found", player
+1 presses B (Play Game Without Saving) 15 sweeps later, decided from game
+memory at the same sweep on every PC.
+
+**Security, as in the Rage Wars port (its round 173):** a joiner is known by
+an id only it and the host have (never passed on); the host takes a port's
+reads only from that port's player; reads only for sweeps not yet played and
+at most 256 ahead, hashes only at their marks; every value from a peer made
+sane (buttons 16 bits, stick finite and in -1..1, the host's settings ones
+the menus offer, the input delay 1-8, ports and player counts in range);
+nicknames, version labels and chat text printable ASCII and short; chat
+rate-limited per player on every PC; STUN answers only from the servers
+asked; the join code and token checked; UPnP and the HTTP fetch as there.
+
+**Settings that split the games** (each changed on its own in a replay of the
+round 197 recording, compared with the sync test):
+- Change what the game does, so the host's for the session
+  (`src/netplay/settings.cpp`, sent in its Welcome and Start, shown to the
+  joiner): Draw Distance (from frame 515, the level start), the aspect ratio
+  (the widened culling; held with the runtime's aspect ratio override,
+  `lib-patches/N64ModernRuntime/0003`, and the game's widen factor is the
+  host's window's), every cheat and hack.
+- Off for everyone online (the owner's call): sound packs and every other
+  mod (`recomp::mods::disable_all_mods_unsaved`, patch 0002, mods.json
+  untouched), the BattleTanx 1 sounds, Sound Effects Reverb, extra sound
+  channels. The BattleTanx 1 sounds changed the game itself: from the level
+  start the tanks' memory differed and the burning wreck's flames looked
+  different, so the sounds touch the game's random numbers.
+- Each player's own: Fog (only the fog word in the two start display lists,
+  0x80157E80-0x80158080, now left out of the hash), volume, frame rate (both
+  hashed the same as the recording), and the rest of the picture and
+  controls.
+
+**Tests** (two copies on one machine over 127.0.0.1, each on its own X
+display and config folder, the joiner's settings all different: fog on,
+aspect Original, Draw Distance Far, BattleTanx 1 sounds and reverb on, Rapid
+Fire; the host's Infinite Tank Bucks):
+- The host keying into mission 1: 2,439 frames the same on both; the joiner
+  was told the host's settings (Draw Distance Original, Expand, Infinite Tank
+  Bucks) and its own fog showed on its screen only.
+- A two-player Tank Wars match, each player confirming their own panel
+  (Team Align: two humans, blue and green), both driving and firing, kills
+  on both: 3,917 frames the same; the pak prompt answered by itself.
+- The round 197 recording replayed outside a session: the same as before.
+
+**Join codes:** `tools/matchmaker` (the Rage Wars port's Cloudflare Worker,
+renamed `btga-match`), to deploy on the owner's account; the game asks
+https://btga-match.wootbeer.workers.dev (`kMatchmaker`; `BTGA_MATCHMAKER`
+overrides). Until it's deployed, hosting says there's no code and players
+join by address.
 
 ## 2026-11-13, round 197: netplay groundwork, a deterministic game
 

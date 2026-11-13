@@ -41,8 +41,11 @@ namespace {
     // Also the three framebuffers (320 x 240 x 2 bytes each from 0x80000400,
     // up to the game's code), which the renderer writes back on its own time,
     // dithered differently from run to run.
+    // And the two frames' start display lists (0x100 each), where the Fog
+    // option (each player's own) writes the fog word.
     constexpr Range kSkipped[] = {
         { 0x80000400, 0x80070C00 },
+        { 0x80157E80, 0x80158080 },
         { 0x80217070, 0x80217078 },
         { 0x8021BA00, 0x8021BA08 },
         { 0x8021BBB0, 0x8021BBB8 },

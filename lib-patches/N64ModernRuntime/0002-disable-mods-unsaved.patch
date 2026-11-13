@@ -1,0 +1,54 @@
+diff --git a/librecomp/include/librecomp/mods.hpp b/librecomp/include/librecomp/mods.hpp
+--- a/librecomp/include/librecomp/mods.hpp
++++ b/librecomp/include/librecomp/mods.hpp
+@@ -345,6 +345,7 @@
+             void close_mods();
+             void load_mods_config();
+             void enable_mod(const std::string& mod_id, bool enabled, bool trigger_save);
++            void disable_all_mods_unsaved();
+             bool is_mod_enabled(const std::string& mod_id) const;
+             bool is_mod_auto_enabled(const std::string& mod_id) const;
+             bool is_mod_deprecated(const std::string& mod_id, const Version& mod_version) const;
+@@ -632,6 +633,9 @@
+         recomp::Version get_mod_version(size_t mod_index);
+         std::string get_mod_id(size_t mod_index);
+         void enable_mod(const std::string& mod_id, bool enabled);
++        // Every mod off until the program ends, the saved choice (mods.json)
++        // left as it is (netplay: both games must run the same code).
++        void disable_all_mods_unsaved();
+         bool is_mod_enabled(const std::string& mod_id);
+         bool is_mod_auto_enabled(const std::string& mod_id);
+         bool is_mod_deprecated(const std::string& mod_id, const Version& mod_version);
+diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
+--- a/librecomp/src/mods.cpp
++++ b/librecomp/src/mods.cpp
+@@ -1152,6 +1152,14 @@
+     }
+ }
+ 
++void recomp::mods::ModContext::disable_all_mods_unsaved() {
++    std::vector<std::string> enabled(enabled_mods.begin(), enabled_mods.end());
++    for (const std::string& mod_id : enabled) {
++        enable_mod(mod_id, false, false);
++    }
++    auto_enabled_mods.clear();
++}
++
+ bool recomp::mods::ModContext::is_mod_enabled(const std::string& mod_id) const {
+     return enabled_mods.contains(mod_id);
+ }
+diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
+--- a/librecomp/src/recomp.cpp
++++ b/librecomp/src/recomp.cpp
+@@ -565,6 +565,11 @@
+     return mod_context->enable_mod(mod_id, enabled, true);
+ }
+ 
++void recomp::mods::disable_all_mods_unsaved() {
++    std::lock_guard lock { mod_context_mutex };
++    mod_context->disable_all_mods_unsaved();
++}
++
+ bool recomp::mods::is_mod_enabled(const std::string& mod_id) {
+     std::lock_guard lock { mod_context_mutex };
+     return mod_context->is_mod_enabled(mod_id);

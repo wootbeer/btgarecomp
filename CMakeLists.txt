@@ -272,6 +272,23 @@ if (BTGA_NETPLAY)
     if (NETPLAY_SOURCES AND SOURCES)
         list(APPEND SOURCES ${NETPLAY_SOURCES})
         target_compile_definitions(BattleTanxGARecompiled PRIVATE BTGA_NETPLAY)
+        if (WIN32)
+            target_link_libraries(BattleTanxGARecompiled PRIVATE Ws2_32.lib Winhttp.lib)
+        endif()
+        # Netplay's build check: everyone needs the same build. The last commit
+        # that changed the game's code or data.
+        find_package(Git QUIET)
+        if (GIT_FOUND)
+            execute_process(
+                COMMAND "${GIT_EXECUTABLE}" -c safe.directory=* log -1 --format=%h --abbrev=12 HEAD -- src include lib lib-patches
+                    patches patches.toml cmake CMakeLists.txt battletanxga.us.rev0.toml n_aspMain.us.rev0.toml BattleTanxGASyms assets
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                OUTPUT_VARIABLE BTGA_BUILD_ID OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        endif()
+        if (NOT BTGA_BUILD_ID)
+            set(BTGA_BUILD_ID "unknown")
+        endif()
+        target_compile_definitions(BattleTanxGARecompiled PRIVATE BTGA_BUILD_ID="${BTGA_BUILD_ID}")
     endif()
 endif()
 

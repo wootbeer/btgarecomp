@@ -2,6 +2,7 @@
 // and local multiplayer; and the screen filter, bloom, fog and draw distance on
 // the Graphics tab.
 // See include/btga_config.h.
+#include "btga_netplay.h"
 #include "btga_config.h"
 
 #include "recompui/config.h"
@@ -211,7 +212,9 @@ void btga::config::add_sound_channels_option(recomp::config::Config& sound) {
 }
 
 btga::config::Accessory btga::config::get_accessory(int port) {
-    if (!options_added) {
+    // Online nobody has a pak (src/netplay/session.h), so nothing is read
+    // from or written to anyone's saves.
+    if (!options_added || btga::netplay::session_active()) {
         return Accessory::None;
     }
     const std::string& id = port == 0 ? p1_accessory_id : other_accessory_id;

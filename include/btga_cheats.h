@@ -35,6 +35,8 @@ namespace btga::cheats {
     // The value of cheat `index` in list(): 0/1 for a toggle, the choice
     // otherwise. Applied on the game's next frame.
     void set_value(size_t index, uint32_t value);
+    // This PC's own value (in an online session the game uses the host's).
+    uint32_t get_value(size_t index);
 
     // Adds the Cheats and Hacks tabs. Call between the other create_*_tab()
     // calls and recompui::config::finalize().

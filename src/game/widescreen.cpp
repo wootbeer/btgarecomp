@@ -56,6 +56,10 @@ void btga::set_widescreen_scale(float scale) {
 }
 
 float btga::get_widescreen_scale() {
+    return btga::netplay::widescreen_scale(widescreen_scale.load(std::memory_order_relaxed));
+}
+
+float btga::window_widescreen_scale() {
     return widescreen_scale.load(std::memory_order_relaxed);
 }
 

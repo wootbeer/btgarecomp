@@ -33,6 +33,7 @@
 
 #include "recomp.h"
 
+#include "btga_netplay.h"
 #include "btga_config.h"
 
 namespace {
@@ -51,6 +52,10 @@ void btga::set_draw_distance(int level) {
 }
 
 int btga::draw_distance_level() {
+    return btga::netplay::draw_distance(distance_level.load());
+}
+
+int btga::draw_distance_setting() {
     return distance_level.load();
 }
 
@@ -66,7 +71,7 @@ extern "C" void btga_fog_word(uint8_t* rdram, recomp_context* ctx) {
 // 0x800D289C and 0x800D28B0).
 extern "C" void btga_scene_draw_distance(uint8_t* rdram, recomp_context* ctx) {
     int32_t distance = (int32_t)ctx->r2;
-    switch (distance_level.load()) {
+    switch (btga::draw_distance_level()) {
         case 1: distance *= 3; break; // Far
         case 2: distance *= 6; break; // Very Far
         case 3: distance = kMaxDrawDistance; break; // Map Edge

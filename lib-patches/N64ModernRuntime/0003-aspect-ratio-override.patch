@@ -1,0 +1,45 @@
+diff --git a/ultramodern/include/ultramodern/config.hpp b/ultramodern/include/ultramodern/config.hpp
+--- a/ultramodern/include/ultramodern/config.hpp
++++ b/ultramodern/include/ultramodern/config.hpp
+@@ -84,6 +84,10 @@
+ 
+         const GraphicsConfig& get_graphics_config();
+         void set_graphics_config(const GraphicsConfig& new_config);
++        // The aspect ratio in use whatever set_graphics_config is given, until
++        // cleared (netplay: both games must draw alike); the saved settings
++        // aren't touched.
++        void set_aspect_ratio_override(std::optional<AspectRatio> aspect_ratio);
+ 
+         NLOHMANN_JSON_SERIALIZE_ENUM(ultramodern::renderer::Resolution, {
+             {ultramodern::renderer::Resolution::Original, "Original"},
+diff --git a/ultramodern/src/renderer_context.cpp b/ultramodern/src/renderer_context.cpp
+--- a/ultramodern/src/renderer_context.cpp
++++ b/ultramodern/src/renderer_context.cpp
+@@ -40,14 +40,27 @@
+ 
+ 
+ static ultramodern::renderer::GraphicsConfig graphic_config{};
++static std::optional<ultramodern::renderer::AspectRatio> aspect_ratio_override;
+ static std::mutex graphic_config_mutex;
+ 
+ void ultramodern::renderer::set_graphics_config(const GraphicsConfig& config) {
+     std::lock_guard<std::mutex> lock(graphic_config_mutex);
+     graphic_config = config;
++    if (aspect_ratio_override) {
++        graphic_config.ar_option = *aspect_ratio_override;
++    }
+     ultramodern::trigger_config_action();
+ }
+ 
++void ultramodern::renderer::set_aspect_ratio_override(std::optional<AspectRatio> aspect_ratio) {
++    std::lock_guard<std::mutex> lock(graphic_config_mutex);
++    aspect_ratio_override = aspect_ratio;
++    if (aspect_ratio_override) {
++        graphic_config.ar_option = *aspect_ratio_override;
++        ultramodern::trigger_config_action();
++    }
++}
++
+ const ultramodern::renderer::GraphicsConfig& ultramodern::renderer::get_graphics_config() {
+     std::lock_guard<std::mutex> lock(graphic_config_mutex);
+     return graphic_config;

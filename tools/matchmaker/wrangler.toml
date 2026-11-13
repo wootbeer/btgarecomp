@@ -1,0 +1,20 @@
+name = "btga-match"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+[[durable_objects.bindings]]
+name = "GAMES"
+class_name = "Game"
+
+[[durable_objects.bindings]]
+name = "LOBBIES"
+class_name = "Directory"
+
+# SQLite-backed Durable Objects are on Cloudflare's free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Game"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Directory"]
