@@ -38,6 +38,8 @@
 
 #include "ultramodern/ultramodern.hpp"
 
+#include "btga_netplay.h"
+
 extern "C" int32_t osGetThreadPri(uint8_t* rdram, int32_t t);
 extern "C" void osSetThreadPri(uint8_t* rdram, int32_t t, int32_t pri);
 
@@ -75,7 +77,30 @@ void dequeue_external_messages(uint8_t* rdram);
 // Shorter runs never sleep: func_800A1384's inner copy calls this up to 32
 // times in a normal pass (round 53), and a flag the hand-off clears is seen
 // at once.
+//
+// Netplay's deterministic mode (include/btga_netplay.h) can't go by the host's
+// clock, and there outside events reach the game only when all its threads
+// wait (draining them here does nothing). A spinning thread never waits, so
+// every kDeterministicSpins-th call stands in for that: the game's time moves
+// on (or what's pending is handed over) as when every thread waits. Counted in
+// calls, so the same on every PC. The hand-off runs on every call as before.
+namespace {
+    constexpr uint32_t kDeterministicSpins = 64;
+}
+
 extern "C" void btga_yield_via_priority_drop(uint8_t* rdram) {
+    if (btga::netplay::deterministic()) {
+        static thread_local uint32_t spins = 0;
+        if (++spins >= kDeterministicSpins) {
+            spins = 0;
+            ultramodern::wait_for_external_message_timed(rdram, 1);
+        }
+        int32_t saved_pri = osGetThreadPri(rdram, 0);
+        osSetThreadPri(rdram, 0, 0);
+        osSetThreadPri(rdram, 0, saved_pri);
+        return;
+    }
+
     // Calls less than 1 ms apart are one wait; once a wait has gone on for
     // 2 ms, each further call first sleeps until the next external message.
     static thread_local std::chrono::steady_clock::time_point last_call{}, wait_start{};

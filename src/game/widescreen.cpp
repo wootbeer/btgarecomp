@@ -32,6 +32,7 @@
 
 #include "btga_config.h"
 #include "btga_markers.h"
+#include "btga_netplay.h"
 
 namespace {
     std::atomic<float> widescreen_scale{ 1.0f };
@@ -391,6 +392,7 @@ extern "C" void btga_box_fillrect_end(uint8_t*, recomp_context*) {
 void btga_interp_new_frame(); // src/game/interpolation_ids.cpp
 
 extern "C" void btga_frame_clear(uint8_t* rdram, recomp_context* ctx) {
+    btga::netplay::frame(rdram);
     btga_interp_new_frame();
     btga::markers::new_frame();
     frame_counter++;

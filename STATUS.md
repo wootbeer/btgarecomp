@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 196)
+## Overview (as of round 197)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,72 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-13, round 197: netplay groundwork, a deterministic game
+
+Netplay (as in the Rage Wars port, wootbeer/trwrecomp rounds 132-185) runs
+both PCs' games in lockstep and sends only controller reads, so given the
+same reads the game has to do exactly the same thing on every PC, however
+fast each runs. This round gets there, behind testing switches only.
+
+**Kept apart** (so a build can leave it out, e.g. Android): everything is in
+`src/netplay/`, reached only through `include/btga_netplay.h`, whose
+functions are empty inline stubs when the CMake option `BTGA_NETPLAY` (on by
+default) is off. With it off, the netplay sources and the runtime patch are
+left out (checked: a `-DBTGA_NETPLAY=OFF` build compiles).
+
+**The runtime's deterministic mode**
+(`lib-patches/N64ModernRuntime/0001-deterministic-mode.patch`, the Rage
+Wars port's 0004, one hunk redone for this runtime's display-list thread):
+`ultramodern::set_deterministic(true)`, before the game starts. Events from
+the runtime's own threads (retraces, RSP and display list completions,
+controller reads, DMA) reach the game only when all its threads wait, in a
+fixed order; with nothing pending, the game's time moves on one retrace,
+paced to the host's clock but never skipped. The CPU counter is retraces x
+the count rate, and queued audio drains a retrace's worth per retrace. Off,
+nothing changes.
+
+**This game's busy-wait loops** (rounds 47-65, 188): they never wait, so in
+deterministic mode the game hung at the first one (`func_800A1384`, the
+main thread spinning for the audio thread, and every hook call after 2 ms of
+spinning advanced a whole retrace, by the host's clock). In deterministic
+mode `btga_yield_via_priority_drop` counts calls instead: every 64th call
+stands in for every thread waiting (`wait_for_external_message_timed`, which
+the mode turns into its idle point), and the hand-off to other threads runs
+on every call as before. Outside the mode, unchanged.
+
+**Sync test** (`src/netplay/sync_test.cpp`, from the Rage Wars port's):
+`BTGA_SYNCTEST=<file>` turns the mode on and writes, each frame (the frame
+clear), the retrace count and a hash of each 64 KB of the first 12 MB (the
+game's 8 MB and our sound heap at 0x80800000; not our draw item pool and
+display lists from 0x80C00000). `BTGA_SYNCDUMP=<frames>` saves that memory
+at those frames; `tools/sync_compare.py` finds the first frame and chunks
+that differ. Left out of the hash, found with it:
+- the runtime's host pointer in each of the game's five OSThreads
+  (0x80217070, 0x8021BA00, 0x8021BBB0, 0x80222988, 0x803ADA90, 8 bytes each;
+  the only words that differed through the first 515 frames);
+- the three framebuffers, 320 x 240 x 2 bytes from 0x80000400 to 0x80070C00,
+  which the renderer writes back with dithering that differs from run to run.
+
+**Input record and replay** (`src/netplay/input_record.cpp`):
+`BTGA_INPUTREC=<file>` writes every controller read the game gets (each
+port's, after the controls and the mouse stick; `src/main/main.cpp`'s input
+callback now goes through `btga::netplay::controller_read`), and
+`BTGA_INPUTPLAY=<file>` gives the game those instead.
+
+**Results** (sandbox):
+- Two boots with no input: 4,551 frames (intro, title, attract demo) the same.
+- A run keyed through the menus into mission 1, driving, turning and firing
+  (10 kills), recorded, then replayed: 2,885 frames the same, the same last
+  picture.
+- A normal boot (no switches): no deterministic mode, plays as before.
+
+**Next:** the two-player session over the network (the Rage Wars port's
+`netplay.cpp`: each PC's read sent for a sweep a few reads ahead, the other's
+waited for, a memory hash compared every few seconds). Things that change
+the game and so must come from the host: cheats and hacks, likely Draw
+Distance; sound packs and the BattleTanx 1 sounds change sound data in
+memory (the hash would need them alike or left out).
 
 ## 2026-11-13, round 196: 0.1.11
 

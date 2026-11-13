@@ -86,6 +86,14 @@ btga_apply_lib_patches(plume lib/rt64/src/contrib/plume)
 # The menu (headings on the Cheats tab).
 btga_apply_lib_patches(RecompFrontend)
 
+# Netplay (src/netplay/, include/btga_netplay.h): online play in lockstep, which needs the
+# runtime's deterministic mode (lib-patches/N64ModernRuntime/, off unless netplay or its sync
+# test turns it on). Kept to its own folder so a build without it (Android) just sets this off.
+option(BTGA_NETPLAY "Build netplay (online play)." ON)
+if (BTGA_NETPLAY)
+    btga_apply_lib_patches(N64ModernRuntime)
+endif()
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/rt64 ${CMAKE_BINARY_DIR}/rt64)
 
 # Lossless Scaling frame generation (lib/lsfg, round 177): the library on plume's Vulkan,
@@ -259,6 +267,13 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/src/game/*.cpp
     ${CMAKE_SOURCE_DIR}/rsp/*.cpp
 )
+if (BTGA_NETPLAY)
+    file(GLOB_RECURSE NETPLAY_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/netplay/*.cpp)
+    if (NETPLAY_SOURCES AND SOURCES)
+        list(APPEND SOURCES ${NETPLAY_SOURCES})
+        target_compile_definitions(BattleTanxGARecompiled PRIVATE BTGA_NETPLAY)
+    endif()
+endif()
 
 # src/main/register_overlays.cpp #includes RecompiledFuncs/recomp_overlays.inl,
 # which (like the rest of RecompiledFuncs/) doesn't exist yet on a fresh

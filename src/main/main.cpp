@@ -52,6 +52,7 @@
 
 #include "btga_config.h"
 #include "btga_cheats.h"
+#include "btga_netplay.h"
 
 #if defined(BTGA_HAS_APP_ICON)
 #include "icon_bytes.h"
@@ -315,6 +316,12 @@ static void set_frequency(uint32_t frequency) {
 // Rumble Pak here; that only sets "something is plugged in" in the status
 // the game queries. What it finds when it probes is decided per port by
 // src/game/controller_pak_hle.cpp's osPfsInitPak.
+// The controls (and the mouse stick), then netplay's say (include/btga_netplay.h).
+static bool get_input(int controller_num, uint16_t* buttons, float* x, float* y) {
+    const bool answered = btga::get_n64_input_with_mouse(controller_num, buttons, x, y);
+    return btga::netplay::controller_read(controller_num, answered, buttons, x, y);
+}
+
 static ultramodern::input::connected_device_info_t get_connected_device_info(int controller_num) {
     size_t ports = 1;
     if (!recompinput::players::is_single_player_mode()) {
@@ -453,6 +460,7 @@ int main(int argc, char** argv) {
         recomp::register_game(game);
     }
     btga::register_sound_packs();
+    btga::netplay::startup();
 
     recompinput::players::set_single_player_mode(true);
 
@@ -509,7 +517,7 @@ int main(int argc, char** argv) {
 
     ultramodern::input::callbacks_t input_callbacks{
         .poll_input = recompinput::poll_inputs,
-        .get_input = btga::get_n64_input_with_mouse,
+        .get_input = get_input,
         .set_rumble = recompinput::set_rumble,
         .get_connected_device_info = get_connected_device_info,
     };
