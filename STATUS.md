@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 199)
+## Overview (as of round 200)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,40 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-13, round 200: netplay security check; the Start's settings held to the Welcome's
+
+Checked against the Rage Wars port's security review (its round 173), item by
+item, in `src/netplay/`: no Controller Pak data exists online (no pak on any
+port, `get_accessory`; its packet types are gone, unknown types ignored); a
+joiner's id never passed on; the host takes a port's reads only from its
+player; reads only for unplayed sweeps at most 256 ahead, hashes only at
+their marks; the stick finite and in range, buttons 16 bits; the host's
+settings made sane; nicknames (letters, digits, `'!?.,:()_-`, no spaces,
+12 at most), version labels, lobby names and chat (printable ASCII, 255 at
+most) cleaned on every PC, and recompui escapes all text it shows; chat
+rate-limited; STUN, join code and token, UPnP and the HTTP fetch checked as
+there; peers' chat text and names never written to the log.
+
+**Fixed (also open in the Rage Wars port):** a joiner accepted the settings
+in the host's Welcome, but took the ones in its Start unchecked, so a host
+could show "Cheats: none" and start with cheats on (only from the game's own
+list, values the menus offer). Now the Start's settings must be the
+Welcome's (`same_settings`), or the join fails: "The host's settings changed
+after you joined."
+
+**Hostile-peer test** (a Python script as a joiner against a hosting copy):
+500 garbage packets of random sizes; a Hello whose name had markup, a
+newline, an escape sequence, bytes 0x7F-0xFF and a right-to-left override
+(shown as "bevilb31"); Ready, which started the session; inputs with NaN,
+infinite and 1e30 sticks, all buttons, odd answer values, reads claiming the
+host's port and reads at 0xFFFFFFF0 with count 0xFFFFFFFF; chats with markup,
+control characters, 256 bytes, random bytes and claimed lengths of 300 and
+0xFFFFFFFF; floods of 30 chats; 3,000 random packets with a valid header.
+The host kept running, took 12 chats (the limit), showed only cleaned text,
+and dropped the player 20 s after its input stopped. A fake host sending a
+Welcome without cheats and a Start with Invincibility: the joiner refused.
+A normal join afterwards: unchanged.
 
 ## 2026-11-13, round 199: the Netplay screen, join codes, chat
 

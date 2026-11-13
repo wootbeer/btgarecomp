@@ -1219,9 +1219,15 @@ namespace {
         case Start:
             if (accepted && !enabled && lobby == btga::netplay::Lobby::Waiting && packet.assigned != 0 && packet.players >= 2 &&
                 packet.players <= (uint32_t)kMaxPlayers && packet.assigned < packet.players) {
+                // The settings must be the ones this player was shown and
+                // accepted (the Welcome's): a host can't start with others.
+                if (!btga::netplay::same_settings(btga::netplay::sane_settings(packet.settings), welcome_settings)) {
+                    lobby = btga::netplay::Lobby::Failed;
+                    lobby_error = "The host's settings changed after you joined. Join again to see the new ones.";
+                    return;
+                }
                 local = (int)packet.assigned;
                 player_count = (int)packet.players;
-                welcome_settings = btga::netplay::sane_settings(packet.settings);
                 delay = std::clamp(packet.first, 1u, kMaxDelay);
                 StartNames names;
                 std::memcpy(&names, packet.reads, sizeof(names));

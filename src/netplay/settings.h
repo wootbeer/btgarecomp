@@ -29,6 +29,8 @@ namespace btga::netplay {
     // The session's from now on (and its fixed ones: mods off, the aspect ratio
     // held). Until the program ends.
     void use_settings(const SharedSettings& settings);
+    // Two sane settings are the same, value for value.
+    bool same_settings(const SharedSettings& a, const SharedSettings& b);
     // For the joiner's prompt and the log.
     std::string describe_settings(const SharedSettings& settings);
     // The session's settings are in use.

@@ -67,6 +67,19 @@ void btga::netplay::use_settings(const SharedSettings& settings) {
         session.widescreen != 0 ? ultramodern::renderer::AspectRatio::Expand : ultramodern::renderer::AspectRatio::Original);
 }
 
+bool btga::netplay::same_settings(const SharedSettings& a, const SharedSettings& b) {
+    if (a.draw_distance != b.draw_distance || a.widescreen != b.widescreen || a.widescreen_scale != b.widescreen_scale ||
+        a.cheat_count != b.cheat_count) {
+        return false;
+    }
+    for (uint32_t i = 0; i < kMaxCheats; i++) {
+        if (a.cheats[i] != b.cheats[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool btga::netplay::settings_in_use() {
     return in_use.load();
 }
