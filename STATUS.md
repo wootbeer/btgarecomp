@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 198)
+## Overview (as of round 199)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,63 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-13, round 199: the Netplay screen, join codes, chat
+
+The owner deployed `tools/matchmaker` to Cloudflare:
+https://btga-match.wootbeer.workers.dev answers, and is the build's
+`kMatchmaker`.
+
+**Launcher:** our own launcher menu now (`launcher_init` in
+`src/main/main.cpp`): the library's default entries, with **Netplay** after
+Start Game when netplay is built in (`btga::netplay::kLauncherEntry`).
+
+**Netplay screen** (`src/netplay/online_menu.cpp`, the Rage Wars port's,
+without its Unlock Everything, Load Profiles and update check): your name;
+Host a game (UDP port, 47100 by default; input delay, Auto or 1-8 reads;
+Public and the lobby's name); Join a game (a join code, or an address, or a
+public game from the list, refreshed every 15 s); the lobby (the join code,
+who's in and ready, Start, Cancel, how others reach this PC, the settings
+for everyone). The joiner is shown the host's settings and input delay
+before joining. Saved in online.txt in the config folder.
+
+**In a session:** the menu's Netplay tab (players, ping, input delay, the
+session's settings, Leave Game, which restarts the game on the Netplay
+screen with `--netplay`); the Cheats, Hacks and Mods tabs hidden; messages
+over the game ("Waiting for player 2...", a player gone, a desync).
+
+**Chat** (`src/netplay/chat.cpp`): T opens it in a session (T isn't bound
+in the game by default), Enter sends, Escape clears then closes, Ctrl+V
+pastes; while it's open this PC's player sends no input (`controller_read`)
+and the keys reach neither the game nor the menus (an SDL event filter).
+Text is printable ASCII, 255 at most, and recompui escapes what it shows, so
+markup in a message or name is shown as text. Each PC allows ten of its own
+in 30 s; every PC drops more than twelve of a player's in 30 s.
+
+**A desync from the runtime's dummy framebuffer**
+(`lib-patches/N64ModernRuntime/0004`): before the game starts the runtime
+points the screen at 0x80700000, and the renderer draws there; with round
+150's level heap in the upper 4 MB that's game memory, and a renderer
+running behind (the host's window slow to start) drew there after the game
+had started: memory 0x80700000-0x8074FFFF differed from frame 37 and the
+check reported a desync at read 840. The dummy framebuffer is now at
+0x80E00000, above everything the game and our code use (mods start at
+0x81000000).
+
+**Tests** (two copies, each on its own display and config folder):
+- The live Worker: a join code (VDAK9E) for the host, its public game in
+  the joiner's list. Joining by code can't finish in this sandbox: no UDP
+  reaches a STUN server, and the Worker rightly takes no documentation-range
+  local address (192.0.2.2), so it offered only the sandbox's outside
+  address. Joined by address instead.
+- Host, join by address, the settings prompt, Start (Auto chose 2 reads at
+  a 44 ms ping): 1,175 and 1,188 frames the same.
+- Chat both ways during the intro, one message with markup and an
+  ampersand (shown as typed); a name typed with `<b>` arrived without it.
+- The Netplay tab; Leave Game (the host restarted on the Netplay screen, its
+  public game closed; the joiner was told and played on alone).
+- A session without the sync test, 90 s: no desync reported (the memory hash
+  is compared every 120 reads).
 
 ## 2026-11-13, round 198: netplay, a two-player match over the network
 

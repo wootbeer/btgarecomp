@@ -7,8 +7,7 @@
 // RecompFrontend loads itself), each with its license in assets/, and our
 // own icons (tools/make_icons.py).
 //
-// Not done yet: no mod/texture-pack content types and no launcher menu
-// customization (the library's default_launcher_init_callback runs).
+// The launcher menu is the library's default plus Netplay (when built in).
 
 #include <algorithm>
 #include <cstdio>
@@ -36,6 +35,7 @@
 #endif
 
 #include "recompui/recompui.h"
+#include "base/ui_launcher.h"
 #include "recompui/program_config.h"
 #include "recompui/renderer.h"
 #include "recompui/config.h"
@@ -415,7 +415,29 @@ void btga_report_fatal_error(const char* message);
     std::abort();
 }
 
+// The launcher's menu: the library's default (start, controls, settings,
+// mods, exit), with Netplay after Start Game when it's built in.
+static void launcher_init(recompui::LauncherMenu* menu) {
+    const recomp::GameEntry& game = supported_games[0];
+    recompui::GameOptionsMenu* options = menu->init_game_options_menu(
+        game.game_id, game.mod_game_id, game.display_name, game.thumbnail_bytes, recompui::GameOptionsMenuLayout::Center);
+    recompui::update_game_mod_id(game.mod_game_id);
+    options->add_start_game_or_load_rom_option();
+    if (btga::netplay::kLauncherEntry) {
+        options->add_option("Netplay", [] { btga::netplay::open_screen(supported_games[0].game_id); });
+    }
+    options->add_setup_controls_option();
+    options->add_settings_option();
+    options->add_mods_option();
+    options->add_exit_option();
+}
+
+static void launcher_update(recompui::LauncherMenu*) {
+    btga::netplay::launcher_update(supported_games[0].game_id);
+}
+
 int main(int argc, char** argv) {
+    btga::netplay::command_line(argc, argv);
     std::set_terminate(report_unhandled_exception_and_abort);
 
     // Controller defaults: Z (the main gun) on the right trigger and R on the left, the other way
@@ -486,6 +508,7 @@ int main(int argc, char** argv) {
     }
     btga::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
+    btga::netplay::create_menu_tab();
     recompui::config::finalize();
     btga::init_mouse_stick();
 
@@ -547,8 +570,8 @@ int main(int argc, char** argv) {
         .get_game_thread_name = get_game_thread_name,
     };
 
-    // recompui's own default launcher menu is used -- no
-    // register_launcher_init_callback call here (see file-level comment).
+    recompui::register_launcher_init_callback(launcher_init);
+    recompui::register_launcher_update_callback(launcher_update);
 
     recomp::start({
         .argc = argc,

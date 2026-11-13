@@ -5,9 +5,8 @@
 #include <string>
 #include <string_view>
 
-// What netplay tells the players (messages.cpp): a line over the game for a
-// while, and the chat. For now they go to the log; the Netplay screen (step
-// 3) shows them.
+// What netplay tells the players: a line over the game for a while
+// (online_menu.cpp), and the chat (chat.cpp).
 namespace btga::netplay {
     // A message for `seconds` (0 until the next one; "" clears it).
     void show_message(const std::string& text, int seconds);
@@ -15,6 +14,10 @@ namespace btga::netplay {
     void message_tick();
 
     constexpr size_t kChatMaxLength = 255;
+    // Before the game starts: the chat sees SDL's events first.
+    void chat_install();
+    // The chat line is open: this PC's player gets no input.
+    bool chat_typing();
     // A player's message (any thread). `port` 0 is player 1. Shown as
     // chat_sanitize leaves it.
     void chat_add_line(int port, std::string_view text);

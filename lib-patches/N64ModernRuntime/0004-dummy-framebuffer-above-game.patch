@@ -1,0 +1,17 @@
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -535,8 +535,11 @@
+     ViState* next_state = events_context.vi.get_next_state();
+     next_state->mode = &dummy_mode;
+     next_state->control = next_state->mode->comRegs.ctrl;
+-    // Set up a dummy framebuffer.
+-    next_state->framebuffer = 0x80700000;
++    // Set up a dummy framebuffer. Above the game's own memory and what
++    // BattleTanx GA adds after its 8 MB (its level heap reaches 0x807E0000,
++    // its display lists 0x80CC0000; mods start at 0x81000000): the renderer
++    // can draw these after the game has started, when it runs behind.
++    next_state->framebuffer = 0x80E00000;
+     if (odd) {
+         next_state->framebuffer += 0x25800;
+     }

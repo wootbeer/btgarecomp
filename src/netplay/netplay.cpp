@@ -1,11 +1,25 @@
 // Netplay's entry points (include/btga_netplay.h): what the rest of the game
 // asks netplay, kept to this one header so a build can leave netplay out.
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <iterator>
+#include <string>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <spawn.h>
+#include <unistd.h>
+#endif
 
 #include "ultramodern/ultramodern.hpp"
 
 #include "btga_netplay.h"
 #include "input_record.h"
+#include "messages.h"
+#include "online_menu.h"
 #include "session.h"
 #include "settings.h"
 #include "sync_test.h"
@@ -48,7 +62,52 @@ namespace {
     }
 }
 
+namespace {
+    // Leave Game: the game again, on the Netplay screen, once this one has
+    // closed its session. The BTGA_NETPLAY test variable stays behind.
+    void start_again_on_netplay_screen() {
+#ifdef _WIN32
+        SetEnvironmentVariableW(L"BTGA_NETPLAY", nullptr);
+        wchar_t path[MAX_PATH * 4];
+        DWORD length = GetModuleFileNameW(nullptr, path, (DWORD)std::size(path));
+        if (length == 0 || length >= std::size(path)) {
+            return;
+        }
+        std::wstring command = L"\"" + std::wstring(path, length) + L"\" --netplay";
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process{};
+        if (CreateProcessW(path, command.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &process)) {
+            AllowSetForegroundWindow(process.dwProcessId);
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+        }
+#else
+        unsetenv("BTGA_NETPLAY");
+        std::string self;
+        if (const char* appimage = std::getenv("APPIMAGE"); appimage != nullptr && appimage[0] != '\0') {
+            self = appimage;
+        }
+        else {
+            std::error_code ec;
+            self = std::filesystem::read_symlink("/proc/self/exe", ec).string();
+            if (ec) {
+                return;
+            }
+        }
+        if (self.empty()) {
+            return;
+        }
+        char flag[] = "--netplay";
+        char* args[] = { self.data(), flag, nullptr };
+        pid_t child = 0;
+        posix_spawn(&child, self.c_str(), nullptr, nullptr, args, environ);
+#endif
+    }
+}
+
 void btga::netplay::startup(const char* version) {
+    chat_install();
     if (sync_test_requested()) {
         // Before the game starts, as the runtime's deterministic mode needs.
         ultramodern::set_deterministic(true);
@@ -59,6 +118,9 @@ void btga::netplay::startup(const char* version) {
 
 void btga::netplay::quitting() {
     shutdown();
+    if (leaving_to_netplay_screen()) {
+        start_again_on_netplay_screen();
+    }
 }
 
 void btga::netplay::frame(uint8_t* rdram) {
@@ -83,9 +145,12 @@ bool btga::netplay::controller_read(int port, bool answered, uint16_t* buttons, 
     if (port == 0) {
         PortRead mine{};
         mine.response = answered ? 1 : 0;
-        mine.buttons = *buttons;
-        mine.x = *x;
-        mine.y = *y;
+        // Nothing pressed while this player types in the chat.
+        if (!chat_typing()) {
+            mine.buttons = *buttons;
+            mine.x = *x;
+            mine.y = *y;
+        }
         exchange(mine, sweep_reads);
         answer_pak_prompt(sweep_reads[0]);
     }

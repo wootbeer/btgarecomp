@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 // Netplay (src/netplay/). Everything outside that folder reaches it only
 // through this header; a build without it (BTGA_NETPLAY off in CMake, e.g.
@@ -14,8 +15,19 @@ namespace btga::netplay {
     // needs the same). The testing switches (BTGA_SYNCTEST, BTGA_NETPLAY) put
     // the runtime in its deterministic mode.
     void startup(const char* version);
-    // The program is closing: the other players are told.
+    // The program is closing: the other players are told (and after the
+    // Netplay tab's Leave Game, the game starts again on the Netplay screen).
     void quitting();
+    // The command line (--netplay: open the Netplay screen at the start).
+    void command_line(int argc, char** argv);
+    // The launcher has a Netplay entry: it opens the Netplay screen for the
+    // game `game_id`. launcher_update each launcher frame.
+    constexpr bool kLauncherEntry = true;
+    void open_screen(const std::u8string& game_id);
+    void launcher_update(const std::u8string& game_id);
+    // The menu's Netplay tab, shown in a session (before the config is
+    // finalized).
+    void create_menu_tab();
     // The game's frame clear (src/game/widescreen.cpp).
     void frame(uint8_t* rdram);
     // The runtime is in its deterministic mode: the game's time is counted
@@ -39,6 +51,11 @@ namespace btga::netplay {
 #else
     inline void startup(const char*) {}
     inline void quitting() {}
+    inline void command_line(int, char**) {}
+    constexpr bool kLauncherEntry = false;
+    inline void open_screen(const std::u8string&) {}
+    inline void launcher_update(const std::u8string&) {}
+    inline void create_menu_tab() {}
     inline void frame(uint8_t*) {}
     inline bool deterministic() { return false; }
     inline bool controller_read(int, bool answered, uint16_t*, float*, float*) { return answered; }
