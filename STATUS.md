@@ -104,6 +104,8 @@ tank + 9 and + 17 on every frame, firing or not (400 frames, none
 automatic). Objects with no tank in their draw are unchanged, and other
 tanks aren't drawn this way.
 
+**Owner's test** (Windows, White House): looks right, no flicker seen.
+
 ## 2026-11-12, round 194: Draw Distance's far plane and distant tank models checked (no change)
 
 **From the BattleTanx port** (wootbeer/btrecomp, commits 1f22e9d and
