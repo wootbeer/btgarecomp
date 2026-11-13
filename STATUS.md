@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 194)
+## Overview (as of round 195)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,40 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-13, round 195: the Annihilator's guns keep their interpolation IDs when it fires
+
+**Report** (GitHub issue 4, reopened): the Annihilator's turret and guns
+flicker briefly when it fires. Round 190 couldn't reach it.
+
+**Reaching it:** it's the boss tank type `TANK_BOSS_A` (index 12 in the tank
+table at `0x80122E30`, 0xD0 apart; a tank's type is the word at +0x98 of its
+object, its x / z at +0x8 / +0xC). The Level Select cheat opens every
+mission on the map; Washington DC - White House is 8 presses right. It
+parks at (0, -1079) behind the barricades, so a temporary probe moved the
+player in front of it once the drive stopped at the barricade.
+
+**Cause:** unlike other tanks, the boss is drawn from the object loop
+(`func_800A1FDC`, round 156) as one object: hull and turret (tank IDs), a
+flash part (tank + 5) only while it fires, then its two side guns, both
+built in a scratch matrix in the stack (0x8021B540). Those got the object
+loop's IDs: the part's order among all the object's parts, given only while
+the part count is the same as in the two frames before. So when the flash
+part came and went, the guns had no ID for a frame or two (automatic
+matching), then came back shifted by one, each gun named as the other had
+been: RT64 blended each gun toward the other. Logged per frame: 4 parts
+(guns `object + 4`, `+ 6`) without firing, and 5 with it (guns AUTO, then
+`+ 6`, `+ 8`).
+
+**Fix** (`src/game/interpolation_ids.cpp`): in an object-loop draw that has
+queued a tank's hull or turret, such stack-matrix parts are named by that
+tank, in their order among themselves: tank + 9 + 8k (odd, clear of the
+hull 1, turret 3 and the extra parts' 5, 7 and 11 + 8k). The hull's Mtx is
+queued again in the draw (for the decal, keeping the hull's ID), so a Mtx
+already named this frame is skipped before counting. Logged again: guns at
+tank + 9 and + 17 on every frame, firing or not (400 frames, none
+automatic). Objects with no tank in their draw are unchanged, and other
+tanks aren't drawn this way.
 
 ## 2026-11-12, round 194: Draw Distance's far plane and distant tank models checked (no change)
 

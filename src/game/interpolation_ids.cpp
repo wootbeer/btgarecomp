@@ -77,6 +77,8 @@ namespace {
     // the Mtx it has queued so far in this draw, and how many parts each
     // object drew in the last three frames.
     uint32_t draw_object = 0;
+    // The tank whose hull or turret this draw has queued so far (round 195), or 0.
+    uint32_t draw_tank = 0;
     std::vector<uint32_t> draw_parts;
     std::unordered_map<uint32_t, uint32_t> object_parts[3];
     int object_parts_current = 0;
@@ -227,6 +229,9 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
         if ((object >= 0x80000000u) && (object < 0x80800000u) && ((object & 3) == 0)) {
             // Odd, so never the address of an Mtx or float matrix used as an ID; all
             // below the next tank (0x4CC on).
+            if (draw_object != 0) {
+                draw_tank = object;
+            }
             if (hull_or_turret) {
                 source = object | ((float_source == 0x8021B2A0u) ? 1u : 3u);
             }
@@ -251,11 +256,39 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     // the draw function's own stack frame is scratch shared by every object
     // of its kind (flying wreckage: func_800DA340's at sp+0x20), so the object
     // the loop is drawing names it, with the part's order within that draw.
+    //
+    // Round 195 (GitHub issue 4): the Annihilator boss is drawn this way, as one object: hull,
+    // turret, a flash part (tank + 5) only while it fires, then its two side guns, both built in
+    // one scratch matrix (0x8021B540). Counted among all the object's parts, the guns lost their
+    // IDs on the frames the part count changed, then came back shifted by one, each gun named
+    // as the other had been -- the guns and turret flickering when it fired. In a draw that has
+    // queued a tank's hull or turret, such parts are named by that tank instead, in the order
+    // they come among themselves (tank + 9 + 8 * k: odd, clear of the 1, 3, 5, 7 and 11 above).
     if ((draw_object != 0) && (source == float_source) && (float_source > (uint32_t)ctx->r29) &&
         (float_source < (uint32_t)ctx->r29 + 0x1000)) {
-        const uint32_t object_id = object_part_id(mtx);
-        if (object_id != 0) {
-            source = object_id;
+        if (draw_tank != 0) {
+            // Only the first time this frame: the hull's Mtx comes again for the tank's decal
+            // (it keeps the hull's ID, below), and counting it would shift the parts after it.
+            if (generations[current].mtx_source.count(mtx) != 0) {
+                return;
+            }
+            std::vector<uint32_t>& built = generations[current].extra_parts[draw_tank + 9u];
+            size_t k = 0;
+            while (k < built.size() && built[k] != mtx) {
+                k++;
+            }
+            if (k == built.size()) {
+                built.push_back(mtx);
+            }
+            if (k < 16) {
+                source = draw_tank + 9u + 8u * (uint32_t)k;
+            }
+        }
+        else {
+            const uint32_t object_id = object_part_id(mtx);
+            if (object_id != 0) {
+                source = object_id;
+            }
         }
     }
     Generation& gen = generations[current];
@@ -333,11 +366,13 @@ void btga_interp_new_frame() {
 // object record in $a0.
 extern "C" void btga_interp_draw_object_begin(uint8_t* rdram, recomp_context* ctx) {
     draw_object = (uint32_t)ctx->r4;
+    draw_tank = 0;
     draw_parts.clear();
 }
 
 extern "C" void btga_interp_draw_object_end(uint8_t* rdram, recomp_context*) {
     draw_object = 0;
+    draw_tank = 0;
 }
 
 // func_8007B65C, at L_8007B738: the start of one bucket's record list (the walker goes
