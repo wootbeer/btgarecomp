@@ -46,6 +46,10 @@ namespace {
     constexpr Range kSkipped[] = {
         { 0x80000400, 0x80070C00 },
         { 0x80157E80, 0x80158080 },
+        // The depth buffer (320 x 240 x 2 bytes below 0x80400000), which the
+        // renderer also writes back: different on each PC once each shows its
+        // own player's view (src/netplay/own_view.cpp).
+        { 0x803DA800, 0x80400000 },
         { 0x80217070, 0x80217078 },
         { 0x8021BA00, 0x8021BA08 },
         { 0x8021BBB0, 0x8021BBB8 },

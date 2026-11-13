@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 200)
+## Overview (as of round 201)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,68 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-13, round 201: netplay, each PC its own player's view
+
+`src/netplay/own_view.cpp` (the Rage Wars port's idea, redone for this
+game), through a wrapper around the renderer (`btga::netplay::wrap_renderer`,
+`src/main/main.cpp`): in a session, just before each display list goes to the
+renderer, this PC's player's view is drawn over the whole screen.
+
+**How the game draws split screen** (display lists dumped from a two-player
+Tank Wars match): the views are interleaved. For each of its draw buckets,
+for each view, the main list (our buffer at 0x80C40000, round 161) calls the
+view's viewport list in segment 1 (0x01000150 top half, 0x01000168 bottom;
+0x01000138 the full screen; 0x01000080 is the frame's setup, no viewport),
+loads the view's projection (G_MTX projection, 0x40 apart) and draws. The
+second list then calls the overlay (in the level heap, 0x804Fxxxx): every
+player's HUD in screen coordinates under the full-screen viewport; in two
+player the two radars are stacked across the line between the views. Each
+view keeps one player's vertical field of view, widened sideways to the
+view's shape. The players' cameras are 0x250 apart from 0x80235F00, each's
+viewport list at +0x118.
+
+**What changes:**
+- This player's view: its camera's viewport list (not the order the views
+  come in: after a respawn the game drew the other view first, and the views
+  swapped). Its spans (a viewport call to the next, or the end of the list)
+  get the full-screen viewport list; its projections a copy in the spare end
+  of the main list's buffer (+0x3F000) with the x column scaled back to the
+  screen's shape: one player's picture.
+- The other views' spans: still drawn, but under a scissor far below the
+  screen (a small list in the same spare area that calls the view's own
+  viewport list, then sets the scissor). Jumping over them broke the
+  textures: the game sets an object's textures and modes only when they
+  differ from the last object's, so later views needed what they set.
+- The HUD (rectangles outside the spans), only while the match plays (the
+  state at 0x802195C8 is 7; func_800A8690 sets 5 for the pause menu, which
+  is left as it is): each rectangle is the view's its middle lies in;
+  another player's are left out; this player's are grouped into widgets
+  (rectangles within 6 pixels of each other: a box and its icon, the radar
+  and its dots, a line of text) and each widget moves as one to the same
+  edges of the screen it was near in its view, kept on the screen. The line
+  between the views goes.
+- Every changed word is put back right after the renderer's send_dl (RT64
+  reads the whole list there), so the game's memory (the overlay is in the
+  level heap) is never left changed.
+
+The desync check now also leaves out the depth buffer (0x803DA800-0x80400000),
+which the renderer writes back and which differs once each PC draws its own
+view; nothing else differed.
+
+**Tests** (copies on one machine, each on its own display):
+- Two-player Tank Wars: each PC its own tank full screen with its own HUD
+  (radar, weapons, health, messages), through respawns and Change Tank: 4,045
+  and 4,055 frames the same on both.
+- The pause menu: whole on both (4,447 frames the same).
+- Four players (four copies, the game at its original resolution): Convoy
+  with four humans, each PC its own quadrant's view and HUD: 5,231 frames
+  the same on all four; a one-player campaign mission with four connected,
+  to the Victory screen: 5,594.
+- `BTGA_SHARED_SCREEN` keeps the game's split screen (testing).
+
+Not tried: three players (a full-width view and two quadrants; the same
+code, by the viewport lists).
 
 ## 2026-11-13, round 200: netplay security check; the Start's settings held to the Welcome's
 

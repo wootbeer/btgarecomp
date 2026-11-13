@@ -3,7 +3,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
+
+#include "ultramodern/renderer_context.hpp"
 
 // Netplay (src/netplay/). Everything outside that folder reaches it only
 // through this header; a build without it (BTGA_NETPLAY off in CMake, e.g.
@@ -28,6 +31,10 @@ namespace btga::netplay {
     // The menu's Netplay tab, shown in a session (before the config is
     // finalized).
     void create_menu_tab();
+    // The renderer, wrapped: in a session each PC shows only its own
+    // player's view, full screen (src/netplay/own_view.cpp).
+    std::unique_ptr<ultramodern::renderer::RendererContext> wrap_renderer(
+        uint8_t* rdram, std::unique_ptr<ultramodern::renderer::RendererContext> inner);
     // The game's frame clear (src/game/widescreen.cpp).
     void frame(uint8_t* rdram);
     // The runtime is in its deterministic mode: the game's time is counted
@@ -56,6 +63,8 @@ namespace btga::netplay {
     inline void open_screen(const std::u8string&) {}
     inline void launcher_update(const std::u8string&) {}
     inline void create_menu_tab() {}
+    inline std::unique_ptr<ultramodern::renderer::RendererContext> wrap_renderer(
+        uint8_t*, std::unique_ptr<ultramodern::renderer::RendererContext> inner) { return inner; }
     inline void frame(uint8_t*) {}
     inline bool deterministic() { return false; }
     inline bool controller_read(int, bool answered, uint16_t*, float*, float*) { return answered; }
