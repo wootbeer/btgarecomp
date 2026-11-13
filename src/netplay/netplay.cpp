@@ -8,6 +8,7 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX // windows.h's min and max macros would break std::min and std::max
 #include <windows.h>
 #else
 #include <spawn.h>
