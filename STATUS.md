@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 195)
+## Overview (as of round 196)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.10).
+and higher framerates. Betas are public (0.1.0 to 0.1.11).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,26 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-13, round 196: 0.1.11
+
+Version 0.1.11 (`version_string` in `src/main/main.cpp`). PC and Linux; the
+Android branch gets it with the Android update.
+
+**Release scan:** no testing switches or debug prints left from rounds
+190-195 (the probes in `interpolation_ids.cpp` were removed), one new lib
+patch (rt64 0023), and no ROM, ROM-derived or Lossless Scaling files
+tracked.
+
+**New since 0.1.10:**
+- Buildings no longer flicker with an extended Draw Distance: RT64's
+  simulated N64 depth clip is off (round 193, GitHub issue 7). Not seen by
+  the owner since; to confirm with the reporter.
+- The Annihilator boss's turret and guns no longer flicker when it fires
+  with frame interpolation on (round 195, GitHub issue 4). Checked by the
+  owner on the White House mission.
+- A turn margin on the view cone for in-between frames, so the ground and
+  objects at the screen's sides don't pop in while turning fast (round 192).
 
 ## 2026-11-13, round 195: the Annihilator's guns keep their interpolation IDs when it fires
 
