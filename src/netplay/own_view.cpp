@@ -329,6 +329,18 @@ namespace {
             set_command(rdram, c.address, c.w0, kFullScreenViewportDl);
             for (size_t k = i + 1; k < end; k++) {
                 const Command& m = commands[k];
+                // Fill rectangles drawn in the view (a fade over it, the
+                // black between places in a tunnel): over the whole screen,
+                // as the 3D is.
+                if ((m.w0 >> 24) == 0xF6) {
+                    auto to_x = [&](uint32_t v) { return full.x0 + ((float)v / 4.0f - mine.x0) * full.w / mine.w; };
+                    auto to_y = [&](uint32_t v) { return full.y0 + ((float)v / 4.0f - mine.y0) * full.h / mine.h; };
+                    auto fixed = [](float v) { return (uint32_t)std::clamp((int)std::lround(v * 4.0f), 0, 0xFFF); };
+                    const uint32_t w0 = 0xF6000000u | (fixed(to_x((m.w0 >> 12) & 0xFFF)) << 12) | fixed(to_y(m.w0 & 0xFFF));
+                    const uint32_t w1 = (fixed(to_x((m.w1 >> 12) & 0xFFF)) << 12) | fixed(to_y(m.w1 & 0xFFF));
+                    set_command(rdram, m.address, w0, w1);
+                    continue;
+                }
                 if ((m.w0 >> 24) != 0xDA || (m.w0 & 4) == 0) {
                     continue;
                 }
@@ -365,11 +377,27 @@ namespace {
             size_t index;
             float left, top, right, bottom;
             int group;
+            int align; // the index of the rect-align command it's under, -1 none
+            bool bar;  // the health bar's (wide and thin)
+            int view;  // the view it's in
+            bool dropped = false; // another player's
         };
         std::vector<HudRect> hud;
+        // In widescreen the HUD's rectangles are anchored to an edge by
+        // RT64 rect-align commands (gEXSetRectAlign, src/game/widescreen.cpp),
+        // chosen by each element's place in the split layout: a box and its
+        // icon could be anchored differently and part. Each command's rects,
+        // to give it the anchoring of where they end up (below); one that
+        // also anchors something else is left as it is.
+        int align_at = -1;
+        std::unordered_map<int, bool> align_shared; // command index -> anchors other rects too
         for (size_t n = 0; n < commands.size(); n++) {
             const Command& c = commands[n];
             const uint32_t op = c.w0 >> 24;
+            if (c.w0 == 0x64000006u && n + 1 < commands.size()) {
+                align_at = (int)n;
+                continue;
+            }
             if (in_span[n] || (op != 0xE4 && op != 0xE5 && op != 0xF6)) {
                 continue;
             }
@@ -390,13 +418,26 @@ namespace {
                 }
             }
             if (within < 0) {
+                if (align_at >= 0) {
+                    align_shared[align_at] = true;
+                }
                 continue; // over the whole screen: as it is
             }
-            if (within != (int)mine_index) {
-                set_command(rdram, c.address, 0, 0); // another player's: left out
+            hud.push_back({ n, left, top, right, bottom, -1, align_at, w >= 40.0f && h <= 10.0f, within });
+        }
+        // The health bar's fill is as wide as the health left: anything
+        // inside the bar's frame is the bar's too.
+        for (HudRect& r : hud) {
+            if (r.bar) {
                 continue;
             }
-            hud.push_back({ n, left, top, right, bottom, -1 });
+            for (const HudRect& frame : hud) {
+                if (frame.bar && r.left >= frame.left - 2.0f && r.right <= frame.right + 2.0f && r.top >= frame.top - 2.0f &&
+                    r.bottom <= frame.bottom + 2.0f) {
+                    r.bar = true;
+                    break;
+                }
+            }
         }
         // Widgets: rectangles that touch or nearly touch (a box and its icon,
         // the radar and its dots, a line of text) move together.
@@ -411,27 +452,57 @@ namespace {
             }
             return i;
         };
-        constexpr float kGap = 6.0f;
+        // Within a view, rectangles up to kGap apart (the letters of a word,
+        // a box and its icon); between views only touching ones (the radar's
+        // two strips), not a message a few pixels from it.
+        constexpr float kGap = 3.0f;
+        constexpr float kTouch = 0.5f;
         for (size_t i = 0; i < hud.size(); i++) {
             for (size_t j = i + 1; j < hud.size(); j++) {
                 const HudRect& p = hud[i];
                 const HudRect& q = hud[j];
-                if (p.left <= q.right + kGap && q.left <= p.right + kGap && p.top <= q.bottom + kGap && q.top <= p.bottom + kGap) {
+                if (p.bar != q.bar) {
+                    continue; // the health bar moves on its own (below)
+                }
+                const float gap = p.view == q.view ? kGap : kTouch;
+                if (p.left <= q.right + gap && q.left <= p.right + gap && p.top <= q.bottom + gap && q.top <= p.bottom + gap) {
                     parent[root_of((int)i)] = root_of((int)j);
                 }
+            }
+        }
+        // Another player's are left out, unless joined to this player's: the
+        // radar in two-player is one for both, drawn half by each player's
+        // HUD (its map in two strips) across the line between the views.
+        std::unordered_map<int, bool> has_mine;
+        for (size_t i = 0; i < hud.size(); i++) {
+            if (hud[i].view == (int)mine_index) {
+                has_mine[root_of((int)i)] = true;
+            }
+        }
+        for (size_t i = 0; i < hud.size(); i++) {
+            if (has_mine.count(root_of((int)i)) == 0) {
+                hud[i].dropped = true;
+                set_command(rdram, commands[hud[i].index].address, 0, 0); // G_SPNOOP
             }
         }
         struct Widget {
             float left = 1e9f, top = 1e9f, right = -1e9f, bottom = -1e9f;
             float dx = 0.0f, dy = 0.0f;
+            bool bar = false;
+            bool shared = false; // several players' (the two-player radar)
         };
         std::unordered_map<int, Widget> widgets;
         for (size_t i = 0; i < hud.size(); i++) {
+            if (hud[i].dropped) {
+                continue;
+            }
             Widget& w = widgets[root_of((int)i)];
             w.left = std::min(w.left, hud[i].left);
             w.top = std::min(w.top, hud[i].top);
             w.right = std::max(w.right, hud[i].right);
             w.bottom = std::max(w.bottom, hud[i].bottom);
+            w.bar = w.bar || hud[i].bar;
+            w.shared = w.shared || hud[i].view != (int)mine_index;
             hud[i].group = root_of((int)i);
         }
         // Each to the same edges of the screen as it's near in the view (by
@@ -439,14 +510,89 @@ namespace {
         for (auto& [id, w] : widgets) {
             const float cx = (w.left + w.right) / 2.0f, cy = (w.top + w.bottom) / 2.0f;
             w.dx = cx >= mine.x0 + mine.w / 2.0f ? (full.x0 + full.w) - (mine.x0 + mine.w) : full.x0 - mine.x0;
-            w.dy = cy >= mine.y0 + mine.h / 2.0f ? (full.y0 + full.h) - (mine.y0 + mine.h) : full.y0 - mine.y0;
+            // A shared widget (the two-player radar, on the line between
+            // the views) to the bottom for everyone, as with one player.
+            w.dy = w.shared || cy >= mine.y0 + mine.h / 2.0f ? (full.y0 + full.h) - (mine.y0 + mine.h) : full.y0 - mine.y0;
             if (w.right + w.dx > full.x0 + full.w) w.dx -= w.right + w.dx - (full.x0 + full.w);
             if (w.left + w.dx < full.x0) w.dx += full.x0 - (w.left + w.dx);
-            if (w.bottom + w.dy > full.y0 + full.h) w.dy -= w.bottom + w.dy - (full.y0 + full.h);
-            if (w.top + w.dy < full.y0) w.dy += full.y0 - (w.top + w.dy);
+            // Up and down, at least the game's own TV-safe margin from the
+            // screen's edge (a TV may crop it): a widget on the line between
+            // the views (the radar) would otherwise touch it.
+            constexpr float kSafe = 16.0f;
+            if (w.bottom + w.dy > full.y0 + full.h - kSafe) w.dy -= w.bottom + w.dy - (full.y0 + full.h - kSafe);
+            if (w.top + w.dy < full.y0 + kSafe) w.dy += full.y0 + kSafe - (w.top + w.dy);
+            // The shared radar: at the bottom on every PC, as with one player.
+            if (w.shared) {
+                w.dy = full.y0 + full.h - kSafe - w.bottom;
+            }
+            // The health bar: centred at the bottom, as with one player.
+            if (w.bar) {
+                w.dx = full.x0 + full.w / 2.0f - (w.left + w.right) / 2.0f;
+                w.dy = full.y0 + full.h - kSafe - w.bottom;
+            }
+        }
+        // Each rect-align command: the anchoring of where its rects end up
+        // (as src/game/widescreen.cpp picks it by x: left of 120 the left
+        // edge, from 200 the right, between them and the bar none), if they
+        // agree. With no rect-align commands (Original, three or four
+        // players) nothing is anchored and this does nothing.
+        // A command that also anchors other rects (text over the screen)
+        // stays as it is, and the pieces under it decide their widget's
+        // anchoring: the rest follow them, so the widget stays together.
+        auto side_of = [&](int at) {
+            const uint32_t origin = commands[(size_t)at].w1 & 0xFFF;
+            return origin == 0x000 ? 0 : origin == 0x800 ? 1 : origin == 0x400 ? 2 : -1;
+        };
+        std::unordered_map<int, int> widget_side; // widget -> 0 left, 1 none, 2 right, -1 leave alone
+        for (const HudRect& r : hud) {
+            if (r.dropped || r.align < 0 || align_shared.count(r.align) == 0) {
+                continue;
+            }
+            const int fixed = side_of(r.align);
+            auto [it, added] = widget_side.emplace(r.group, fixed);
+            if (!added && it->second != fixed) {
+                it->second = -1;
+            }
+        }
+        std::unordered_map<int, int> align_side; // command index -> 0 left, 1 none, 2 right, -1 mixed
+        for (const HudRect& r : hud) {
+            if (r.dropped || r.align < 0) {
+                continue;
+            }
+            const Widget& w = widgets[r.group];
+            const float cx = (w.left + w.right) / 2.0f + w.dx;
+            int side = w.bar ? 1 : cx < 120.0f ? 0 : cx >= 200.0f ? 2 : 1;
+            if (auto fixed = widget_side.find(r.group); fixed != widget_side.end()) {
+                side = fixed->second;
+            }
+            auto [it, added] = align_side.emplace(r.align, side);
+            if (!added && it->second != side) {
+                it->second = -1;
+            }
+        }
+        for (const auto& [at, side] : align_side) {
+            if (side < 0 || align_shared.count(at) != 0) {
+                continue;
+            }
+            const Command& a = commands[(size_t)at];
+            const Command& offsets = commands[(size_t)at + 1];
+            // As widescreen.cpp's kAlignHudLeft, kAlignNone, kAlignHudRight
+            // (origins, then offsets in 10.2 fixed point); already set: as is.
+            constexpr uint32_t kOrigin[3] = { 0x000, 0x800, 0x400 };
+            constexpr int16_t kOffset[3] = { -16 * 4, 0, -320 * 4 + 16 * 4 };
+            const uint32_t w1 = kOrigin[side] | (kOrigin[side] << 12);
+            const uint32_t off = (uint32_t)(uint16_t)kOffset[side] << 16;
+            if (a.w1 == w1 && offsets.w0 == off && offsets.w1 == off) {
+                continue;
+            }
+            set_command(rdram, a.address, a.w0, w1);
+            set_command(rdram, offsets.address, off, off);
         }
         auto clamp12 = [](float v) { return (uint32_t)std::clamp((int)std::lround(v * 4.0f), 0, 0xFFF); };
         for (const HudRect& r : hud) {
+            if (r.dropped) {
+                continue;
+            }
             const Command& c = commands[r.index];
             const float mx = widgets[r.group].dx, my = widgets[r.group].dy;
             const uint32_t w0 = (c.w0 & 0xFF000000u) | (clamp12(r.right + mx) << 12) | clamp12(r.bottom + my);

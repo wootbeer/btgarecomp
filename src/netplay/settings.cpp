@@ -1,5 +1,6 @@
 // The settings every PC in a session must share (settings.h).
 #include <algorithm>
+#include <cstdlib>
 #include <atomic>
 #include <cmath>
 
@@ -22,6 +23,11 @@ btga::netplay::SharedSettings btga::netplay::own_settings() {
     s.draw_distance = (uint32_t)std::clamp(btga::draw_distance_setting(), 0, 3);
     s.widescreen = ultramodern::renderer::get_graphics_config().ar_option == ultramodern::renderer::AspectRatio::Original ? 0u : 1u;
     s.widescreen_scale = s.widescreen != 0 ? btga::window_widescreen_scale() : 1.0f;
+    // Testing (BTGA_NETPLAY sessions start before the window exists, so its
+    // shape isn't known yet): BTGA_NETPLAY_WSCALE, e.g. 1.333 for 16:9.
+    if (const char* forced = std::getenv("BTGA_NETPLAY_WSCALE"); forced != nullptr && s.widescreen != 0) {
+        s.widescreen_scale = std::strtof(forced, nullptr);
+    }
     const auto& cheats = btga::cheats::list();
     s.cheat_count = (uint32_t)std::min<size_t>(cheats.size(), kMaxCheats);
     for (uint32_t i = 0; i < s.cheat_count; i++) {

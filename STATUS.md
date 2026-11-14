@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 213)
+## Overview (as of round 214)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,45 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 214: own view's HUD laid out as one player's; fades over the screen
+
+Owner (two Windows PCs, one on a TV): the weapon and ammo icons outside
+their boxes, the radar cut off (top-left on the joiner's TV) or touching the
+bottom, the health bar beside the boxes instead of centred; and in tunnels
+half the screen went black.
+
+Found here once the test sessions had the window's shape
+(BTGA_NETPLAY_WSCALE: BTGA_NETPLAY sessions start before the window, so the
+host's widescreen scale was 1 and no HUD anchoring happened):
+- **Anchoring.** In widescreen, widescreen.cpp anchors each HUD element to
+  an edge by its script x; in split screen a box (left of 120: the left
+  edge) and its icon (between: none) parted. own_view.cpp now gives each
+  rect-align command the anchoring of where its widget ends up (left of 120
+  the left edge, from 200 the right, else none); a command that also
+  anchors other rects (a message over the screen) stays, and its widget
+  follows it. In a session widescreen.cpp writes a command for each element,
+  even the same as the last, so elements don't share one (the same on every
+  PC: the session's player count).
+- **The radar** is one for both players in two-player, drawn half by each
+  player's HUD (its map in two strips, 88-128 and 128-153) across the line
+  between the views: each PC showed half. Rects of other players that touch
+  this player's (between views only touching, within a view up to 3 apart)
+  are kept; such a shared widget goes to the bottom on every PC.
+- **The health bar** (rects at least 40 wide and at most 10 high, and what's
+  inside its frame: the fill is as wide as the health left) moves on its
+  own, centred at the bottom, unanchored.
+- Up and down, widgets keep at least 16 from the screen's edge (the game's
+  TV-safe margin).
+- **Fades:** fill rectangles drawn inside this player's view (a fade, the
+  black between places in a tunnel) are stretched from the view to the
+  whole screen, as the 3D is. Not seen here (no tunnel reached in the test
+  match); from the owner's video, where the black covered the joiner's old
+  half.
+
+Tested over 127.0.0.1 at 16:9: both PCs show the radar whole at the bottom
+left, the health bar centred, the ammo icon and count in their box, as one
+player's HUD; 3789 frames the same.
 
 ## 2026-11-14, round 213: chat while paused
 

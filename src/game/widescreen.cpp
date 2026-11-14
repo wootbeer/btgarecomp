@@ -180,7 +180,11 @@ namespace {
     bool scissor_pushed = false;
 
     void emit(uint8_t* rdram, gpr head_ptr, gpr home_ptr, const Align& align) {
-        if (align == emitted) {
+        // In a netplay session each element gets its own command, even the
+        // same as the last: src/netplay/own_view.cpp re-anchors each piece of
+        // the HUD by where it moves it, and elements sharing one command
+        // couldn't part. The same on every PC (the session's player count).
+        if (align == emitted && !(btga::netplay::session_players() >= 2 && !(align == kAlignNone))) {
             return;
         }
         DlWriter dl{ rdram, kseg0((uint32_t)MEM_W(0, head_ptr)) };
