@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 221)
+## Overview (as of round 222)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,34 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 222: netplay's update check; compared with PaxDino again
+
+Owner: does netplay have PaxDino's update check? It didn't: round 198 ported
+the Rage Wars port's rounds 134-185 but left out the update check from its
+round 174 (the version labels in Hello/Welcome and the Worker's "version"
+answer were ported).
+
+**Update check** (`src/netplay/update_check.cpp`, `update_check.h`, from
+PaxDino's `src/main/update_check.cpp`): when the Netplay screen first opens,
+one anonymous request (the HTTP helper's generic user agent) to
+api.github.com for wootbeer/btgarecomp's latest release, at most once a
+launch, off the UI's thread. Only the tag is read and compared with this
+build's version number by number; if it's newer, a line at the top of the
+screen: "A newer version is out (X; you have Y). Everyone in a game needs the
+same version: get it at github.com/wootbeer/btgarecomp/releases". Nothing is
+downloaded. Netplay only (off with `BTGA_NETPLAY`). Tested with a small
+harness against GitHub: 0.1.10 sees 0.1.11 as newer; 0.1.11 and 0.2.0 see
+nothing. The game builds; the latest release is v0.1.11, so this build shows
+nothing.
+
+**Compared with PaxDino after its round 185:** 186 (window in front), 187
+(Leave Game from an AppImage), 188 (build ID from the code's last commit), 192
+(the Start held to the Welcome's settings) are here; 191 (no game thread
+spinning) was this port's own fix; 189-190 (stick look) are Rage Wars only.
+Before it, the Rage Wars-only parts (Controller Paks, profiles, crosshairs,
+Unlock Everything, Extra Modes) don't apply. One deliberate difference:
+Chat's default key is T only (Enter is Start, the pause, in this game).
 
 ## 2026-11-14, round 221: remaining scenery gaps investigated (nothing changed)
 
