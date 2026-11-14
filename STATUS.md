@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 214)
+## Overview (as of round 215)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,20 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 215: the HUD's snap as the game pauses
+
+Owner's video: elements snapped as the pause menu opened. The frame the
+game pauses in (state 5 from that frame's controller read) still draws the
+HUD, then the pause menu; the HUD pass ran only at state 3 or 7, so for
+that frame the HUD showed where split screen has it. Now, paused, a frame
+with rect-align commands (only HUD scripts write them, widescreen) is
+taken as that one: the rects under its commands are moved as in play, and
+what comes after the last of them (the pause menu) stays as it is. Later
+paused frames have no HUD and no commands; unpausing goes straight to 3
+with the HUD. Tested: four pauses, two of them in a frame with the HUD
+(about 54 rects moved, the menu left), the pause menu itself unchanged;
+4330 frames the same.
 
 ## 2026-11-14, round 214: own view's HUD laid out as one player's; fades over the screen
 

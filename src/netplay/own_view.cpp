@@ -370,7 +370,20 @@ namespace {
         // together; a group that would leave the screen is moved back onto it.
         // Only while the match plays: paused (and between screens) the game's
         // menus are drawn over the whole screen, and stay as they are.
-        if (!match_playing((uint32_t)MEM_W(0, (gpr)(int32_t)kPlayState))) {
+        // The frame the game pauses in still draws the HUD (then the pause
+        // menu, which is left as it is): in widescreen its rect-align
+        // commands show it, and what comes after the last of them is the
+        // menu's. Without this the HUD snapped to the split layout for that
+        // frame.
+        int last_align = -1;
+        for (size_t n = 0; n < commands.size(); n++) {
+            if (commands[n].w0 == 0x64000006u) {
+                last_align = (int)n;
+            }
+        }
+        const uint32_t state = (uint32_t)MEM_W(0, (gpr)(int32_t)kPlayState);
+        const bool pausing = state == 5 && last_align >= 0;
+        if (!match_playing(state) && !pausing) {
             return;
         }
         struct HudRect {
@@ -400,6 +413,12 @@ namespace {
             }
             if (in_span[n] || (op != 0xE4 && op != 0xE5 && op != 0xF6)) {
                 continue;
+            }
+            if (pausing && (align_at < 0 || align_at == last_align)) {
+                if (align_at >= 0) {
+                    align_shared[align_at] = true;
+                }
+                continue; // the pause menu: as it is
             }
             const float left = (float)((c.w1 >> 12) & 0xFFF) / 4.0f, top = (float)(c.w1 & 0xFFF) / 4.0f;
             const float right = (float)((c.w0 >> 12) & 0xFFF) / 4.0f, bottom = (float)(c.w0 & 0xFFF) / 4.0f;
