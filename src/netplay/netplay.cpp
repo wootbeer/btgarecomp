@@ -212,11 +212,15 @@ bool btga::netplay::controller_read(int port, bool answered, uint16_t* buttons, 
             mine.y = *y;
         }
         exchange(mine, sweep_reads);
-        // Where the chat can open: a match (3 or 7), not paused (5), else the
-        // menu screens.
+        // Where the chat can open: a match (3 or 7) as a match; paused (5) as
+        // the menu screens for whoever drives the pause menu (the host, or a
+        // joiner standing in for one that's gone: Enter selects there), as a
+        // match for the others (their input isn't the game's while paused,
+        // host_drives_menus); anything else the menu screens.
         if (game_rdram != nullptr) {
             const uint32_t state = *reinterpret_cast<const uint32_t*>(game_rdram + (0x802195C8u - 0x80000000u));
-            chat_set_where(state == 3 || state == 7 ? 2 : state == 5 ? 0 : 1);
+            const bool drives_pause = local_port() == 0 || host_gone();
+            chat_set_where(state == 3 || state == 7 ? 2 : state == 5 ? (drives_pause ? 1 : 2) : 1);
         }
         stand_in_for_host();
         host_drives_menus();

@@ -22,7 +22,7 @@ namespace btga::netplay {
     // sent or closed it) while it's still held: kept from the game.
     uint16_t chat_held_buttons();
     // Where the chat can open, from the game's state each sweep
-    // (netplay.cpp): 0 nowhere (paused), 1 the menu screens, 2 a match.
+    // (netplay.cpp): 0 nowhere, 1 the menu screens (not by Enter), 2 a match.
     void chat_set_where(int where);
     // The Chat control's description and default key (T), before the
     // controls are loaded.

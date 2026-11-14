@@ -1,9 +1,9 @@
 // Netplay chat (messages.h), from the Rage Wars port's: a few lines at the
 // left of the screen and a line to type in. The Chat control (Controls tab;
 // T by default, any key or controller button) opens it in a session, on the
-// game's menu screens and in a match, not while paused nor while the menu
-// (F1) is open; Enter doesn't open it on the menu screens (it selects there).
-// If the game pauses while it's open, it closes, keeping what's typed. While
+// game's menu screens, in a match and paused, not while the menu (F1) is
+// open; Enter doesn't open it on the menu screens nor, for whoever drives the
+// pause menu (the host), while paused: it selects there. While
 // it's open every key goes to it and this PC's player gets no input: Enter
 // sends, Escape clears what's typed and a second Escape closes it, Ctrl+V
 // pastes; on a controller the Chat button again sends and B is Escape.
@@ -58,8 +58,8 @@ namespace {
     };
 
     std::mutex chat_mutex;
-    // Where it can open (chat_set_where): 0 nowhere (paused), 1 the game's
-    // menu screens (not by Enter), 2 a match.
+    // Where it can open (chat_set_where): 0 nowhere, 1 the game's menu
+    // screens and the host's pause menu (not by Enter), 2 a match.
     std::atomic<int> allowed{ 1 };
     bool open = false;
     bool swallow_open_text = false; // the letter key that opened it, still to come as text
@@ -197,8 +197,9 @@ namespace {
             open = false;
             return 1;
         }
-        // Paused: the keys are the game's. A line still open closes (what's
-        // typed is kept), and the key that found it so goes nowhere.
+        // Nowhere (unused for now): the keys are the game's. A line still open
+        // closes (what's typed is kept), and the key that found it so goes
+        // nowhere.
         if (allowed.load() == 0) {
             if (!open) {
                 return 1;
@@ -399,7 +400,7 @@ void btga::netplay::chat_set_where(int where) {
 
 void btga::netplay::chat_set_defaults() {
     recompinput::set_game_input_description(GameInput::OPEN_CHAT,
-        "Netplay: opens the chat line (on the game's menu screens and in a match, not while paused). "
+        "Netplay: opens the chat line. "
         "Enter sends, Escape clears it and then closes it; on a controller this button sends and B closes.");
     // T; Enter is Start (pause) here. No controller button by default (its
     // buttons are all the game's), though one can be bound.
@@ -437,7 +438,7 @@ void btga::netplay::chat_tick() {
     {
         std::lock_guard lock{ chat_mutex };
         if (open && (recompinput::game_input_disabled() || allowed.load() == 0)) {
-            close_chat(); // the menu (F1) opened over it, or the game paused
+            close_chat(); // the menu (F1) opened over it
         }
         typing_now = open;
         const clock::time_point now = clock::now();

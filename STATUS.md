@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 212)
+## Overview (as of round 213)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,16 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 213: chat while paused
+
+Owner: the other players can't control the pause menu, so they should be
+able to chat there. The chat now opens while paused too: for the players
+whose input the pause menu doesn't take as in a match (any Chat key), for
+whoever drives it (the host, or a joiner standing in for one that's gone)
+as on the menu screens (Enter selects there, so it doesn't open the chat).
+Tested paused: the joiner's line and the host's (by T) sent, the host's
+Enter that sent it didn't pick Continue; 3951 frames the same.
 
 ## 2026-11-14, round 212: Chat as a control; chat where; the host drives the menus
 
