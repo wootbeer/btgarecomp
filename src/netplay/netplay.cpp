@@ -149,8 +149,10 @@ bool btga::netplay::controller_read(int port, bool answered, uint16_t* buttons, 
         PortRead mine{};
         mine.response = answered ? 1 : 0;
         // Nothing pressed while this player types in the chat.
+        // Nor the buttons on a key the chat took that's still held (Enter that
+        // sent a line is also Start: the pause menu).
         if (!chat_typing()) {
-            mine.buttons = *buttons;
+            mine.buttons = *buttons & ~chat_held_buttons();
             mine.x = *x;
             mine.y = *y;
         }

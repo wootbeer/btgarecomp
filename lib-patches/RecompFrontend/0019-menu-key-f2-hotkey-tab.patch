@@ -1,0 +1,65 @@
+--- a/recompui/include/recompui/recompui.h
++++ b/recompui/include/recompui/recompui.h
+@@ -137,6 +137,8 @@
+         // F1 and F10 open the menu from the game, and close it too.
+         static const key_map toggle_f1 =  { MenuAction::Toggle,  recompinput::GameInput::TOGGLE_MENU,    SDLK_F1,     Rml::Input::KI_F1 };
+         static const key_map toggle_f10 = { MenuAction::Toggle,  recompinput::GameInput::TOGGLE_MENU,    SDLK_F10,    Rml::Input::KI_F10 };
++        // F2 opens the menu on the hotkey tab (config::set_hotkey_tab), and closes it.
++        static const key_map toggle_f2 =  { MenuAction::Toggle,  recompinput::GameInput::TOGGLE_MENU,    SDLK_F2,     Rml::Input::KI_F2 };
+         static const key_map tab_left =  { MenuAction::TabLeft,  recompinput::GameInput::TAB_LEFT_MENU,  SDLK_F16,    Rml::Input::KI_F16 };
+         static const key_map tab_right = { MenuAction::TabRight, recompinput::GameInput::TAB_RIGHT_MENU, SDLK_F17,    Rml::Input::KI_F17 };
+ 
+@@ -147,6 +149,7 @@
+             { toggle.rml, toggle },
+             { toggle_f1.rml, toggle_f1 },
+             { toggle_f10.rml, toggle_f10 },
++            { toggle_f2.rml, toggle_f2 },
+             { tab_left.rml, tab_left },
+             { tab_right.rml, tab_right }
+         };
+--- a/recompui/src/base/ui_state.cpp
++++ b/recompui/src/base/ui_state.cpp
+@@ -819,6 +819,12 @@
+                     cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F10) {
+                     open_config = true;
+                 }
++                // F2: on the hotkey tab.
++                else if (cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F2 &&
++                    !recompui::config::get_hotkey_tab().empty()) {
++                    recompui::config::set_tab(recompui::config::get_hotkey_tab());
++                    open_config = true;
++                }
+                 break;
+             case SDL_EventType::SDL_CONTROLLERBUTTONDOWN: {
+                 SDL_ControllerButtonEvent* button_event = &cur_event.cbutton;
+--- a/recompui/include/recompui/config.h
++++ b/recompui/include/recompui/config.h
+@@ -134,6 +134,9 @@
+         void set_tab_visible(const std::string &id, bool is_visible);
+ 
+         void set_tab(const std::string &id);
++        // The tab F2 opens the menu on (none by default: F2 then does nothing).
++        void set_hotkey_tab(const std::string &id);
++        const std::string &get_hotkey_tab();
+         void open();
+         bool close();
+ 
+--- a/recompui/src/config/ui_config.cpp
++++ b/recompui/src/config/ui_config.cpp
+@@ -185,6 +185,16 @@
+         config_modal->set_selected_tab(id);
+     }
+ 
++    static std::string hotkey_tab;
++
++    void config::set_hotkey_tab(const std::string &id) {
++        hotkey_tab = id;
++    }
++
++    const std::string &config::get_hotkey_tab() {
++        return hotkey_tab;
++    }
++
+     void config::open() {
+         if (config_modal == nullptr) {
+             throw std::runtime_error("Config modal has not been initialized.");

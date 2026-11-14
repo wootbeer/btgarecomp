@@ -1,0 +1,38 @@
+diff --git a/recompui/include/recompui/recompui.h b/recompui/include/recompui/recompui.h
+index 30c463b..abeefb2 100644
+--- a/recompui/include/recompui/recompui.h
++++ b/recompui/include/recompui/recompui.h
+@@ -134,6 +134,9 @@ namespace recompui {
+         static const key_map apply =     { MenuAction::Apply,    recompinput::GameInput::APPLY_MENU,     SDLK_f,      Rml::Input::KI_F };
+         static const key_map back =      { MenuAction::Back,     recompinput::GameInput::BACK_MENU,      SDLK_F15,    Rml::Input::KI_F15 };
+         static const key_map toggle =    { MenuAction::Toggle,   recompinput::GameInput::TOGGLE_MENU,    SDLK_ESCAPE, Rml::Input::KI_ESCAPE };
++        // F1 and F10 open the menu from the game, and close it too.
++        static const key_map toggle_f1 =  { MenuAction::Toggle,  recompinput::GameInput::TOGGLE_MENU,    SDLK_F1,     Rml::Input::KI_F1 };
++        static const key_map toggle_f10 = { MenuAction::Toggle,  recompinput::GameInput::TOGGLE_MENU,    SDLK_F10,    Rml::Input::KI_F10 };
+         static const key_map tab_left =  { MenuAction::TabLeft,  recompinput::GameInput::TAB_LEFT_MENU,  SDLK_F16,    Rml::Input::KI_F16 };
+         static const key_map tab_right = { MenuAction::TabRight, recompinput::GameInput::TAB_RIGHT_MENU, SDLK_F17,    Rml::Input::KI_F17 };
+ 
+@@ -142,6 +145,8 @@ namespace recompui {
+             { apply.rml, apply },
+             { back.rml, back },
+             { toggle.rml, toggle },
++            { toggle_f1.rml, toggle_f1 },
++            { toggle_f10.rml, toggle_f10 },
+             { tab_left.rml, tab_left },
+             { tab_right.rml, tab_right }
+         };
+diff --git a/recompui/src/base/ui_state.cpp b/recompui/src/base/ui_state.cpp
+index 277a421..2da9c78 100644
+--- a/recompui/src/base/ui_state.cpp
++++ b/recompui/src/base/ui_state.cpp
+@@ -814,7 +814,9 @@ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer*
+ 
+             switch (cur_event.type) {
+             case SDL_EventType::SDL_KEYDOWN:
+-                if (cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_ESCAPE) {
++                // F1 or F10 (Escape is the game's: its pause menu).
++                if (cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F1 ||
++                    cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F10) {
+                     open_config = true;
+                 }
+                 break;

@@ -7,6 +7,9 @@
 // allows ten in any 30 seconds, and every PC drops more than twelve of a
 // player's in 30 seconds. Text is printable ASCII only, at most
 // kChatMaxLength, and shown as text (recompui escapes it), never as markup.
+// The keys it takes (T that opens it, Enter that sends, Escape that closes)
+// are kept from the game until let go: the game reads the keyboard's state,
+// not its events, and Enter is also Start (chat_held_buttons).
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -17,6 +20,10 @@
 
 #include "SDL.h"
 #include "recompinput/input_state.h"
+#include "recompinput/input_types.h"
+#include "recompinput/recompinput.h"
+#include "recompinput/players.h"
+#include "recompinput/profiles.h"
 #include "recompui/recompui.h"
 #include "elements/ui_container.h"
 #include "elements/ui_label.h"
@@ -48,6 +55,13 @@ namespace {
     std::string draft;
     std::deque<Line> lines;
     std::deque<clock::time_point> sent; // this PC's, for the rate limit
+    std::vector<SDL_Scancode> taken_keys; // the chat's, until let go
+
+    void take_key(SDL_Scancode sc) {
+        if (std::find(taken_keys.begin(), taken_keys.end(), sc) == taken_keys.end()) {
+            taken_keys.push_back(sc);
+        }
+    }
 
     void add_line_locked(int port, std::string text) {
         // A note replaces the one before it, if that's the last line.
@@ -132,6 +146,7 @@ namespace {
         case SDL_KEYDOWN: {
             const SDL_Scancode sc = event->key.keysym.scancode;
             if (open) {
+                take_key(sc);
                 if (recompinput::game_input_disabled()) {
                     close_chat(); // the menu (F1) opened over it: the menu has the keys
                     return 1;
@@ -164,12 +179,14 @@ namespace {
                 return 0;
             }
             if (sc == kOpenKey && event->key.repeat == 0 && !recompinput::game_input_disabled()) {
+                take_key(sc);
                 open_chat();
                 return 0;
             }
             return 1;
         }
         case SDL_KEYUP:
+            taken_keys.erase(std::remove(taken_keys.begin(), taken_keys.end(), event->key.keysym.scancode), taken_keys.end());
             return open ? 0 : 1;
         case SDL_TEXTINPUT:
             if (!open) {
@@ -239,6 +256,39 @@ void btga::netplay::chat_install() {
 bool btga::netplay::chat_typing() {
     std::lock_guard lock{ chat_mutex };
     return open;
+}
+
+uint16_t btga::netplay::chat_held_buttons() {
+    std::vector<SDL_Scancode> keys;
+    {
+        std::lock_guard lock{ chat_mutex };
+        if (taken_keys.empty()) {
+            return 0;
+        }
+        keys = taken_keys;
+    }
+    namespace profiles = recompinput::profiles;
+    const int profile = recompinput::players::is_single_player_mode()
+        ? profiles::get_sp_keyboard_profile_index()
+        : profiles::get_input_profile_for_player(0, recompinput::InputDevice::Keyboard);
+    if (profile < 0) {
+        return 0;
+    }
+#define DEFINE_INPUT(name, value, readable) { recompinput::GameInput::name, (uint16_t)value },
+    static const std::pair<recompinput::GameInput, uint16_t> buttons[] = { DEFINE_N64_BUTTON_INPUTS() };
+#undef DEFINE_INPUT
+    uint16_t mask = 0;
+    for (SDL_Scancode sc : keys) {
+        const recompinput::InputField key = recompinput::InputField::keyboard(sc);
+        for (const auto& [input, value] : buttons) {
+            for (size_t slot = 0; slot < recompinput::num_bindings_per_input; slot++) {
+                if (profiles::get_input_binding(profile, input, slot) == key) {
+                    mask |= value;
+                }
+            }
+        }
+    }
+    return mask;
 }
 
 std::string btga::netplay::chat_sanitize(std::string_view text) {

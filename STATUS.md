@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 209)
+## Overview (as of round 210)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,24 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 210: chat's Enter kept from the game; F1, F10 and F2
+
+Owner: Enter that sent a chat line opened (or closed) the pause menu. The
+chat's event filter drops the key's events, but the game reads the
+keyboard's state, and Enter is also Start: the line closed on the key going
+down, and the next reads saw Start held. As the Rage Wars port does
+(chat_held_buttons): the keys the chat takes (T that opens it, Enter that
+sends, Escape that closes, every key while it's open) are kept from this
+PC's read, as the buttons bound to them in its keyboard profile, until let
+go (src/netplay/chat.cpp, netplay.cpp). Tested over 127.0.0.1 in a match and
+on the map screen: the line sent, no pause menu or selection, 3914 frames
+the same.
+
+The menu keys from the Rage Wars port (RecompFrontend 0018-0020, its
+0003-0005): F1 and F10 open and close the menu like Escape, F2 opens it on
+a chosen tab: Cheats normally, the Netplay tab (players, Leave Game) in a
+session; F1 after F2 keeps that tab. Tested: F2 in a session opens Netplay.
 
 ## 2026-11-14, round 209: own view's HUD during the match
 

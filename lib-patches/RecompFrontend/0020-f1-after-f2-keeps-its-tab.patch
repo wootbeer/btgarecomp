@@ -1,0 +1,90 @@
+--- a/recompui/src/elements/ui_modal.h
++++ b/recompui/src/elements/ui_modal.h
+@@ -122,6 +122,10 @@
+         );
+         void set_selected_tab(int tab_index);
+         void set_selected_tab(const std::string &id);
++        // The id of the tab shown, or an empty string.
++        std::string get_selected_tab_id() const {
++            return current_tab_index >= 0 && current_tab_index < static_cast<int>(tab_contexts.size()) ? tab_contexts[current_tab_index].id : std::string{};
++        }
+         Element *get_active_tab() { return tabs != nullptr ? static_cast<Tab*>(tabs->get_active_tab_element()) : nullptr; }
+         void set_tab_visible(const std::string &id, bool is_visible);
+     };
+--- a/recompui/src/base/ui_state.cpp
++++ b/recompui/src/base/ui_state.cpp
+@@ -646,6 +646,11 @@
+     ui_state->update_focus(true, false);
+ }
+ 
++// Whether the menu was last opened by F2 (on the hotkey tab), and the tab it
++// showed before that, which other ways of opening the menu go back to.
++static bool opened_on_hotkey_tab = false;
++static std::string tab_before_hotkey;
++
+ void draw_hook(plume::RenderCommandList* command_list, plume::RenderFramebuffer* swap_chain_framebuffer) {
+ 
+     apply_background_input_mode();
+@@ -811,6 +816,7 @@
+         // If the config menu isn't open and the game has been started and either the escape key or select button are pressed, open the config menu.
+         if (!config_was_open && ultramodern::is_game_started()) {
+             bool open_config = false;
++            bool hotkey_open = false; // F2
+ 
+             switch (cur_event.type) {
+             case SDL_EventType::SDL_KEYDOWN:
+@@ -819,10 +825,16 @@
+                     cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F10) {
+                     open_config = true;
+                 }
+-                // F2: on the hotkey tab.
++                // F2: on the hotkey tab, remembering the tab it replaces so
++                // the next other open (F1) shows that one again.
+                 else if (cur_event.key.keysym.scancode == SDL_Scancode::SDL_SCANCODE_F2 &&
+                     !recompui::config::get_hotkey_tab().empty()) {
++                    if (!opened_on_hotkey_tab) {
++                        tab_before_hotkey = recompui::config::get_tab();
++                    }
+                     recompui::config::set_tab(recompui::config::get_hotkey_tab());
++                    opened_on_hotkey_tab = true;
++                    hotkey_open = true;
+                     open_config = true;
+                 }
+                 break;
+@@ -846,6 +858,12 @@
+             }
+ 
+             if (open_config) {
++                if (!hotkey_open && opened_on_hotkey_tab) {
++                    if (!tab_before_hotkey.empty()) {
++                        recompui::config::set_tab(tab_before_hotkey);
++                    }
++                    opened_on_hotkey_tab = false;
++                }
+                 recompui::config::open();
+             }
+         }
+--- a/recompui/include/recompui/config.h
++++ b/recompui/include/recompui/config.h
+@@ -134,6 +134,8 @@
+         void set_tab_visible(const std::string &id, bool is_visible);
+ 
+         void set_tab(const std::string &id);
++        // The id of the tab shown (or last shown), or an empty string.
++        std::string get_tab();
+         // The tab F2 opens the menu on (none by default: F2 then does nothing).
+         void set_hotkey_tab(const std::string &id);
+         const std::string &get_hotkey_tab();
+--- a/recompui/src/config/ui_config.cpp
++++ b/recompui/src/config/ui_config.cpp
+@@ -185,6 +185,10 @@
+         config_modal->set_selected_tab(id);
+     }
+ 
++    std::string config::get_tab() {
++        return config_modal != nullptr ? config_modal->get_selected_tab_id() : std::string{};
++    }
++
+     static std::string hotkey_tab;
+ 
+     void config::set_hotkey_tab(const std::string &id) {

@@ -932,6 +932,8 @@ void use_session_menu() {
     }
     recompui::config::set_tab_visible(recompui::config::mods::id, false);
     recompui::config::set_tab_visible(netplay_tab_id, true);
+    // F2: the Netplay tab (Leave Game, the players), as in the Rage Wars port.
+    recompui::config::set_hotkey_tab(netplay_tab_id);
     // Off a tab just hidden (before the menu's window exists, it opens on
     // the first tab anyway, and this throws).
     try {
