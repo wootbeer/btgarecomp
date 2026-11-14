@@ -28,6 +28,10 @@ See [BUILDING.md](BUILDING.md).
 ## Sound Packs  
 Replace the game's sound effects with your own. See [SOUND_PACKS.md](SOUND_PACKS.md).
   
+## Mods  
+- [Gang Mod](https://github.com/wootbeer/btgarecomp-gang-mod)  
+- [Mod template](https://github.com/wootbeer/btgarecomp-mod-template), to start your own mod  
+  
 ## Issues and Limitations
 
 Known:  
