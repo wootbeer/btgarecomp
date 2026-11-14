@@ -43,10 +43,21 @@ if (-not (Test-Path $ClangCl)) {
     throw "clang-cl not found at $ClangCl -- pass -ClangCl <path> or set `$env:BTGA_CLANGCL."
 }
 
-cmake -S . -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_C_COMPILER=$ClangCl" "-DCMAKE_CXX_COMPILER=$ClangCl"
+# The release C++ runtime (MSVCP140.dll), never the debug one (MSVCP140D.dll), which only
+# PCs with Visual Studio have: a player's PC can't start an exe that needs it.
+cmake -S . -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL "-DCMAKE_C_COMPILER=$ClangCl" "-DCMAKE_CXX_COMPILER=$ClangCl"
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
 cmake --build $BuildDir --target BattleTanxGARecompiled
 if ($LASTEXITCODE -ne 0) { throw "Build failed." }
+
+# Refuse to package an exe that needs a debug runtime DLL (MSVCP140D, VCRUNTIME140D, ucrtbased).
+$exe = Join-Path $BuildDir "BattleTanxGARecompiled.exe"
+$dependents = & dumpbin /nologo /dependents $exe
+if ($LASTEXITCODE -ne 0) { throw "dumpbin couldn't read $exe." }
+$debugDlls = $dependents | Where-Object { $_ -match "^\s*(msvcp140d\S*|vcruntime140d\S*|vcruntime140_1d\S*|ucrtbased)\.dll\s*$" } | ForEach-Object { $_.Trim() }
+if ($debugDlls) {
+    throw "The exe needs the debug runtime ($($debugDlls -join ', ')), which players don't have. Delete the $BuildDir folder and run this again."
+}
 
 $name = "BattleTanxGARecompiled-$Version-windows"
 $stage = Join-Path $root "dist\$name"
