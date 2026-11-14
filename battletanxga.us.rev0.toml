@@ -2338,3 +2338,26 @@ before_vram = 0x800AFDE4
 text = """
     { extern void btga_scenery_object_test(uint8_t *rdram, recomp_context *ctx); btga_scenery_object_test(rdram, ctx); }
 """
+
+# Steady Distant Scenery, detail levels (round 221, src/game/steady_scenery.cpp):
+# func_800AF978's three loops at their joins after the level test.
+[[patches.hook]]
+func = "func_800AF978"
+before_vram = 0x800AFC8C
+text = """
+    { extern void btga_scenery_lod_list(uint8_t *rdram, recomp_context *ctx); btga_scenery_lod_list(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800AF978"
+before_vram = 0x800AFF6C
+text = """
+    { extern void btga_scenery_lod_objects(uint8_t *rdram, recomp_context *ctx); btga_scenery_lod_objects(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800AF978"
+before_vram = 0x800B00C0
+text = """
+    { extern void btga_scenery_lod_objects2(uint8_t *rdram, recomp_context *ctx); btga_scenery_lod_objects2(rdram, ctx); }
+"""
