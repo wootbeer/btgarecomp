@@ -94,6 +94,12 @@ Checked (temporary probes, kept outside the repo as r224_probes.patch):
 Not reproduced in the sandbox yet. Next: a still view of a flickering
 building (where, which level) to probe exactly that object.
 
+Then (owner): it only happens while moving, isn't at any one spot, and a later
+test didn't show it at all, with other settings too. Also checked: each
+object's lights (func_800AA058) are the same from frame to frame (the lights
+lists rotate through three buffers at 0x8017CEE0, 0x8018CEE0, 0x8019CEE0; the
+probe is r225_light_probe.patch). Left until it can be caught again.
+
 ## 2026-11-14, round 223: Parliament building flicker (owner's clip), still looking
 
 Owner's clip (Houses of Parliament, Steady Distant Scenery on): buildings still
