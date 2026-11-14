@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 216)
+## Overview (as of round 217)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,38 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 217: distant buildings blinking out (found where, not fixed)
+
+Owner: distant buildings and fences flicker (clips from mission 1 and
+London); still with Vulkan and at Framerate Original, so neither D3D12 nor
+interpolation. Round 193's depth clip change is already in.
+
+Probe (temporary, kept as a patch outside the repo): every queued draw
+(func_8007B1F0: display list, matrix translation) per frame; a "gap" is one
+drawn at the same place two frames before and two after but not in the
+middle frame. Mission 1, driving and turning, about 3 minutes each:
+- Original Draw Distance: about 3 frames with scenery gaps; Very Far: 13-19.
+- Nothing appears at the same place in the gap frame: not a detail-level
+  swap (func_800AF978 picks LOD 0-2 by squared distance against
+  0x80072F68 / F6C / F70).
+- The same with the cull factor k left alone (no Expand widening, no
+  round 192 turn margin): 19 against 20 objects.
+- The groups of about 15 gaps at one place are tanks (func_80094744 ->
+  func_80092C38 -> func_800AE184), probably the game's own blinking.
+- The frame-time measure (func_80097660 / func_800976AC -> 0x801B45A8) is
+  never read: no time budget.
+
+Where: scenery is queued by func_8009B0F0 -> func_800B0268 (per view) ->
+func_800AF978, which first runs every map object (0x50-byte records, flag
++0x4E bit 0x80, per-view bits at +0x4D) through func_800AB980. That takes
+the camera position truncated to integers and the object's ground
+rectangle (+0x40..+0x46), rejects it past the draw distance (squared), and
+clips the edges facing the camera against the view (func_800AAEA0), handing
+them to func_800AAC14: apparently an angular coverage (occlusion) test,
+where nearer buildings hide farther ones. An object judged hidden for one
+frame is the gap. Next: log func_800AB980's inputs and result for an object
+that gaps, and compare with an emulator at Original Draw Distance.
 
 ## 2026-11-14, round 216: own view from the match's first frame; fades; a message by the radar
 
