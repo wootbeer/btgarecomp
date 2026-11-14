@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 210)
+## Overview (as of round 211)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,17 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 211: the joiner stands in for a host that's gone
+
+From the Rage Wars port's round 183: a joiner whose host left or was lost
+plays on alone, but the game's menus and its pause answer player 1's
+controller only, so nobody could pause or quit. stand_in_for_host
+(src/netplay/netplay.cpp, after the exchange): outside a match and while
+paused, this player's read is player 1's too; in a match (state 3 or 7) only
+its Start, so player 1's tank stands still. Tested: host killed mid-match,
+"Lost the connection to the host" after the timeout, the joiner's Enter
+paused it (Continue, Restart, Quit on their view).
 
 ## 2026-11-14, round 210: chat's Enter kept from the game; F1, F10 and F2
 

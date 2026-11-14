@@ -109,6 +109,30 @@ namespace {
     }
 }
 
+namespace {
+    // A joiner whose host is gone plays on alone, but the menus and the pause
+    // answer player 1's controller only (the Rage Wars port's round 183):
+    // this player's read is player 1's too outside a match and while paused;
+    // in a match only its Start, so this player can pause and quit while
+    // player 1's tank stands still. From the game's state (0x802195C8: 3 or 7
+    // while a match plays, 5 paused, src/netplay/own_view.cpp).
+    void stand_in_for_host() {
+        const int local = btga::netplay::local_port();
+        if (game_rdram == nullptr || !btga::netplay::host_gone() || local <= 0 || local >= 4) {
+            return;
+        }
+        const uint32_t state = *reinterpret_cast<const uint32_t*>(game_rdram + (0x802195C8u - 0x80000000u));
+        if (state != 3 && state != 7) {
+            sweep_reads[0] = sweep_reads[local];
+            return;
+        }
+        btga::netplay::PortRead start{};
+        start.response = 1;
+        start.buttons = sweep_reads[local].buttons & 0x1000; // START_BUTTON
+        sweep_reads[0] = start;
+    }
+}
+
 void btga::netplay::startup(const char* version) {
     chat_install();
     if (sync_test_requested()) {
@@ -157,6 +181,7 @@ bool btga::netplay::controller_read(int port, bool answered, uint16_t* buttons, 
             mine.y = *y;
         }
         exchange(mine, sweep_reads);
+        stand_in_for_host();
         answer_pak_prompt(sweep_reads[0]);
     }
     const PortRead& read = sweep_reads[port];
