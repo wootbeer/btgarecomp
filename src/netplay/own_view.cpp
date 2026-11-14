@@ -141,9 +141,12 @@ namespace {
     constexpr uint32_t kCameraStride = 0x250;
     constexpr uint32_t kCameraViewportDl = 0x118;
     // The game's state (func_800A8690 sets 5 when Start pauses the match):
-    // 7 while a match plays.
+    // 7 for the match's start (the intro and countdown, about 900 frames in
+    // two-player Tank Wars), then 3 while it plays, 5 paused.
     constexpr uint32_t kPlayState = 0x802195C8;
-    constexpr uint32_t kPlaying = 7;
+    bool match_playing(uint32_t state) {
+        return state == 3 || state == 7;
+    }
     constexpr uint32_t kMainListBuffers = 0x80C40000; // two, src/game/draw_limits.cpp
     constexpr uint32_t kMainListBufferSize = 0x40000;
     constexpr uint32_t kScratchOffset = 0x3F000;      // past the cut-off (0x30000) and its slack
@@ -355,7 +358,7 @@ namespace {
         // together; a group that would leave the screen is moved back onto it.
         // Only while the match plays: paused (and between screens) the game's
         // menus are drawn over the whole screen, and stay as they are.
-        if ((uint32_t)MEM_W(0, (gpr)(int32_t)kPlayState) != kPlaying) {
+        if (!match_playing((uint32_t)MEM_W(0, (gpr)(int32_t)kPlayState))) {
             return;
         }
         struct HudRect {

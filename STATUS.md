@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 208)
+## Overview (as of round 209)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,17 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 209: own view's HUD during the match
+
+Owner (two Windows PCs): both players' HUDs showed on each PC, where split
+screen has them. Reproduced here. The HUD pass ran only while the game's
+state (0x802195C8) was 7, which round 201 took for "playing": it's 7 for the
+match's start only (the intro and countdown, about 900 frames in two-player
+Tank Wars), then 3 while it plays, 5 paused (func_800A8690). Round 201's
+checks were all in those first seconds. Now 3 or 7. Tested over 127.0.0.1:
+mid-match each PC shows only its own HUD at the screen's edges, paused the
+menu as it is, 3850 frames the same.
 
 ## 2026-11-14, round 208: Netplay after Load ROM
 
