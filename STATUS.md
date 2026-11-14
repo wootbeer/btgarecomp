@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 219)
+## Overview (as of round 220)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,43 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 220: tank shadows flickering (interpolation IDs)
+
+Owner: the shadows under the tanks flicker. (The Android branch only fixed their
+jitter, with the IDs PC already has; its PLAN still lists a rare flicker.)
+
+**How a shadow is drawn.** Each tank's shadow is a flat black quad (prim alpha
+0x9F) under the hull, 70 x 148 for the starting tank, drawn with no depth
+compare or update (render mode C8104240) in a bucket of its own right after the
+ground. Its queue record's model display list is `gDPSetPrimColor(.., alpha)`
+and a branch to the quad.
+
+**What went wrong.** A temporary per-frame probe of the display list (mission 1,
+three minutes of driving) found every tank's shadow drawn every frame, but its
+matrix comes two ways: either the hull's Mtx (so it had the hull's ID, tank + 1)
+or one built for it in the 0x8021B478 scratch (tank + 11 + 8 * k, as the first
+part built there). Tanks switched between the two about 40 times in the run
+(the player's tank around the end of the intro, the others while driving). On
+each switch RT64 paired the shadow with the wrong transform from the frame
+before (the hull, the Rattler cannon, or nothing) and blended or snapped it on
+the in-between frames: the flicker. Counted as a scratch part, the shadow also
+shifted the Rattler cannon's k.
+
+**Fix** (`src/game/interpolation_ids.cpp`): a record whose model list is a
+shadow's gets an ID of its own, its tank + 0x201, either way:
+- the queue hook (func_8007B1F0, where the model list is `$fp`) records the
+  shadow's Mtx under that ID, without counting it among the tank's parts;
+- the walker's matrix-load hook (record in `$s1`) uses it for a shadow record,
+  falling back to the hull's ID's tank;
+- a new hook at L_8007B7A4 (`btga_interp_record_start`) forces a matrix load
+  when the walker goes between a shadow's record and another with the same Mtx
+  (the shadow and the hull can share one Mtx but not one ID).
+
+Verified here: the same drive afterwards had 9082 shadow draws, all tank +
+0x201, no switches and no one-frame gaps; the hull's other draws keep tank + 1.
+The sandbox renders too slowly for in-between frames, so the owner's test
+decides whether the flicker is gone.
 
 ## 2026-11-14, round 219: Steady Distant Scenery on by default
 
