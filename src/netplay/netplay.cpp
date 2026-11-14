@@ -24,6 +24,7 @@
 #include "messages.h"
 #include "online_menu.h"
 #include "session.h"
+#include "update_check.h"
 #include "settings.h"
 #include "sync_test.h"
 
@@ -166,6 +167,9 @@ void btga::netplay::set_control_defaults() {
 
 void btga::netplay::startup(const char* version) {
     chat_install();
+    // "0.1.11 1a2b3c4": the version is the first word.
+    const std::string label = version;
+    btga::netplay::update::set_current(label.substr(0, label.find(' ')));
     if (sync_test_requested()) {
         // Before the game starts, as the runtime's deterministic mode needs.
         ultramodern::set_deterministic(true);

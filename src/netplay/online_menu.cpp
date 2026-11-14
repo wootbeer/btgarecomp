@@ -34,6 +34,7 @@
 #include "online_menu.h"
 #include "session.h"
 #include "settings.h"
+#include "update_check.h"
 #include "upnp.h"
 
 namespace {
@@ -49,6 +50,8 @@ namespace {
     Button* delay_button = nullptr;
     Button* start_button = nullptr; // the host: start with the players in
     Label* status_label = nullptr;
+    Label* update_label = nullptr; // a newer version is out (update_check.h)
+    bool update_shown = false;
     Label* code_label = nullptr; // the host's join code, big
     Element* lobby_card = nullptr; // while hosting or joining: the code, the players, Start
     Label* players_label = nullptr;
@@ -413,6 +416,11 @@ namespace {
         column->set_width(100.0f, Unit::Percent);
         column->set_as_navigation_container(NavigationType::Vertical);
 
+        // A newer version, once the check finds one (everyone in a game needs
+        // the same).
+        update_label = text_label(context, column, "", kTextSize, theme::color::Warning);
+        update_label->set_display(Display::None);
+
         // Who this player is to the others, and what netplay is.
         Element* name_row = row(context, column);
         Label* name_label = context.create_element<Label>(name_row, "Your name", theme::Typography::LabelMD);
@@ -602,6 +610,7 @@ void btga::netplay::open_screen(const std::u8string& id) {
         }
     }
     modal->open();
+    btga::netplay::update::check();
     in_menu_context([] { host_button->focus(); });
 }
 
@@ -690,6 +699,17 @@ void btga::netplay::launcher_update(const std::u8string& id) {
     }
     if (!modal->is_open_now()) {
         return;
+    }
+    if (!update_shown) {
+        std::string newer = btga::netplay::update::newer();
+        if (!newer.empty()) {
+            update_shown = true;
+            in_menu_context([&] {
+                update_label->set_text("A newer version is out (" + newer + "; you have " + btga::netplay::update::current() +
+                    "). Everyone in a game needs the same version: get it at " + btga::netplay::update::kReleasesUrl);
+                update_label->set_display(Display::Block);
+            });
+        }
     }
     switch (btga::netplay::poll_lobby()) {
     case btga::netplay::Lobby::Idle:
