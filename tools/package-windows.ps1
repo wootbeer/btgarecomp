@@ -139,3 +139,13 @@ $zip = Join-Path $root "dist\$name.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip
 Write-Host "Packaged $zip"
+
+# The exe's symbols, kept beside the zip (not in it): crash logs from this
+# release give host call stack offsets that resolve against it, e.g.
+#   llvm-symbolizer --obj=dist\<name>\BattleTanxGARecompiled.exe 0x<offset>
+$pdb = Join-Path $BuildDir "BattleTanxGARecompiled.pdb"
+if (Test-Path $pdb) {
+    Copy-Item $pdb (Join-Path $root "dist\$name.pdb")
+    Write-Host "Symbols in dist\$name.pdb (keep it with this release; don't upload it)"
+}
+else { Write-Warning "BattleTanxGARecompiled.pdb not found in $BuildDir" }

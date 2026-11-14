@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 204)
+## Overview (as of round 205)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,26 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 205: crash logs for crashes outside game code
+
+From the Rage Wars port's round 125: src/main/crash_handler.cpp now also
+writes the faulting thread's name (the runtime and RT64 name theirs) and its
+host call stack, each frame as module+offset: Windows unwinds from the fault
+with the x64 unwind data (RtlLookupFunctionEntry / RtlVirtualUnwind, there
+with or without symbols), Linux takes backtrace() from the faulting frame on.
+Also the game thread's MIPS registers when a host register still points at
+its recomp_context, and on Linux one report when several threads fault at
+once. Not the port's crash_rdram.bin: N64 memory holds the game's code, and
+players attach these files to public issues.
+
+Windows Release builds now write line tables to BattleTanxGARecompiled.pdb
+(/Z7 with -gline-tables-only; not RecompiledFuncs, -g0), with /OPT:REF kept
+and /PDBALTPATH so only the file name goes into the exe;
+tools/package-windows.ps1 keeps the .pdb in dist\ beside the zip, not in it
+(it has the build machine's paths), for resolving a release's offsets.
+Checked on Linux (SIGSEGV sent to the game): the log shows the thread and
+eight frames. The Windows path is not built here.
 
 ## 2026-11-14, round 204: controller list; the window in front on Windows
 
