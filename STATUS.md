@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 202)
+## Overview (as of round 203)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,24 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 203: Windows on a TV: debug runtime, DPI
+
+The owner's second Windows PC (Windows 11, on a TV), with the netplay test
+zip, the same two problems as the Rage Wars port's round 144:
+- The exe wanted MSVCP140D_ATOMIC_WAIT.dll (Microsoft's debug runtime, only
+  on PCs with Visual Studio). 0.1.11's exe names MSVCP140.dll, and nothing in
+  the tree asks for the debug one: the build-release folder had been
+  configured as another build type. tools/package-windows.ps1 now starts
+  such a folder over, checks the type after configuring, pins
+  CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreadedDLL, and refuses an exe that
+  names a debug runtime.
+- The settings were bigger than the screen and cropped at the left and top:
+  the process wasn't DPI-aware, so at a TV's display scale Windows stretched
+  the window while RT64 sized its swap chain in real pixels. Now per-monitor
+  DPI aware (SDL_HINT_WINDOWS_DPI_AWARENESS), and the first window is 16:9 at
+  two thirds of the screen's height (at least 1280 x 720 where that fits),
+  so not tiny on a 4K screen.
 
 ## 2026-11-13, round 202: netplay, "Waiting for player N..." during a stall
 

@@ -119,6 +119,11 @@ SDL_Window* window = nullptr;
 static ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
 
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+    // Windows: work in the screen's real pixels. Without this, at a display
+    // scale above 100% (a TV at 300% or so) Windows stretches the window while
+    // the renderer's swap chain is sized in real pixels, and the picture comes
+    // out bigger than the screen and cropped (the Rage Wars port's round 144).
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) != 0) {
@@ -161,7 +166,19 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     flags |= SDL_WINDOW_VULKAN;
 #endif
 
-    window = SDL_CreateWindow(program_name.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, flags);
+    // 16:9, two thirds of the screen's height (in real pixels, so not tiny
+    // on a 4K screen), at least 1280 x 720 where that fits.
+    int window_w = 1280, window_h = 720;
+    SDL_Rect usable;
+    if (SDL_GetDisplayUsableBounds(0, &usable) == 0 && usable.h > 0) {
+        window_h = std::max(720, usable.h * 2 / 3);
+        window_w = window_h * 16 / 9;
+        if (window_w > usable.w * 9 / 10) {
+            window_w = usable.w * 9 / 10;
+            window_h = window_w * 9 / 16;
+        }
+    }
+    window = SDL_CreateWindow(program_name.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, window_w, window_h, flags);
     if (window == nullptr) {
         exit_error("Failed to create window: %s", SDL_GetError());
     }

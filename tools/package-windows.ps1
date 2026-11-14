@@ -43,20 +43,36 @@ if (-not (Test-Path $ClangCl)) {
     throw "clang-cl not found at $ClangCl -- pass -ClangCl <path> or set `$env:BTGA_CLANGCL."
 }
 
-# The release C++ runtime (MSVCP140.dll), never the debug one (MSVCP140D.dll), which only
-# PCs with Visual Studio have: a player's PC can't start an exe that needs it.
+# The build type a folder was configured with, from its CMakeCache.txt.
+function Get-BuildType([string]$dir) {
+    $cache = Join-Path $dir "CMakeCache.txt"
+    if (-not (Test-Path $cache)) { return $null }
+    $line = Select-String -Path $cache -Pattern "^CMAKE_BUILD_TYPE:" | Select-Object -First 1
+    if ($line) { return ($line.Line -split "=", 2)[1] }
+    return ""
+}
+
+# A folder left over from another build type is started over: its objects
+# would otherwise link Microsoft's debug runtime (MSVCP140D.dll and the
+# like), which only PCs with Visual Studio have (the Rage Wars port's round 144).
+$type = Get-BuildType $BuildDir
+if ($null -ne $type -and $type -ne "Release") {
+    Write-Host "$BuildDir was configured as '$type'; starting it over as Release."
+    Remove-Item $BuildDir -Recurse -Force
+}
+
 cmake -S . -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL "-DCMAKE_C_COMPILER=$ClangCl" "-DCMAKE_CXX_COMPILER=$ClangCl"
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
+$type = Get-BuildType $BuildDir
+if ($type -ne "Release") { throw "$BuildDir configured as '$type', not Release." }
 cmake --build $BuildDir --target BattleTanxGARecompiled
 if ($LASTEXITCODE -ne 0) { throw "Build failed." }
 
-# Refuse to package an exe that needs a debug runtime DLL (MSVCP140D, VCRUNTIME140D, ucrtbased).
+# Never ship an exe that needs the debug runtime.
 $exe = Join-Path $BuildDir "BattleTanxGARecompiled.exe"
-$dependents = & dumpbin /nologo /dependents $exe
-if ($LASTEXITCODE -ne 0) { throw "dumpbin couldn't read $exe." }
-$debugDlls = $dependents | Where-Object { $_ -match "^\s*(msvcp140d\S*|vcruntime140d\S*|vcruntime140_1d\S*|ucrtbased)\.dll\s*$" } | ForEach-Object { $_.Trim() }
-if ($debugDlls) {
-    throw "The exe needs the debug runtime ($($debugDlls -join ', ')), which players don't have. Delete the $BuildDir folder and run this again."
+$debugRuntime = Select-String -Path $exe -Pattern "MSVCP140D|VCRUNTIME140D|VCRUNTIME140_1D|ucrtbased" -List
+if ($debugRuntime) {
+    throw "BattleTanxGARecompiled.exe uses Microsoft's debug runtime ($($debugRuntime.Matches[0].Value).dll); it won't run on PCs without Visual Studio. Delete $BuildDir and run this again."
 }
 
 $name = "BattleTanxGARecompiled-$Version-windows"
