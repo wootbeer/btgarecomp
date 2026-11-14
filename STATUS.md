@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 223)
+## Overview (as of round 224)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,30 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 224: buildings flickering between intact and damaged (not found yet)
+
+Owner: the flicker is a building switching between its intact look and its look
+after being shot once, on lots of buildings in lots of levels; Steady
+Distant Scenery, frame rate and anti-aliasing make no difference. The owner's
+second clip shows it on the Houses of Parliament: a building's dark side face
+appears for a few frames and goes.
+
+Checked (temporary probes, kept outside the repo as r224_probes.patch):
+- The objects' model (+0x48) and kind (+0x4C) don't flip: in three minutes of
+  mission 1 only 4 objects changed, once each (kind 2 to 0, the model's next
+  record), most likely things that got hit.
+- A model's pieces are separate faces side by side (a building's walls),
+  not an intact and a damaged layer drawn over each other.
+- func_800AA058 builds each object's lights (point lights near it, e.g.
+  fires and explosions) from the per-frame allocator func_8007B190 (0x2000
+  units of 8 bytes, falling back to the default lights when full): at most
+  1650 used in mission 1.
+- Mission 1 parked at the start, 80 screenshots: only moving things change
+  (the pickup, a vehicle, the sandbox's screen filter), no building.
+
+Not reproduced in the sandbox yet. Next: a still view of a flickering
+building (where, which level) to probe exactly that object.
 
 ## 2026-11-14, round 223: Parliament building flicker (owner's clip), still looking
 
