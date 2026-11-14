@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 206)
+## Overview (as of round 207)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,17 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 207: the launcher on a TV
+
+With Netplay and Add to Steam the launcher's menu (seven entries) reached up
+into the title. As in the Rage Wars port (its rounds 142 and 143): Controls
+and Mods are gone from the menu (they only opened Settings at their tabs,
+which are still there), and the entries have 11 above and below (the
+frontend's 16). Start Game, Netplay, Settings, Add to Steam, Exit; the title
+at 25% from the top and the menu at 25% from the bottom (the frontend's),
+well inside the edges a TV may crop. Checked at 1920 x 1080: clear of the
+title.
 
 ## 2026-11-14, round 206: Add to Steam
 

@@ -539,23 +539,29 @@ namespace {
     }
 }
 
-// The launcher's menu: the library's default (start, controls, settings,
-// mods, exit), with Netplay after Start Game when it's built in and Add to
-// Steam before Exit.
+// The launcher's menu: Start Game, Netplay (when it's built in), Settings,
+// Add to Steam and Exit. Controls and Mods only opened Settings at their tabs,
+// which are still there; without them the menu stays clear of the title (the
+// Rage Wars port's rounds 142 and 143). The title is 25% from the top and the
+// menu 25% from the bottom (the frontend's), well inside the edges a TV may
+// crop.
 static void launcher_init(recompui::LauncherMenu* menu) {
     const recomp::GameEntry& game = supported_games[0];
     recompui::GameOptionsMenu* options = menu->init_game_options_menu(
         game.game_id, game.mod_game_id, game.display_name, game.thumbnail_bytes, recompui::GameOptionsMenuLayout::Center);
     recompui::update_game_mod_id(game.mod_game_id);
-    options->add_start_game_or_load_rom_option();
+    // Entries a little slimmer than the frontend's (16 above and below).
+    auto slim = [](recompui::GameOption* option) {
+        option->set_padding_top(11.0f);
+        option->set_padding_bottom(11.0f);
+    };
+    slim(options->add_start_game_or_load_rom_option());
     if (btga::netplay::kLauncherEntry) {
-        options->add_option("Netplay", [] { btga::netplay::open_screen(supported_games[0].game_id); });
+        slim(options->add_option("Netplay", [] { btga::netplay::open_screen(supported_games[0].game_id); }));
     }
-    options->add_setup_controls_option();
-    options->add_settings_option();
-    options->add_mods_option();
-    options->add_option("Add to Steam", on_add_to_steam);
-    options->add_exit_option();
+    slim(options->add_settings_option());
+    slim(options->add_option("Add to Steam", on_add_to_steam));
+    slim(options->add_exit_option());
 }
 
 static void launcher_update(recompui::LauncherMenu*) {
