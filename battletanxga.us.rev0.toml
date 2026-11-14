@@ -2313,3 +2313,19 @@ before_vram = 0x800C8A40
 text = """
     { extern void btga_arrow_projection_stored(uint8_t *rdram, recomp_context *ctx); btga_arrow_projection_stored(rdram, ctx); }
 """
+
+# Steady Distant Scenery (src/game/steady_scenery.cpp): objects the occlusion
+# test just dropped stay listed for a couple of frames.
+[[patches.hook]]
+func = "func_800AF978"
+before_vram = 0x800AFAE0
+text = """
+    { extern void btga_scenery_visible_list(uint8_t *rdram, recomp_context *ctx); btga_scenery_visible_list(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800AF978"
+before_vram = 0x800AFDE4
+text = """
+    { extern void btga_scenery_object_test(uint8_t *rdram, recomp_context *ctx); btga_scenery_object_test(rdram, ctx); }
+"""

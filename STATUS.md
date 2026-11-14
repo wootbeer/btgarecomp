@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 217)
+## Overview (as of round 218)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,34 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 218: Steady Distant Scenery (Graphics tab, off by default)
+
+Owner: at Original Draw Distance and Original resolution it's less, but
+still noticeable, and not on an emulator. Higher resolutions add shimmer
+(edges finer than a pixel); the rest is round 217's one-frame gaps.
+
+Where the gaps come from (temporary probes, mission 1, Very Far, about 3
+minutes): func_800AF978's occlusion list (func_800ABE6C) is almost always
+empty; most scenery is drawn by its second loop, which runs each object
+with its per-view bit (+0x4D) through func_800AC538, a test of its
+rectangle against the view. 38 objects failed that test for exactly one
+frame between two passes; none were dropped by the +0x4D bit.
+
+**Option** (src/game/steady_scenery.cpp, Graphics: Steady Distant Scenery,
+Off = the game's own): an object this view listed (hook at 0x800AFAE0) or
+that passed func_800AC538 (hook at 0x800AFDE4) in the last 2 frames is kept
+when it drops out. Kept objects draw like any other. In netplay it's the
+host's setting for everyone (SharedSettings.steady_scenery, shown in the
+session's settings), since it changes what the drawing code writes to game
+memory; the history comes from the game's own results, the same on every
+PC. Tested: the probe's gaps fell from 15-20 to 6-10 in the same drive;
+a two-player match with it on, 3426 frames the same.
+
+Still left: type 1-3 objects choose a detail level by distance
+(0x80072F68-0x80072F8C) and the farthest can be empty, so one whose
+distance wobbles at that threshold can vanish for a frame (the remaining
+6-10). Not on an emulator per the owner; why it differs is not known yet.
 
 ## 2026-11-14, round 217: distant buildings blinking out (found where, not fixed)
 

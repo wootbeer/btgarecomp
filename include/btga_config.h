@@ -70,6 +70,11 @@ namespace btga {
     int draw_distance_level();
     // The Graphics tab's own (draw_distance_level is the online session's, in one).
     int draw_distance_setting();
+    // Steady Distant Scenery (src/game/steady_scenery.cpp): the Graphics tab's
+    // own, and the one in use (the online session's, in one).
+    void set_steady_scenery(bool on);
+    bool steady_scenery_setting();
+    bool steady_scenery();
 
     // Sound tab: Sound Effects Reverb (src/game/sfx_reverb.cpp), amount 0-100.
     void set_sfx_reverb(bool on, double percent);

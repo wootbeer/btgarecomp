@@ -58,6 +58,7 @@ namespace btga::netplay {
     uint32_t cheat_value(size_t index, uint32_t own);
     int draw_distance(int own);
     float widescreen_scale(float own);
+    bool steady_scenery(bool own);
 #else
     inline void startup(const char*) {}
     inline void quitting() {}
@@ -77,6 +78,7 @@ namespace btga::netplay {
     inline uint32_t cheat_value(size_t, uint32_t own) { return own; }
     inline int draw_distance(int own) { return own; }
     inline float widescreen_scale(float own) { return own; }
+    inline bool steady_scenery(bool own) { return own; }
 #endif
 }
 

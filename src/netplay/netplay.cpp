@@ -256,3 +256,7 @@ int btga::netplay::draw_distance(int own) {
 float btga::netplay::widescreen_scale(float own) {
     return settings_in_use() ? session_settings_in_use().widescreen_scale : own;
 }
+
+bool btga::netplay::steady_scenery(bool own) {
+    return settings_in_use() ? session_settings_in_use().steady_scenery != 0 : own;
+}

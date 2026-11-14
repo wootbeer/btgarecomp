@@ -140,6 +140,16 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
         { {0u, "Original", "Original"}, {1u, "Far", "Far"}, {2u, "VeryFar", "Very Far"}, {3u, "MapEdge", "Map Edge"} },
         0u
     );
+    graphics.add_enum_option(
+        "steady_scenery",
+        "Steady Distant Scenery",
+        "<b>On</b> stops distant buildings, walls and fences from blinking out for a frame. The game hides "
+        "whatever it judges to be behind something nearer, and that judgement wavers from frame to frame for "
+        "things far away; with this on, anything it showed in the last couple of frames stays drawn. "
+        "<b>Off</b> is the game's own behaviour.",
+        { {0u, "Off", "Off"}, {1u, "On", "On"} },
+        0u
+    );
 
     btga::config::add_frame_generation_options(graphics);
 
@@ -155,6 +165,10 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
     graphics.add_option_change_callback("fog",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             btga::set_fog_enabled(std::get<uint32_t>(value) != 0);
+        });
+    graphics.add_option_change_callback("steady_scenery",
+        [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
+            btga::set_steady_scenery(std::get<uint32_t>(value) != 0);
         });
     graphics.add_option_change_callback("draw_distance",
         [](recomp::config::ConfigValueVariant value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {

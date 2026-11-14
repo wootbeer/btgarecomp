@@ -28,6 +28,7 @@ btga::netplay::SharedSettings btga::netplay::own_settings() {
     if (const char* forced = std::getenv("BTGA_NETPLAY_WSCALE"); forced != nullptr && s.widescreen != 0) {
         s.widescreen_scale = std::strtof(forced, nullptr);
     }
+    s.steady_scenery = btga::steady_scenery_setting() ? 1u : 0u;
     const auto& cheats = btga::cheats::list();
     s.cheat_count = (uint32_t)std::min<size_t>(cheats.size(), kMaxCheats);
     for (uint32_t i = 0; i < s.cheat_count; i++) {
@@ -40,6 +41,7 @@ btga::netplay::SharedSettings btga::netplay::sane_settings(const SharedSettings&
     SharedSettings s = in;
     s.draw_distance = std::min(s.draw_distance, 3u);
     s.widescreen = s.widescreen != 0 ? 1u : 0u;
+    s.steady_scenery = s.steady_scenery != 0 ? 1u : 0u;
     if (!std::isfinite(s.widescreen_scale)) {
         s.widescreen_scale = 1.0f;
     }
@@ -75,7 +77,7 @@ void btga::netplay::use_settings(const SharedSettings& settings) {
 
 bool btga::netplay::same_settings(const SharedSettings& a, const SharedSettings& b) {
     if (a.draw_distance != b.draw_distance || a.widescreen != b.widescreen || a.widescreen_scale != b.widescreen_scale ||
-        a.cheat_count != b.cheat_count) {
+        a.steady_scenery != b.steady_scenery || a.cheat_count != b.cheat_count) {
         return false;
     }
     for (uint32_t i = 0; i < kMaxCheats; i++) {
@@ -98,6 +100,7 @@ std::string btga::netplay::describe_settings(const SharedSettings& in) {
     const SharedSettings s = sane_settings(in);
     std::string text = std::string("Draw Distance: ") + kDrawDistances[s.draw_distance] + "\n";
     text += std::string("Aspect Ratio: ") + (s.widescreen != 0 ? "Expand" : "Original") + "\n";
+    text += std::string("Steady Distant Scenery: ") + (s.steady_scenery != 0 ? "On" : "Off") + "\n";
     std::string on;
     const auto& cheats = btga::cheats::list();
     for (uint32_t i = 0; i < s.cheat_count; i++) {

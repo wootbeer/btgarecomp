@@ -18,6 +18,7 @@ namespace btga::netplay {
         uint32_t draw_distance = 0;     // 0 Original, 1 Far, 2 Very Far, 3 Map Edge
         uint32_t widescreen = 0;        // 0 the game's 4:3, 1 Expand
         float widescreen_scale = 1.0f;  // Expand: how much wider the game culls (the host's window)
+        uint32_t steady_scenery = 0;    // Steady Distant Scenery (it changes what the game writes)
         uint32_t cheat_count = 0;
         uint8_t cheats[kMaxCheats] = {}; // each cheat's value, in btga::cheats::list()'s order
     };
