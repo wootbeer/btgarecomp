@@ -97,8 +97,10 @@ binary with its folder as the start folder (assets load from there).
 Artwork: the code that makes Steam's three pieces (portrait capsule, wide
 capsule, hero) from a square cover and a wide picture is in, downloading
 them from SteamGridDB only when the option runs, into the player's
-`config/grid/`. The two pictures aren't chosen yet (kArtUrls empty, no
-artwork); the owner picks them (SteamGridDB game 39008).
+`config/grid/`. The owner picked two plain SteamGridDB pictures (game
+39008): a square cover (1024 x 1024) and a wide banner (920 x 430), the
+full-size grid files of the thumbnails sent. Checked with the fake Steam
+folder: the three pieces written (600 x 900, 920 x 430, 1920 x 620).
 
 Tested with a fake Steam folder (HOME pointed at it) holding another game's
 shortcut: that entry kept, ours added, a second run updated it with no

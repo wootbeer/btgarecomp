@@ -44,11 +44,11 @@ namespace {
     // wide banner, downloaded only when the player adds the game, straight
     // into their Steam folder: none of it is part of this project. Each of
     // Steam's pieces is made from one of them at its own size (see compose())
-    // and saved in config/grid/ as <app ID><suffix>.jpg. Empty: not chosen
-    // yet, so no artwork (Steam shows its plain placeholder).
+    // and saved in config/grid/ as <app ID><suffix>.jpg. Chosen by the owner.
+    // An empty one is skipped (Steam shows its plain placeholder there).
     const char* const kArtUrls[] = {
-        "", // square cover
-        "", // wide, 920x430
+        "https://cdn2.steamgriddb.com/grid/c999091b7f6c19ee61149851283d5d7e.png", // square cover, 1024x1024
+        "https://cdn2.steamgriddb.com/grid/8ad336ff59c136a979f44bc1636170ff.png", // wide, 920x430
     };
     struct ArtPiece {
         const char* suffix;
