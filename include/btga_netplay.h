@@ -23,6 +23,9 @@ namespace btga::netplay {
     void quitting();
     // The command line (--netplay: open the Netplay screen at the start).
     void command_line(int argc, char** argv);
+    // The Chat control's description and default key, before the controls
+    // are loaded (src/main/main.cpp).
+    void set_control_defaults();
     // The launcher has a Netplay entry: it opens the Netplay screen for the
     // game `game_id`. launcher_update each launcher frame.
     constexpr bool kLauncherEntry = true;
@@ -59,6 +62,7 @@ namespace btga::netplay {
     inline void startup(const char*) {}
     inline void quitting() {}
     inline void command_line(int, char**) {}
+    inline void set_control_defaults() {}
     constexpr bool kLauncherEntry = false;
     inline void open_screen(const std::u8string&) {}
     inline void launcher_update(const std::u8string&) {}

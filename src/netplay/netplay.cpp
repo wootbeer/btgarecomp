@@ -133,6 +133,37 @@ namespace {
     }
 }
 
+namespace {
+    // The host drives the menus (as in the Rage Wars port): the game's
+    // shared menu screens already answer player 1's controller only, and
+    // Team Align and Gang Select each player's own; in a match the other
+    // players' Start is left out (only the host pauses), and while paused
+    // their whole read (the pause menu is the host's). From the game's state
+    // alone, so every PC filters alike. A joiner standing in for a host
+    // that's gone has its read in port 0 already (stand_in_for_host).
+    void host_drives_menus() {
+        if (game_rdram == nullptr) {
+            return;
+        }
+        const uint32_t state = *reinterpret_cast<const uint32_t*>(game_rdram + (0x802195C8u - 0x80000000u));
+        for (int port = 1; port < 4; port++) {
+            btga::netplay::PortRead& read = sweep_reads[port];
+            if (state == 3 || state == 7) {
+                read.buttons &= ~0x1000u; // START_BUTTON
+            }
+            else if (state == 5) {
+                read.buttons = 0;
+                read.x = 0.0f;
+                read.y = 0.0f;
+            }
+        }
+    }
+}
+
+void btga::netplay::set_control_defaults() {
+    chat_set_defaults();
+}
+
 void btga::netplay::startup(const char* version) {
     chat_install();
     if (sync_test_requested()) {
@@ -181,7 +212,14 @@ bool btga::netplay::controller_read(int port, bool answered, uint16_t* buttons, 
             mine.y = *y;
         }
         exchange(mine, sweep_reads);
+        // Where the chat can open: a match (3 or 7), not paused (5), else the
+        // menu screens.
+        if (game_rdram != nullptr) {
+            const uint32_t state = *reinterpret_cast<const uint32_t*>(game_rdram + (0x802195C8u - 0x80000000u));
+            chat_set_where(state == 3 || state == 7 ? 2 : state == 5 ? 0 : 1);
+        }
         stand_in_for_host();
+        host_drives_menus();
         answer_pak_prompt(sweep_reads[0]);
     }
     const PortRead& read = sweep_reads[port];

@@ -889,7 +889,7 @@ namespace {
                 "Settings for everyone: " + settings_line(btga::netplay::describe_settings(btga::netplay::session_settings_in_use())),
                 kSmallSize, theme::color::TextDim);
         }
-        text_label(context, session_card, "Chat: T. Enter sends, Escape closes.", kSmallSize, theme::color::TextDim);
+        text_label(context, session_card, "Chat: T (Controls tab: Chat). Enter sends, Escape closes.", kSmallSize, theme::color::TextDim);
         // Out of the session, back to the Netplay screen: the game can't
         // leave a session as it runs, so it starts again.
         Button* leave = context.create_element<Button>(session_card, "Leave Game", ButtonStyle::Danger, ButtonSize::Large);

@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 211)
+## Overview (as of round 212)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,37 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 212: Chat as a control; chat where; the host drives the menus
+
+As in the Rage Wars port (its rounds 160, 166 and 176):
+- **Chat is a control** (Controls tab, RecompFrontend 0021, its 0017:
+  GameInput::OPEN_CHAT): T by default (Enter is Start here), any key or a
+  controller button can be bound. On a controller the Chat button again
+  sends and B is Escape; Steam's on-screen keyboard is asked for when Steam
+  started the game. The keys and buttons it takes are kept from the game
+  until let go, a controller's too (chat_held_buttons).
+- **Where it opens:** in a match and on the game's menu screens (Enter
+  doesn't open it there, it selects), not while paused; a line open when
+  the game pauses closes, keeping what's typed. From the game's state each
+  sweep (chat_set_where: 3 or 7 a match, 5 paused).
+- **The host drives the menus:** this game's shared menu screens (title,
+  main menu, Game Setup, the map) already answer player 1's controller only,
+  and Team Align and Gang Select each player's own (tested: player 2's keys
+  changed nothing on Game Setup or the title). What was left: in a match
+  the other players' Start is left out (only the host pauses), and while
+  paused their whole read (the pause menu is the host's). After the
+  stand-in for a host that's gone, so a joiner on their own still can.
+
+Game states seen (0x802195C8): 0 title and boot, 3 the attract demo, then
+1 and 2 for the front end (every menu screen 2), 7 the match's start, 3
+playing, 5 paused. No clean screen id was found for Team Align and Gang
+Select (not needed after the test above).
+
+Tested over 127.0.0.1: player 2's Start in a match didn't pause; the host's
+did; player 2's keys didn't move the pause menu; T while paused did nothing;
+after Continue player 2's line sent. 4215 frames the same. Chat in the
+Controls tab (keyboard: T).
 
 ## 2026-11-14, round 211: the joiner stands in for a host that's gone
 

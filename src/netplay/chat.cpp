@@ -1,24 +1,31 @@
 // Netplay chat (messages.h), from the Rage Wars port's: a few lines at the
-// left of the screen and a line to type in. In a session, T opens it (it's
-// not bound to anything in the game by default), except while the menu (F1)
-// is open. While it's open every key goes to it and this PC's player gets no
-// input: Enter sends, Escape clears what's typed and a second Escape closes
-// it, Ctrl+V pastes. Messages go through the host (session.cpp); each PC
-// allows ten in any 30 seconds, and every PC drops more than twelve of a
-// player's in 30 seconds. Text is printable ASCII only, at most
-// kChatMaxLength, and shown as text (recompui escapes it), never as markup.
-// The keys it takes (T that opens it, Enter that sends, Escape that closes)
-// are kept from the game until let go: the game reads the keyboard's state,
-// not its events, and Enter is also Start (chat_held_buttons).
+// left of the screen and a line to type in. The Chat control (Controls tab;
+// T by default, any key or controller button) opens it in a session, on the
+// game's menu screens and in a match, not while paused nor while the menu
+// (F1) is open; Enter doesn't open it on the menu screens (it selects there).
+// If the game pauses while it's open, it closes, keeping what's typed. While
+// it's open every key goes to it and this PC's player gets no input: Enter
+// sends, Escape clears what's typed and a second Escape closes it, Ctrl+V
+// pastes; on a controller the Chat button again sends and B is Escape.
+// Messages go through the host (session.cpp); each PC allows ten in any 30
+// seconds, and every PC drops more than twelve of a player's in 30 seconds.
+// Text is printable ASCII only, at most kChatMaxLength, and shown as text
+// (recompui escapes it), never as markup.
+// The keys and buttons it takes (the one that opens it, Enter that sends,
+// Escape that closes, every one while it's open) are kept from the game
+// until let go: the game reads their state, not their events, and Enter is
+// also Start (chat_held_buttons).
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <deque>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "SDL.h"
+#include "recompinput/input_mapping.h"
 #include "recompinput/input_state.h"
 #include "recompinput/input_types.h"
 #include "recompinput/recompinput.h"
@@ -40,7 +47,8 @@ namespace {
     constexpr auto kLineTime = std::chrono::seconds(12);
     constexpr size_t kRateCount = 10;   // messages in any kRateWindow
     constexpr auto kRateWindow = std::chrono::seconds(30);
-    constexpr SDL_Scancode kOpenKey = SDL_SCANCODE_T;
+    using recompinput::GameInput;
+    using recompinput::InputField;
 
     struct Line {
         int port;        // -1: a note from the chat itself
@@ -50,17 +58,53 @@ namespace {
     };
 
     std::mutex chat_mutex;
+    // Where it can open (chat_set_where): 0 nowhere (paused), 1 the game's
+    // menu screens (not by Enter), 2 a match.
+    std::atomic<int> allowed{ 1 };
     bool open = false;
-    bool swallow_open_text = false; // the T that opened it, still to come as text
+    bool swallow_open_text = false; // the letter key that opened it, still to come as text
     std::string draft;
     std::deque<Line> lines;
     std::deque<clock::time_point> sent; // this PC's, for the rate limit
     std::vector<SDL_Scancode> taken_keys; // the chat's, until let go
+    std::vector<uint8_t> taken_buttons;   // the same for controller buttons
 
     void take_key(SDL_Scancode sc) {
         if (std::find(taken_keys.begin(), taken_keys.end(), sc) == taken_keys.end()) {
             taken_keys.push_back(sc);
         }
+    }
+
+    void take_button(uint8_t button) {
+        if (std::find(taken_buttons.begin(), taken_buttons.end(), button) == taken_buttons.end()) {
+            taken_buttons.push_back(button);
+        }
+    }
+
+    // This PC's player's profile for a device (player 1's on this PC).
+    int profile_for(recompinput::InputDevice device) {
+        namespace profiles = recompinput::profiles;
+        if (recompinput::players::is_single_player_mode()) {
+            return device == recompinput::InputDevice::Keyboard ? profiles::get_sp_keyboard_profile_index()
+                                                                : profiles::get_sp_controller_profile_index();
+        }
+        return profiles::get_input_profile_for_player(0, device);
+    }
+
+    // Whether `pressed` is bound to Chat.
+    bool is_chat_input(const InputField& pressed) {
+        for (auto device : { recompinput::InputDevice::Keyboard, recompinput::InputDevice::Controller }) {
+            const int profile = profile_for(device);
+            if (profile < 0) {
+                continue;
+            }
+            for (size_t slot = 0; slot < recompinput::num_bindings_per_input; slot++) {
+                if (recompinput::profiles::get_input_binding(profile, GameInput::OPEN_CHAT, slot) == pressed) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     void add_line_locked(int port, std::string text) {
@@ -75,10 +119,15 @@ namespace {
         }
     }
 
-    void open_chat() {
+    void open_chat(bool by_letter_key, bool by_controller) {
         open = true;
-        swallow_open_text = true;
+        swallow_open_text = by_letter_key;
         SDL_StartTextInput();
+        // Steam's on-screen keyboard (Steam Deck, Big Picture), when Steam
+        // started the game.
+        if (by_controller && (std::getenv("SteamDeck") != nullptr || std::getenv("SteamGameId") != nullptr)) {
+            SDL_OpenURL("steam://open/keyboard");
+        }
     }
 
     void close_chat() {
@@ -138,9 +187,30 @@ namespace {
     // don't see it). Runs where events are pumped.
     int SDLCALL filter_events(void*, SDL_Event* event) {
         std::lock_guard lock{ chat_mutex };
+        if (event->type == SDL_KEYUP) {
+            taken_keys.erase(std::remove(taken_keys.begin(), taken_keys.end(), event->key.keysym.scancode), taken_keys.end());
+        }
+        if (event->type == SDL_CONTROLLERBUTTONUP) {
+            taken_buttons.erase(std::remove(taken_buttons.begin(), taken_buttons.end(), event->cbutton.button), taken_buttons.end());
+        }
         if (!btga::netplay::active()) {
             open = false;
             return 1;
+        }
+        // Paused: the keys are the game's. A line still open closes (what's
+        // typed is kept), and the key that found it so goes nowhere.
+        if (allowed.load() == 0) {
+            if (!open) {
+                return 1;
+            }
+            close_chat();
+            if (event->type == SDL_KEYDOWN) {
+                take_key(event->key.keysym.scancode);
+            }
+            if (event->type == SDL_CONTROLLERBUTTONDOWN) {
+                take_button(event->cbutton.button);
+            }
+            return (event->type == SDL_KEYDOWN || event->type == SDL_TEXTINPUT || event->type == SDL_CONTROLLERBUTTONDOWN) ? 0 : 1;
         }
         switch (event->type) {
         case SDL_KEYDOWN: {
@@ -178,15 +248,17 @@ namespace {
                 }
                 return 0;
             }
-            if (sc == kOpenKey && event->key.repeat == 0 && !recompinput::game_input_disabled()) {
+            const bool enter = sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER;
+            const bool here = allowed.load() == 2 || !enter; // Enter selects on the menu screens
+            if (here && event->key.repeat == 0 && !recompinput::game_input_disabled() && is_chat_input(InputField::keyboard(sc))) {
                 take_key(sc);
-                open_chat();
+                const SDL_Keycode key = SDL_GetKeyFromScancode(sc);
+                open_chat(key >= 0x20 && key <= 0x7E, false);
                 return 0;
             }
             return 1;
         }
         case SDL_KEYUP:
-            taken_keys.erase(std::remove(taken_keys.begin(), taken_keys.end(), event->key.keysym.scancode), taken_keys.end());
             return open ? 0 : 1;
         case SDL_TEXTINPUT:
             if (!open) {
@@ -200,6 +272,31 @@ namespace {
             swallow_open_text = false;
             type(event->text.text);
             return 0;
+        case SDL_CONTROLLERBUTTONDOWN: {
+            const InputField pressed = InputField::controller_digital((SDL_GameControllerButton)event->cbutton.button);
+            if (open) {
+                take_button(event->cbutton.button);
+                if (recompinput::game_input_disabled()) {
+                    close_chat();
+                    return 1;
+                }
+                if (event->cbutton.button == SDL_CONTROLLER_BUTTON_B) {
+                    escape();
+                }
+                else if (is_chat_input(pressed)) {
+                    send();
+                }
+                return 0;
+            }
+            if (!recompinput::game_input_disabled() && is_chat_input(pressed)) {
+                take_button(event->cbutton.button);
+                open_chat(false, true);
+                return 0;
+            }
+            return 1;
+        }
+        case SDL_CONTROLLERBUTTONUP:
+            return open ? 0 : 1;
         default:
             return 1;
         }
@@ -260,35 +357,53 @@ bool btga::netplay::chat_typing() {
 
 uint16_t btga::netplay::chat_held_buttons() {
     std::vector<SDL_Scancode> keys;
+    std::vector<uint8_t> pads;
     {
         std::lock_guard lock{ chat_mutex };
-        if (taken_keys.empty()) {
+        if (taken_keys.empty() && taken_buttons.empty()) {
             return 0;
         }
         keys = taken_keys;
-    }
-    namespace profiles = recompinput::profiles;
-    const int profile = recompinput::players::is_single_player_mode()
-        ? profiles::get_sp_keyboard_profile_index()
-        : profiles::get_input_profile_for_player(0, recompinput::InputDevice::Keyboard);
-    if (profile < 0) {
-        return 0;
+        pads = taken_buttons;
     }
 #define DEFINE_INPUT(name, value, readable) { recompinput::GameInput::name, (uint16_t)value },
     static const std::pair<recompinput::GameInput, uint16_t> buttons[] = { DEFINE_N64_BUTTON_INPUTS() };
 #undef DEFINE_INPUT
     uint16_t mask = 0;
-    for (SDL_Scancode sc : keys) {
-        const recompinput::InputField key = recompinput::InputField::keyboard(sc);
+    auto mask_bound = [&](int profile, const InputField& field) {
+        if (profile < 0) {
+            return;
+        }
         for (const auto& [input, value] : buttons) {
             for (size_t slot = 0; slot < recompinput::num_bindings_per_input; slot++) {
-                if (profiles::get_input_binding(profile, input, slot) == key) {
+                if (recompinput::profiles::get_input_binding(profile, input, slot) == field) {
                     mask |= value;
                 }
             }
         }
+    };
+    const int keyboard = profile_for(recompinput::InputDevice::Keyboard);
+    const int controller = profile_for(recompinput::InputDevice::Controller);
+    for (SDL_Scancode sc : keys) {
+        mask_bound(keyboard, InputField::keyboard(sc));
+    }
+    for (uint8_t button : pads) {
+        mask_bound(controller, InputField::controller_digital((SDL_GameControllerButton)button));
     }
     return mask;
+}
+
+void btga::netplay::chat_set_where(int where) {
+    allowed.store(where);
+}
+
+void btga::netplay::chat_set_defaults() {
+    recompinput::set_game_input_description(GameInput::OPEN_CHAT,
+        "Netplay: opens the chat line (on the game's menu screens and in a match, not while paused). "
+        "Enter sends, Escape clears it and then closes it; on a controller this button sends and B closes.");
+    // T; Enter is Start (pause) here. No controller button by default (its
+    // buttons are all the game's), though one can be bound.
+    recompinput::set_default_mapping_for_keyboard(GameInput::OPEN_CHAT, { InputField::keyboard(SDL_SCANCODE_T) });
 }
 
 std::string btga::netplay::chat_sanitize(std::string_view text) {
@@ -321,8 +436,8 @@ void btga::netplay::chat_tick() {
     bool typing_now;
     {
         std::lock_guard lock{ chat_mutex };
-        if (open && recompinput::game_input_disabled()) {
-            close_chat(); // the menu (F1) opened over it
+        if (open && (recompinput::game_input_disabled() || allowed.load() == 0)) {
+            close_chat(); // the menu (F1) opened over it, or the game paused
         }
         typing_now = open;
         const clock::time_point now = clock::now();

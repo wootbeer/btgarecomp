@@ -21,6 +21,12 @@ namespace btga::netplay {
     // The controller buttons bound to a key the chat took (that opened,
     // sent or closed it) while it's still held: kept from the game.
     uint16_t chat_held_buttons();
+    // Where the chat can open, from the game's state each sweep
+    // (netplay.cpp): 0 nowhere (paused), 1 the menu screens, 2 a match.
+    void chat_set_where(int where);
+    // The Chat control's description and default key (T), before the
+    // controls are loaded.
+    void chat_set_defaults();
     // A player's message (any thread). `port` 0 is player 1. Shown as
     // chat_sanitize leaves it.
     void chat_add_line(int port, std::string_view text);

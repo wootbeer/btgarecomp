@@ -616,6 +616,7 @@ int main(int argc, char** argv) {
         { recompinput::InputField::keyboard(SDL_SCANCODE_Q), recompinput::InputField{ recompinput::InputType::Mouse, SDL_BUTTON_LEFT } });
     recompinput::set_default_mapping_for_keyboard(recompinput::GameInput::R,
         { recompinput::InputField::keyboard(SDL_SCANCODE_R), recompinput::InputField{ recompinput::InputType::Mouse, SDL_BUTTON_RIGHT } });
+    btga::netplay::set_control_defaults(); // Chat
 
     recomp::Version project_version{};
     if (!recomp::Version::from_string(version_string, project_version)) {
