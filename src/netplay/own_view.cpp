@@ -269,6 +269,17 @@ namespace {
                 view_rects.push_back(r);
             }
         }
+        // The match's first frames don't call the full-screen viewport list
+        // yet (the split screen showed for them): it's there all the same,
+        // segment 1's list at 0x138 (a G_MOVEMEM of the viewport, then the
+        // whole screen's scissor).
+        if (view_dls.size() >= 2 && !have_full && segment1 != 0) {
+            const uint32_t list = k0(segment1 + (kFullScreenViewportDl & 0xFFFFFF));
+            if (word(rdram, list) == 0xDC080008u) {
+                std::vector<Command> one{ { 0, 0xDE000000u, kFullScreenViewportDl, 0 }, { list, 0xDC080008u, word(rdram, list + 4), 1 } };
+                have_full = viewport_rect(rdram, one, 0, segment1, full);
+            }
+        }
         if (view_dls.size() < 2 || !have_full || buffer == 0) {
             if (view_dls.size() >= 2 && unhandled_logged++ < 8) {
                 std::fprintf(stderr, "[NET] own view: %zu views, but no full-screen viewport or main list buffer\n", view_dls.size());
@@ -442,6 +453,24 @@ namespace {
                 }
                 continue; // over the whole screen: as it is
             }
+            // Over most of a view (a fade, the black between places in a
+            // tunnel): this player's from the view to the whole screen, as
+            // the 3D is; another player's left out.
+            if (w >= view_rects[(size_t)within].w * 0.9f && h >= view_rects[(size_t)within].h * 0.5f) {
+                if (align_at >= 0) {
+                    align_shared[align_at] = true;
+                }
+                if (within != (int)mine_index) {
+                    set_command(rdram, c.address, 0, 0); // G_SPNOOP
+                    continue;
+                }
+                auto to_x = [&](float v) { return full.x0 + (v - mine.x0) * full.w / mine.w; };
+                auto to_y = [&](float v) { return full.y0 + (v - mine.y0) * full.h / mine.h; };
+                auto fixed = [](float v) { return (uint32_t)std::clamp((int)std::lround(v * 4.0f), 0, 0xFFF); };
+                set_command(rdram, c.address, (c.w0 & 0xFF000000u) | (fixed(to_x(right)) << 12) | fixed(to_y(bottom)),
+                    (c.w1 & 0xFF000000u) | (fixed(to_x(left)) << 12) | fixed(to_y(top)));
+                continue;
+            }
             hud.push_back({ n, left, top, right, bottom, -1, align_at, w >= 40.0f && h <= 10.0f, within });
         }
         // The health bar's fill is as wide as the health left: anything
@@ -471,10 +500,10 @@ namespace {
             }
             return i;
         };
-        // Within a view, rectangles up to kGap apart (the letters of a word,
-        // a box and its icon); between views only touching ones (the radar's
-        // two strips), not a message a few pixels from it.
-        constexpr float kGap = 3.0f;
+        // Only touching or overlapping rectangles (the letters of a word, a
+        // box and its icon, the radar's two strips across views): a message
+        // starts a pixel from the radar's edge, and went with it.
+        constexpr float kGap = 0.5f;
         constexpr float kTouch = 0.5f;
         for (size_t i = 0; i < hud.size(); i++) {
             for (size_t j = i + 1; j < hud.size(); j++) {

@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 215)
+## Overview (as of round 216)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,28 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 216: own view from the match's first frame; fades; a message by the radar
+
+Owner (join codes work between the two PCs; the TV's picture and menus
+right now):
+- **A snap as the match starts:** its first frames showed the split screen.
+  They don't call the full-screen viewport list yet ("own view: 2 views,
+  but no full-screen viewport" in every test log), so own_view left them.
+  The list is there all the same (segment 1 at 0x138: the viewport's
+  G_MOVEMEM, then the whole screen's scissor): its viewport is read from
+  it. No such line in the logs now.
+- **The tunnel's fade still a black band in the middle:** it isn't drawn in
+  the view's span but with the HUD, over most of the player's view; the
+  HUD pass moved it like a widget (16 from the edge). Rectangles over at
+  least 90% of a view's width and half its height are now this player's
+  stretched from the view to the screen, another player's left out. (The
+  round 214 change for fills inside the span stays.) Not seen here.
+- The kill message's digit starts a pixel from the radar's edge and went
+  with the radar (a "2" beside it): rectangles now join a widget only when
+  they touch or overlap (the letters of a word, a box and its icon, the
+  radar's strips); the 3 within a view is gone.
+3196 frames the same.
 
 ## 2026-11-14, round 215: the HUD's snap as the game pauses
 
