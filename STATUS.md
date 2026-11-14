@@ -107,6 +107,8 @@ Verified here: the same drive afterwards had 9082 shadow draws, all tank +
 The sandbox renders too slowly for in-between frames, so the owner's test
 decides whether the flicker is gone.
 
+**Confirmed (owner, Windows):** the shadows are stable now.
+
 ## 2026-11-14, round 219: Steady Distant Scenery on by default
 
 Owner tested round 218's option on Windows: it works, and as a bug fix it
