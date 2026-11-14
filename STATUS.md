@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 222)
+## Overview (as of round 223)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,28 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 223: Parliament building flicker (owner's clip), still looking
+
+Owner's clip (Houses of Parliament, Steady Distant Scenery on): buildings still
+flicker, some "between their whole state and part of their destroyed state".
+Measured on that level in the sandbox (Level Select, London - Parliament,
+Original Draw Distance, about 2-3 minutes of driving each, temporary probes):
+- Not detail levels: no type 2 or 3 scenery was drawn (the multi-level path in
+  func_800AF978 never ran).
+- Not the game's draw limits: at most 127 of 300 queue keys and 997 of 2288
+  items a frame.
+- One-frame gaps (round 217's probe): 22 frames, 28 objects, more than mission
+  1. Many are the second piece of two-piece (kind 3 and 4) objects, queued at
+  0x800B020C right after the first piece (0x800B015C / 0x800B01D0), which the
+  probe didn't see missing in the same frame. Unexplained so far: both calls
+  run together after the same test, and func_8007B1F0 returned no failure.
+- The clip itself, frame by frame (60 fps): the Parliament's far face turns
+  into its near one as the tank closes in (frames 66-69); no clear one-frame
+  blink found by image differencing.
+
+Asked the owner for the time in the clip and which building. Probes kept
+outside the repo (scratchpad r223_stash_*.patch).
 
 ## 2026-11-14, round 222: netplay's update check; compared with PaxDino again
 
