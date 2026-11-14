@@ -1,4 +1,4 @@
-// Steady Distant Scenery (Graphics tab, off by default; round 218).
+// Steady Distant Scenery (Graphics tab, on by default since round 219; round 218).
 //
 // The map objects (buildings, walls, fences) are drawn per view by
 // func_800AF978, and only those the game finds visible: each object's ground
@@ -42,7 +42,7 @@
 #include "btga_netplay.h"
 
 namespace {
-    std::atomic<bool> steady_setting{ false };
+    std::atomic<bool> steady_setting{ true };
 
     constexpr uint32_t kHold = 2;      // frames an object stays after it drops out
     constexpr uint32_t kListMax = 256; // func_800AF978's list at sp+0x28: 0x400 bytes

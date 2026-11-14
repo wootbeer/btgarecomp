@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 218)
+## Overview (as of round 219)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,13 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 219: Steady Distant Scenery on by default
+
+Owner tested round 218's option on Windows: it works, and as a bug fix it
+should be the default. Now On (the Graphics tab's default, and the setting
+before the config loads); Off keeps the original game's blinking. Saved
+configs that already have the option keep their choice.
 
 ## 2026-11-14, round 218: Steady Distant Scenery (Graphics tab, off by default)
 

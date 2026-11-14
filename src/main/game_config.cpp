@@ -143,12 +143,11 @@ void btga::config::add_graphics_options(recomp::config::Config& graphics) {
     graphics.add_enum_option(
         "steady_scenery",
         "Steady Distant Scenery",
-        "<b>On</b> stops distant buildings, walls and fences from blinking out for a frame. The game hides "
-        "whatever it judges to be behind something nearer, and that judgement wavers from frame to frame for "
-        "things far away; with this on, anything it showed in the last couple of frames stays drawn. "
-        "<b>Off</b> is the game's own behaviour.",
+        "<b>On</b> stops distant buildings, walls and fences from blinking out for a frame: the game's "
+        "check for what's in view wavers from frame to frame for things far away, so anything it showed in "
+        "the last couple of frames stays drawn. <b>Off</b> is the original game's behaviour, blinking included.",
         { {0u, "Off", "Off"}, {1u, "On", "On"} },
-        0u
+        1u
     );
 
     btga::config::add_frame_generation_options(graphics);
