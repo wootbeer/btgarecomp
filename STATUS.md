@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 220)
+## Overview (as of round 221)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,31 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 221: remaining scenery gaps investigated (nothing changed)
+
+Owner asked to try round 218's leftover: objects whose farthest detail level
+is empty, vanishing as the camera's distance wobbles at the threshold. Findings
+(temporary probes, mission 1, Very Far, Steady Distant Scenery on, about 3
+minutes of driving per run):
+- Mission 1's scenery is all type 1 (one detail level): the level code in
+  func_800AF978 (0x800AFC8C, 0x800AFF6C, 0x800B00C0) never switches anything
+  there. A hold on level changes (9edbcc8) was reverted untested on a map that
+  uses types 2 and 3.
+- The remaining one-frame gaps (4-22 per run; the count varies a lot from run
+  to run) all come from func_800AC538 failing for exactly one frame more than
+  the hold. A 4- or 8-frame hold left as many (failure runs come in all
+  lengths, and a one-frame gap is only seen at the end of one).
+- All of them are close objects (well inside the draw distance) failing the
+  view clip (func_800AAEA0), not the occlusion test (func_800ABF38, which only
+  func_800AC538 calls). Skipping the occlusion test changed nothing measurable
+  (the 2-frame hold already covers its one-frame gaps); passing objects whose
+  ground rectangle is within 64 of the camera didn't help either. Most are
+  likely at the screen's edges as the tank turns, so not visible; the probe
+  can't tell.
+
+Nothing kept. Next only if the owner still sees blinking: a clip of it, to
+find what the probe can't.
 
 ## 2026-11-14, round 220: tank shadows flickering (interpolation IDs)
 
