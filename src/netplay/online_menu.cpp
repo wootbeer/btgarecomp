@@ -584,6 +584,11 @@ namespace {
 
 void btga::netplay::open_screen(const std::u8string& id) {
     game_id = id;
+    // The runtime's list of valid ROMs is made at startup: a ROM loaded since
+    // (Load ROM) is stored but not on it until checked again.
+    if (!recomp::is_rom_valid(game_id)) {
+        recomp::check_all_stored_roms();
+    }
     if (!recomp::is_rom_valid(game_id)) {
         recompui::open_info_prompt("Netplay", "Load the game's ROM first (Load ROM).", "OK", nullptr);
         return;

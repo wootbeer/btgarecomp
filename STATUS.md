@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 207)
+## Overview (as of round 208)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,18 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 208: Netplay after Load ROM
+
+Owner (Windows 11 PC, first run): after Load ROM, Netplay still said to
+load the ROM first, until the program was started again. The runtime's list
+of valid ROMs (recomp::is_rom_valid) is made once at startup
+(check_all_stored_roms); select_rom stores a new one but doesn't add it, and
+only the launcher's own Start Game remembers. open_screen
+(src/netplay/online_menu.cpp) now checks the stored ROMs again when the game
+isn't on the list. Tested: started with no stored ROM, put it back while the
+launcher was up, Netplay opened its screen. The Rage Wars port has the same
+check (its online_menu.cpp).
 
 ## 2026-11-14, round 207: the launcher on a TV
 
