@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 205)
+## Overview (as of round 206)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,29 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 206: Add to Steam
+
+The Rage Wars port's launcher option (its round 49), in the launcher before
+Exit (src/main/steam_shortcut.cpp, include/btga_steam.h): adds this copy to
+every Steam account on the computer as a non-Steam game, in
+`userdata/<account>/config/shortcuts.vdf` (binary VDF, read and rewritten
+keeping every other entry; the old file is kept as
+`shortcuts.vdf.btga-backup`). App ID = CRC-32 of Exe + AppName with the top
+bit set, as Steam makes it. Steam must be closed (it rewrites the file when
+it exits): if it's running, the option offers to close it (`steam://exit`)
+and waits on a thread. Run again, it updates its entry. Linux records the
+binary with its folder as the start folder (assets load from there).
+
+Artwork: the code that makes Steam's three pieces (portrait capsule, wide
+capsule, hero) from a square cover and a wide picture is in, downloading
+them from SteamGridDB only when the option runs, into the player's
+`config/grid/`. The two pictures aren't chosen yet (kArtUrls empty, no
+artwork); the owner picks them (SteamGridDB game 39008).
+
+Tested with a fake Steam folder (HOME pointed at it) holding another game's
+shortcut: that entry kept, ours added, a second run updated it with no
+duplicate.
 
 ## 2026-11-14, round 205: crash logs for crashes outside game code
 

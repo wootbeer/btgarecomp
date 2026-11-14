@@ -10,6 +10,9 @@
 // The launcher menu is the library's default plus Netplay (when built in).
 
 #include <algorithm>
+#include <atomic>
+#include <optional>
+#include <thread>
 #include <cstdio>
 #include <cstdlib>
 #include <cinttypes>
@@ -51,6 +54,7 @@
 #include "librecomp/helpers.hpp"
 
 #include "btga_config.h"
+#include "btga_steam.h"
 #include "btga_cheats.h"
 #include "btga_netplay.h"
 
@@ -463,8 +467,81 @@ void btga_report_fatal_error(const char* message);
     std::abort();
 }
 
+// Add to Steam (src/main/steam_shortcut.cpp, from the Rage Wars port): it
+// closes Steam first when it's running, which takes a few seconds, so that
+// runs on its own thread, and the launcher's update callback shows the
+// outcome.
+namespace {
+    enum class SteamJob { Idle, Running, Done };
+    std::atomic<SteamJob> steam_job{ SteamJob::Idle };
+    std::mutex steam_job_mutex;
+    btga::steam::Result steam_job_result;
+
+    void show_steam_result(const btga::steam::Result& result) {
+        if (!result.ok) {
+            recompui::open_info_prompt("Add to Steam", result.error, "OK", nullptr);
+            return;
+        }
+        recompui::open_choice_prompt(
+            "Add to Steam",
+            std::string(result.added ? "The game was added to your Steam library" : "The game's Steam shortcut was updated") +
+                " as a non-Steam game" + (result.art > 0 ? ", with its artwork" : "") + ". Open Steam now?",
+            "Open Steam", "Not now",
+            [] { btga::steam::open_steam(); }, nullptr,
+            recompui::ButtonStyle::Success, recompui::ButtonStyle::Tertiary, false);
+    }
+
+    void add_to_steam(btga::steam::Location location, bool close_first) {
+        steam_job = SteamJob::Running;
+        std::thread([location, close_first] {
+            btga::steam::Result result;
+            if (close_first && !btga::steam::close_steam_and_wait(20)) {
+                result.error = "Steam didn't close. Close it yourself (Steam > Exit) and try again.";
+            }
+            else {
+                result = btga::steam::add_shortcut(location);
+            }
+            {
+                std::lock_guard lock{ steam_job_mutex };
+                steam_job_result = result;
+            }
+            steam_job = SteamJob::Done;
+        }).detach();
+    }
+
+    void on_add_to_steam() {
+        if (steam_job != SteamJob::Idle) {
+            return;
+        }
+        if (btga::steam::started_from_steam()) {
+            recompui::open_info_prompt("Add to Steam", "The game was started from Steam, so it's in your library already.", "OK", nullptr);
+            return;
+        }
+        std::optional<btga::steam::Location> location = btga::steam::locate();
+        if (!location) {
+            recompui::open_info_prompt("Add to Steam", "Steam wasn't found on this computer.", "OK", nullptr);
+            return;
+        }
+        if (btga::steam::steam_running()) {
+            recompui::open_choice_prompt(
+                "Add to Steam",
+                "Steam has to be closed while the game is added (it rewrites its list of games when it exits). "
+                "Close Steam now? It can be opened again afterwards.",
+                "Close Steam", "Cancel",
+                [location] {
+                    recompui::open_notification("Add to Steam", "Closing Steam...");
+                    add_to_steam(*location, true);
+                }, nullptr,
+                recompui::ButtonStyle::Success, recompui::ButtonStyle::Tertiary, false);
+            return;
+        }
+        add_to_steam(*location, false);
+    }
+}
+
 // The launcher's menu: the library's default (start, controls, settings,
-// mods, exit), with Netplay after Start Game when it's built in.
+// mods, exit), with Netplay after Start Game when it's built in and Add to
+// Steam before Exit.
 static void launcher_init(recompui::LauncherMenu* menu) {
     const recomp::GameEntry& game = supported_games[0];
     recompui::GameOptionsMenu* options = menu->init_game_options_menu(
@@ -477,10 +554,20 @@ static void launcher_init(recompui::LauncherMenu* menu) {
     options->add_setup_controls_option();
     options->add_settings_option();
     options->add_mods_option();
+    options->add_option("Add to Steam", on_add_to_steam);
     options->add_exit_option();
 }
 
 static void launcher_update(recompui::LauncherMenu*) {
+    if (steam_job == SteamJob::Done) {
+        btga::steam::Result result;
+        {
+            std::lock_guard lock{ steam_job_mutex };
+            result = steam_job_result;
+        }
+        steam_job = SteamJob::Idle;
+        show_steam_result(result);
+    }
 #ifdef _WIN32
     // In front once the launcher shows (the start can take a while, and
     // Windows hands the focus to what was clicked meanwhile): with the
