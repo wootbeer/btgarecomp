@@ -114,6 +114,7 @@ $licenses = [ordered]@{
     "GamepadMotionHelpers"  = "lib\RecompFrontend\lib\GamepadMotionHelpers\LICENSE"
     "SlotMap"               = "lib\SlotMap\README.md"
     "DirectXShaderCompiler" = "licenses\DirectXShaderCompiler.txt"
+    "SDL_GameControllerDB"  = "licenses\SDL_GameControllerDB.txt"
     # Lossless Scaling frame generation (lib\lsfg): lsfg-vk's passes, DXVK's shader compiler, SPIR-V headers.
     "lsfg-vk"               = "lib\lsfg\LICENSE-lsfg-vk.md"
     "DXVK"                  = "lib\lsfg\LICENSE-dxvk.txt"

@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 203)
+## Overview (as of round 204)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,23 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-14, round 204: controller list; the window in front on Windows
+
+More from the Rage Wars port, for the owner's Windows 11 TV PC:
+- assets/gamecontrollerdb.txt (SDL_GameControllerDB, the port's copy; its
+  notice in licenses/, packaged by both scripts), given to SDL before it
+  starts (SDL_HINT_GAMECONTROLLERCONFIG_FILE, beside the exe first): only
+  pads SDL knows are used, and pads like an 8BitDo Ultimate 2C in its
+  DirectInput mode it doesn't know itself. The log now names each joystick
+  and whether it's used. 751 mappings load here (Linux's section).
+- The window in front (the port's round 186): Windows 11 could open it
+  behind Explorer. create_window sets SDL_HINT_FORCE_RAISEWINDOW and raises
+  it; ten launcher frames in, it's brought to the front again
+  (BringWindowToTop and SetForegroundWindow with the foreground window's
+  thread input attached), since the start can take a while. Leave Game's
+  restart already allowed the new process the foreground
+  (src/netplay/netplay.cpp). Only the SDL part runs here (Linux).
 
 ## 2026-11-14, round 203: Windows on a TV: debug runtime, DPI
 

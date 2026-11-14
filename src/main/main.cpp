@@ -126,8 +126,34 @@ static ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 
+    // The community controller list (assets/gamecontrollerdb.txt, from
+    // SDL_GameControllerDB), for pads SDL doesn't know itself (an 8BitDo
+    // Ultimate 2C in its DirectInput mode): only pads SDL knows are used.
+    // Given before SDL starts, so the pads already connected are announced
+    // as controllers; added after, they weren't, and went unused (the Rage
+    // Wars port's round 144).
+    std::string controller_db = "assets/gamecontrollerdb.txt";
+    if (char* base = SDL_GetBasePath()) {
+        std::string beside = std::string(base) + controller_db;
+        SDL_free(base);
+        if (std::filesystem::exists(beside)) {
+            controller_db = beside;
+        }
+    }
+    SDL_SetHint(SDL_HINT_GAMECONTROLLERCONFIG_FILE, controller_db.c_str());
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) != 0) {
         exit_error("Failed to initialize SDL2: %s", SDL_GetError());
+    }
+    fprintf(stderr, "[BTGA] controller mappings from %s: %d known in all\n", controller_db.c_str(), SDL_GameControllerNumMappings());
+    // What SDL finds, for when a controller isn't picked up: only those it
+    // takes as game controllers are used.
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        char guid[64];
+        SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(i), guid, sizeof(guid));
+        const char* name = SDL_JoystickNameForIndex(i);
+        fprintf(stderr, "[BTGA] joystick %d: %s (%s)%s\n", i, name != nullptr ? name : "?", guid,
+            SDL_IsGameController(i) ? "" : " - not a known game controller, not used");
     }
 
     return {};
@@ -183,6 +209,11 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
         exit_error("Failed to create window: %s", SDL_GetError());
     }
     set_window_icon(window);
+    // In front, with the keyboard: Windows 11 can leave a new window behind
+    // others (Explorer's) when another had the focus meanwhile; the hint
+    // makes SDL take it (the Rage Wars port's round 186).
+    SDL_SetHint(SDL_HINT_FORCE_RAISEWINDOW, "1");
+    SDL_RaiseWindow(window);
 
 #if defined(_WIN32)
     SDL_SysWMinfo wm_info;
@@ -450,6 +481,28 @@ static void launcher_init(recompui::LauncherMenu* menu) {
 }
 
 static void launcher_update(recompui::LauncherMenu*) {
+#ifdef _WIN32
+    // In front once the launcher shows (the start can take a while, and
+    // Windows hands the focus to what was clicked meanwhile): with the
+    // foreground window's thread input attached, as SDL's hint does.
+    static int frames_to_front = 10;
+    if (frames_to_front > 0 && --frames_to_front == 0 && window != nullptr) {
+        SDL_SysWMinfo wm_info;
+        SDL_VERSION(&wm_info.version);
+        if (SDL_GetWindowWMInfo(window, &wm_info)) {
+            HWND hwnd = wm_info.info.win.window;
+            HWND front = GetForegroundWindow();
+            DWORD front_thread = front != nullptr ? GetWindowThreadProcessId(front, nullptr) : 0;
+            DWORD own_thread = GetCurrentThreadId();
+            bool attached = front_thread != 0 && front_thread != own_thread && AttachThreadInput(front_thread, own_thread, TRUE);
+            BringWindowToTop(hwnd);
+            SetForegroundWindow(hwnd);
+            if (attached) {
+                AttachThreadInput(front_thread, own_thread, FALSE);
+            }
+        }
+    }
+#endif
     btga::netplay::launcher_update(supported_games[0].game_id);
 }
 

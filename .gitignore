@@ -61,7 +61,7 @@ node_modules/
 /RSPRecomp
 
 .DS_Store
-gamecontrollerdb.txt
+/gamecontrollerdb.txt
 
 # Ghidra project files and any local exports containing copyrighted disassembly text
 *.gpr
