@@ -14,6 +14,19 @@ included.** You need your own dump of the game to build or play this.
 
 Early Android build is now posted. Optimized for retro handhelds but will work with touch.
   
+## Features  
+- **Netplay**: online play for up to 4 players with join codes, public games, chat and each player's own full-screen view  
+- **Local multiplayer** for up to 4 players, with controllers or keyboard and mouse  
+- **Widescreen**, higher resolutions and anti-aliasing  
+- **Higher framerates** (interpolated), plus Lossless Scaling frame generation if you own it  
+- **Draw Distance** out to the map's edge, with Fog on or off and Steady Distant Scenery against pop-in  
+- **Screen filters** (CRT, Scanlines, LCD) and Bloom  
+- **Vulkan or DX12**  
+- **Remappable controls**, Mouse Stick, rumble and per-player Controller/Rumble Pak options  
+- **Cheats and hacks** menus (Level Select, All Weapons, gangs and more)  
+- **Mods, texture packs and sound packs**, BattleTanx 1 Sound Effects, reverb and more sound channels  
+- **Add to Steam** from the launcher  
+  
 ## Game Files  
 You need your own data files BattleTanx - Global Assault (USA).n64  
 SHA-1: 
@@ -30,6 +43,7 @@ Replace the game's sound effects with your own. See [SOUND_PACKS.md](SOUND_PACKS
   
 ## Mods  
 - [Gang Mod](https://github.com/wootbeer/btgarecomp-gang-mod)  
+- [Gun Buddy Mod](https://github.com/wootbeer/btga-gunbuddy-mod)  
 - [Mod template](https://github.com/wootbeer/btgarecomp-mod-template), to start your own mod  
   
 ## Issues and Limitations
