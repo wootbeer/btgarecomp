@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 224)
+## Overview (as of round 225)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,43 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-15, round 225: 0.1.12 (netplay)
+
+Version 0.1.12 (`version_string` in `src/main/main.cpp`), approved by the
+owner after a netplay test between their two Windows PCs on the release
+build (join codes, a match, tunnels). PC and Linux; the Android branch gets
+it with the Android update. The update check (round 222) compares this with
+GitHub's latest release tag, so the release is tagged `v0.1.12`.
+
+**Release scan:** no probes or debug prints left (rounds 217-225's are kept
+outside the repo); the BTGA_* environment switches are netplay's testing
+aids, inert unless set; no ROM, ROM-derived or Lossless Scaling files
+tracked. New lib patches since 0.1.11: N64ModernRuntime 0001-0004
+(deterministic mode, mods off unsaved, aspect ratio override, dummy
+framebuffer), RecompFrontend 0017-0021 (screen held, F1/F10/F2 menu keys,
+Chat input). A two-player Tank Wars match on this build in the sandbox:
+3764 frames the same on both.
+
+**New since 0.1.11:**
+- Netplay (rounds 197-202, 208-216, 222): online play for up to 4 players in
+  lockstep, from the launcher's Netplay screen (join codes, public games,
+  UPnP), each PC its own player's full-screen view and HUD, chat (T),
+  the host driving the menus, a stand-in when the host leaves, Leave Game,
+  a version check against other players and against GitHub's latest
+  release. Mods, sound packs and the BattleTanx 1 sounds are off online.
+- Steady Distant Scenery (Graphics, on by default; rounds 217-219): distant
+  buildings and fences no longer blink out for a frame.
+- Tank shadows no longer flicker with frame interpolation (round 220).
+- Windows: debug runtime check and DPI awareness for TVs and Windows 11,
+  the window brought to the front, the launcher's spacing on a TV, Add to
+  Steam, crash logs for crashes outside game code (rounds 203-207).
+- README: links to the Gang Mod and the mod template.
+
+**Known, not fixed:** a small snap of the view as a netplay match starts
+(round 216's fix not confirmed; the owner didn't notice it in the last
+test); buildings sometimes flickering between intact and damaged while
+moving (round 224, intermittent, not reproduced).
 
 ## 2026-11-14, round 224: buildings flickering between intact and damaged (not found yet)
 
