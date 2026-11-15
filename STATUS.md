@@ -303,6 +303,8 @@ right now):
   radar's strips); the 3 within a view is gone.
 3196 frames the same.
 
+**Confirmed (owner, two Windows PCs, 2026-11-15):** the tunnel fades are good.
+
 ## 2026-11-14, round 215: the HUD's snap as the game pauses
 
 Owner's video: elements snapped as the pause menu opened. The frame the
