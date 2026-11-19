@@ -56,6 +56,7 @@
 #include "btga_config.h"
 #include "btga_steam.h"
 #include "btga_cheats.h"
+#include "btga_command_line.h"
 #include "btga_netplay.h"
 
 #if defined(BTGA_HAS_APP_ICON)
@@ -596,10 +597,12 @@ static void launcher_update(recompui::LauncherMenu*) {
         }
     }
 #endif
+    btga::cli::launcher_update(supported_games[0].game_id, supported_games[0].mod_game_id);
     btga::netplay::launcher_update(supported_games[0].game_id);
 }
 
 int main(int argc, char** argv) {
+    btga::cli::parse(argc, argv, version_string);
     btga::netplay::command_line(argc, argv);
     std::set_terminate(report_unhandled_exception_and_abort);
 
@@ -631,6 +634,8 @@ int main(int argc, char** argv) {
 
     recompui::programconfig::set_program_name(program_name);
     recompui::programconfig::set_program_id(program_id);
+    // Before anything reads the app folder.
+    btga::cli::default_to_portable();
 
     SDL_InitSubSystem(SDL_INIT_AUDIO);
     if (!open_audio_device(game_frequency)) {
@@ -675,6 +680,8 @@ int main(int argc, char** argv) {
     btga::netplay::create_menu_tab();
     recompui::config::finalize();
     btga::init_mouse_stick();
+    // Settings and the ROM from the command line, after the saved ones load.
+    btga::cli::apply_after_config(supported_games[0].game_id);
 
     // Netplay's testing switches (and its session, once the launcher can
     // start one): after the settings are loaded, before the game runs.
