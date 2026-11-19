@@ -42,7 +42,7 @@ cd "$(dirname "$(readlink -f "$0")")" && exec ./BattleTanxGARecompiled "$@"
 EOF
 chmod 755 "$stage/BattleTanxGARecompiled.sh"
 cp -r assets "$stage/"
-cp README.md SOUND_PACKS.md COPYING "$stage/"
+cp README.md SOUND_PACKS.md COMMAND_LINE.md COPYING "$stage/"
 
 # License notices for the third-party code built into the binary.
 licenses=(

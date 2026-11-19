@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 225)
+## Overview (as of round 226)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,55 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-19, round 226: portable by default; command-line options
+
+Owner: portable by default (existing players left as they are), and command
+line arguments for nearly every setting, to start straight into the game and
+to select the ROM.
+
+**Portable by default** (`btga::cli::default_to_portable`, in
+`src/main/command_line.cpp`, called after the program id is set and before
+anything reads the app folder): when there's no `portable.txt` in the working
+folder (the game's: assets load from there too), the folder holds `assets`,
+and the profile folder (`%LOCALAPPDATA%\btgarecomp`, `~/.config/btgarecomp`)
+doesn't exist yet, `portable.txt` is created there with a note on what it
+does. Not under an AppImage or Flatpak or with `APP_FOLDER_PATH` set; a
+folder that can't be written (Program Files) stays on the profile, as before.
+
+**Command line** (`include/btga_command_line.h`, `COMMAND_LINE.md`, in both
+packages):
+- Any option of the General, Graphics, Sound, Cheats and Hacks tabs by its id:
+  `--<id>=<value>`, `--<tab>.<id>=<value>`, `--set <id>=<value>`. Choices by
+  key or name (case and spaces ignored) or number, numbers within range (`%`
+  allowed), switches on/off/true/false/yes/no/1/0. Applied after the saved
+  settings load (a tab needing Apply gets it applied), and saved: the tabs
+  without Apply save whenever they're closed, so a one-run setting would end
+  up saved the first time its tab was opened anyway.
+- `--rom <file>` (or a file name alone, as frontends pass it): as Load ROM.
+- `--play` (`--start`, `--skip-launcher`): as Start Game, a few launcher
+  frames in (the mod game id updated, the menus hidden).
+- `--fullscreen`, `--windowed`, `--list-settings` (after the settings given
+  with it), `--version`, `--help`; the runtime's `--game`/`--game-mode` and
+  netplay's `--netplay` left to them.
+- Problems (an unknown option or setting, a bad value, a ROM that can't be
+  used, `--play` with no ROM) go to stderr and a "Command line" prompt on the
+  launcher; the game starts anyway.
+- On Windows the arguments are read as UTF-8 from the wide command line (ROM
+  paths with any letters), and the GUI build prints help and lists to the
+  console that started it (AttachConsole).
+
+Tested here (Linux): --help, --version, --list-settings (every tab's options,
+values and current value); settings applied and saved to the tabs' JSON, and
+an unknown setting, a bad value and a missing tab's id shown in the prompt;
+`--play "<ROM>"` with an empty settings folder loads and stores the ROM and
+goes straight into the game's intro; portable: a fresh game folder with no
+profile folder got portable.txt and its settings beside it, one with a
+profile folder was left on the profile. The Windows-only parts (console,
+wide arguments) are built only there; to be checked on Windows.
+
+README: the portable line updated, a Command Line section pointing to
+COMMAND_LINE.md.
 
 ## 2026-11-15, round 225: 0.1.12 (netplay)
 

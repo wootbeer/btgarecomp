@@ -31,7 +31,12 @@
 #include <vector>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
 #include <shellapi.h>
 #endif
@@ -135,7 +140,7 @@ namespace {
             "  --fullscreen          Fullscreen (graphics.wm_option=Fullscreen)\n"
             "  --windowed            Windowed (graphics.wm_option=Windowed)\n"
             "  --<setting>=<value>   Change a setting, e.g. --draw_distance=Far or\n"
-            "                        --graphics.res_option=2x. Saved, as in the menu.\n"
+            "                        --graphics.res_option=Original2x. Saved, as in the menu.\n"
             "  --set <setting>=<value>  The same\n"
             "  --list-settings       Every setting, its values and what it's set to now\n"
             "  --netplay             Open the Netplay screen once the launcher is up\n"
@@ -299,7 +304,10 @@ namespace {
         }
     }
 
-    void add_problem(const std::string& text) {
+    void add_problem(std::string text) {
+        if (!text.empty()) {
+            text[0] = (char)std::toupper((unsigned char)text[0]);
+        }
         problems.push_back(text);
         std::fprintf(stderr, "Command line: %s\n", text.c_str());
     }
@@ -460,18 +468,19 @@ void btga::cli::default_to_portable() {
 }
 
 void btga::cli::apply_after_config(const std::u8string& game_id) {
-    if (list_settings) {
-        use_parent_console();
-        print_settings();
-        std::fflush(stdout);
-        std::exit(EXIT_SUCCESS);
-    }
     std::vector<recomp::config::Config*> changed;
     for (const Setting& setting : settings) {
         apply_setting(setting, changed);
     }
     for (recomp::config::Config* tab : changed) {
         tab->save_config();
+    }
+    // After the settings given with it, so the list shows them.
+    if (list_settings) {
+        use_parent_console();
+        print_settings();
+        std::fflush(stdout);
+        std::exit(EXIT_SUCCESS);
     }
     if (!rom_argument.empty()) {
         const recomp::RomValidationError result = recomp::select_rom(path_from_utf8(rom_argument), game_id);

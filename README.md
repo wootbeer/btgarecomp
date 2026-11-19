@@ -33,7 +33,10 @@ SHA-1:
 08A9037488C47D1E26CE6F709955639E9F0F0BB8  
 Place in an accessible folder onto your device.  
   
-Add a blank portable.txt in the application's folder to make portable if you want to save settings locally.  
+New installs are portable: settings, saves and mods stay in the game's folder (portable.txt). If you've played an earlier version, your settings stay in your user profile; see [COMMAND_LINE.md](COMMAND_LINE.md#portable-mode) to switch.  
+  
+## Command Line  
+Start straight into the game, load a ROM or change any setting from a shortcut or frontend. See [COMMAND_LINE.md](COMMAND_LINE.md).  
   
 ## Building  
 See [BUILDING.md](BUILDING.md).

@@ -43,11 +43,11 @@ be set by its id:
 For example:
 
 ```
-BattleTanxGARecompiled.exe --draw_distance=Far --fog=Off --graphics.res_option=2x
+BattleTanxGARecompiled.exe --draw_distance=Far --fog=Off --graphics.msaa_option=4x
 ```
 
 - A choice is given by its name (any case, spaces optional), e.g. `Far` or
-  `Very Far`, or by its number.
+  `Very Far`, `4x` or `MSAA4X`, or by its number.
 - A number has to be in the option's range; a `%` after it is fine.
 - A switch is `on` or `off` (`true`/`false`, `yes`/`no` and `1`/`0` work too).
 - The id on its own works when only one tab has it; otherwise put the tab in
