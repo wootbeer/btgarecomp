@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 228)
+## Overview (as of round 229)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.11).
+and higher framerates. Betas are public (0.1.0 to 0.1.13).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,30 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-22, round 229: 0.1.13
+
+Version 0.1.13 (`version_string` in `src/main/main.cpp`), approved by the
+owner after Restart was confirmed on Windows. Tagged `v0.1.13` for the
+update check (round 222). Netplay players need the same version, so 0.1.12
+and 0.1.13 can't play together; the Netplay screen points 0.1.12 players to
+the new release. The Android branch gets it with the Android update.
+
+**Release scan:** no probes or debug prints left (round 228's temporary
+relaunch delay was removed before its commit); the new `BTGA_RESTARTED`
+variable is set only by Restart, for the new start, and cleared there; no
+ROM, ROM-derived or Lossless Scaling files tracked. New lib patch since
+0.1.12: RecompFrontend 0022 (Restart).
+
+**New since 0.1.12:**
+- Restart in the menu's header and in the quit prompt (round 228).
+- Portable by default for new installs; existing installs keep their profile
+  folder (round 226).
+- Command-line options: every setting by its id, `--rom`, `--play`,
+  `--fullscreen`/`--windowed`, `--list-settings` (round 226,
+  COMMAND_LINE.md).
+- Turrets keep the game's own range with a longer Draw Distance (round 227).
+- README: features list, Gun Buddy Mod link.
 
 ## 2026-11-22, round 228: Restart in the menu
 
