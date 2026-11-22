@@ -4,11 +4,11 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 189)
+## Overview (as of round 229)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
-and higher framerates. Betas are public (0.1.0 to 0.1.10).
+and higher framerates. Betas are public (0.1.0 to 0.1.13).
 
 **How the main areas got here** (the rounds to read for each):
 
@@ -69,6 +69,1223 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-22, round 230 (Android branch): 0.1.13 on Android
+
+Main (0.1.13, rounds 189-229) merged into the Android branch. Conflicts:
+`src/main/main.cpp` (Android's startup, touch input and launcher kept beside
+the command line, netplay's input hook and Restart), `crash_handler.cpp` (the
+aarch64 registers beside the x86-64 ones), `README.md`. The lib patch sets
+(RecompFrontend 19, rt64 22, plume 8, N64ModernRuntime 4, N64Recomp 1) apply
+in order on clean submodules.
+
+Android differences:
+- Netplay is off (`BTGA_NETPLAY` defaults OFF for Android): its web requests
+  (matchmaking, the update check) go through the curl program, which Android
+  doesn't have. So no Netplay entry or Chat control.
+- No Restart (as snprecomp): the system starts the app, so `btga::restart`
+  sets no callback and the menu shows no Restart button or choice.
+- No portable default and no Add to Steam (the app keeps everything in its own
+  storage; its launcher is `src/android/android_launcher.cpp`'s, with Change ROM).
+- The crash log's host call stack (round 206) uses `_Unwind_Backtrace`:
+  bionic's `backtrace()` needs Android 13.
+- versionCode 5, versionName 0.1.13.
+
+## 2026-11-22, round 229: 0.1.13
+
+Version 0.1.13 (`version_string` in `src/main/main.cpp`), approved by the
+owner after Restart was confirmed on Windows. Tagged `v0.1.13` for the
+update check (round 222). Netplay players need the same version, so 0.1.12
+and 0.1.13 can't play together; the Netplay screen points 0.1.12 players to
+the new release. The Android branch gets it with the Android update.
+
+**Release scan:** no probes or debug prints left (round 228's temporary
+relaunch delay was removed before its commit); the new `BTGA_RESTARTED`
+variable is set only by Restart, for the new start, and cleared there; no
+ROM, ROM-derived or Lossless Scaling files tracked. New lib patch since
+0.1.12: RecompFrontend 0022 (Restart).
+
+**New since 0.1.12:**
+- Restart in the menu's header and in the quit prompt (round 228).
+- Portable by default for new installs; existing installs keep their profile
+  folder (round 226).
+- Command-line options: every setting by its id, `--rom`, `--play`,
+  `--fullscreen`/`--windowed`, `--list-settings` (round 226,
+  COMMAND_LINE.md).
+- Turrets keep the game's own range with a longer Draw Distance (round 227).
+- README: features list, Gun Buddy Mod link.
+
+## 2026-11-22, round 228: Restart in the menu
+
+Owner: a Restart button like snprecomp's.
+
+Ported from snprecomp's round 12. `lib-patches/RecompFrontend/0022` (its 0023,
+rebased onto ours) gives the menu's header a Restart button between Quit and
+Close, and the quit prompt (Quit, Alt+F4, closing the window) a Restart choice
+between Quit and Cancel. Once the game has started, the button asks first ("Are
+you sure you want to restart?"); in the launcher it restarts straight away. Both
+show only when the game has set a restart callback.
+
+`src/main/restart.cpp`: the callback marks the restart and quits as Quit does,
+so in netplay the other players are told (btga::netplay::quitting, as before).
+Just before the process ends (main's end, or the quiet shutdown-fault exit in
+`crash_handler.cpp`), the game is started again with the same command line:
+`CreateProcessW` with `GetCommandLineW()` and `AllowSetForegroundWindow` on
+Windows; on Linux `posix_spawn` of the AppImage (`$APPIMAGE`, since the
+executable's mount goes away with the process) or `/proc/self/exe`, with the
+same arguments and environment. The new start gets `BTGA_RESTARTED=1`, and the
+command line's settings are skipped (`src/main/command_line.cpp`): they were saved
+at the first start, and a change made in the menu since would otherwise be
+undone. `--rom` and `--play` still count.
+
+Tested (Linux, Xvfb): in the launcher, the header's Restart starts the game
+again at once, with the same arguments; started with `--mouse_stick=Turn` and
+changed to Off in the menu, it's still Off after the restart. In-game, the button
+asks first, and the quit prompt shows Quit / Restart / Cancel; Restart from there
+quits the game and starts it again, with no crash log.
+
+**Owner (Windows): Restart from the launcher worked; from in-game it just closed
+the game.** Cause: quitting a game frees its memory while the game's threads
+still run, and their faults end the process quietly (`crash_handler.cpp`'s
+shutdown faults), which also calls relaunch_if_requested. When main had already
+begun starting the new process, that second call returned at once and the
+process ended under it; Windows' CreateProcess takes long enough to lose that
+race every time (no game threads in the launcher, so it worked there).
+Reproduced on Linux with a temporary 1 s delay before the spawn: the game closed
+and nothing started. Fix: a second caller waits (up to 10 s) until the first
+has started the new process. Also as snprecomp: a quit that gets stuck after
+Restart starts the game again and ends after 5 s. With the delay, and without,
+in-game Restart now starts the game again.
+
+**Confirmed (owner, Windows):** Restart from in-game works.
+
+## 2026-11-22, round 227: turret range no longer grows with Draw Distance
+
+Report (via the owner): with a long or maximum draw distance, turrets open fire
+from much farther away, in both BattleTanx ports; more noticeable here, where
+they used to have a shorter range than in the first game.
+
+**Cause:** the gun emplacements' range checks (func_800E3460 at 0x800E36A8 and
+0x800E3874; a third copy at 0x800E3404 is never called) use the draw distance
+at 0x8023A060: (draw distance)^2 * 0.92 (0x80075C74-0x80075C80, read from game
+memory), a third of that for one kind. That's about 96% of the draw distance:
+3400 at a one-player level's start, growing to 5000 as the frame-rate governor
+(func_80099FE8) raises it. Draw Distance multiplies the draw distance (Far x3,
+Very Far x6, Map Edge 45000), so the turrets' range went with it. The value's
+other readers are rendering only: the scenery drawer, the camera projection
+(func_800A72C0, func_800A7664), the object view test (func_800AA664, reached
+only from the draw functions through func_800AD14C), the camera scripts.
+
+**Fix** (`src/game/view_distance.cpp`): the draw distance the game would have
+without the option is kept beside the real one: set at the same stores (scene
+start, camera scripts) before the option scales them, and stepped by the
+governor's own rule at its once-a-second check (hook at L_8009A1B4, $a0 the
+frames of the last second: under 20, -50 down to 1801; otherwise +50 under
+5000). The turrets' range checks get it (hooks right after both loads) when
+Draw Distance is above Original.
+
+Tested (temporary prints): at Original, the kept value follows the real one
+through a mission 1 drive (3400 to 5000); on Houses of Parliament at Far, the
+turrets' range checks read 10200 before and now the game's 4250-5000, as
+without the option. In netplay it's from the game's state and the host's
+Draw Distance alike on every PC.
+
+**Confirmed (owner, Windows):** fixed.
+
+## 2026-11-19, round 226: portable by default; command-line options
+
+Owner: portable by default (existing players left as they are), and command
+line arguments for nearly every setting, to start straight into the game and
+to select the ROM.
+
+**Portable by default** (`btga::cli::default_to_portable`, in
+`src/main/command_line.cpp`, called after the program id is set and before
+anything reads the app folder): when there's no `portable.txt` in the working
+folder (the game's: assets load from there too), the folder holds `assets`,
+and the profile folder (`%LOCALAPPDATA%\btgarecomp`, `~/.config/btgarecomp`)
+doesn't exist yet, `portable.txt` is created there with a note on what it
+does. Not under an AppImage or Flatpak or with `APP_FOLDER_PATH` set; a
+folder that can't be written (Program Files) stays on the profile, as before.
+
+**Command line** (`include/btga_command_line.h`, `COMMAND_LINE.md`, in both
+packages):
+- Any option of the General, Graphics, Sound, Cheats and Hacks tabs by its id:
+  `--<id>=<value>`, `--<tab>.<id>=<value>`, `--set <id>=<value>`. Choices by
+  key or name (case and spaces ignored) or number, numbers within range (`%`
+  allowed), switches on/off/true/false/yes/no/1/0. Applied after the saved
+  settings load (a tab needing Apply gets it applied), and saved: the tabs
+  without Apply save whenever they're closed, so a one-run setting would end
+  up saved the first time its tab was opened anyway.
+- `--rom <file>` (or a file name alone, as frontends pass it): as Load ROM.
+- `--play` (`--start`, `--skip-launcher`): as Start Game, a few launcher
+  frames in (the mod game id updated, the menus hidden).
+- `--fullscreen`, `--windowed`, `--list-settings` (after the settings given
+  with it), `--version`, `--help`; the runtime's `--game`/`--game-mode` and
+  netplay's `--netplay` left to them.
+- Problems (an unknown option or setting, a bad value, a ROM that can't be
+  used, `--play` with no ROM) go to stderr and a "Command line" prompt on the
+  launcher; the game starts anyway.
+- On Windows the arguments are read as UTF-8 from the wide command line (ROM
+  paths with any letters), and the GUI build prints help and lists to the
+  console that started it (AttachConsole).
+
+Tested here (Linux): --help, --version, --list-settings (every tab's options,
+values and current value); settings applied and saved to the tabs' JSON, and
+an unknown setting, a bad value and a missing tab's id shown in the prompt;
+`--play "<ROM>"` with an empty settings folder loads and stores the ROM and
+goes straight into the game's intro; portable: a fresh game folder with no
+profile folder got portable.txt and its settings beside it, one with a
+profile folder was left on the profile. The Windows-only parts (console,
+wide arguments) are built only there; to be checked on Windows.
+
+README: the portable line updated, a Command Line section pointing to
+COMMAND_LINE.md.
+
+## 2026-11-15, round 225: 0.1.12 (netplay)
+
+Version 0.1.12 (`version_string` in `src/main/main.cpp`), approved by the
+owner after a netplay test between their two Windows PCs on the release
+build (join codes, a match, tunnels). PC and Linux; the Android branch gets
+it with the Android update. The update check (round 222) compares this with
+GitHub's latest release tag, so the release is tagged `v0.1.12`.
+
+**Release scan:** no probes or debug prints left (rounds 217-225's are kept
+outside the repo); the BTGA_* environment switches are netplay's testing
+aids, inert unless set; no ROM, ROM-derived or Lossless Scaling files
+tracked. New lib patches since 0.1.11: N64ModernRuntime 0001-0004
+(deterministic mode, mods off unsaved, aspect ratio override, dummy
+framebuffer), RecompFrontend 0017-0021 (screen held, F1/F10/F2 menu keys,
+Chat input). A two-player Tank Wars match on this build in the sandbox:
+3764 frames the same on both.
+
+**New since 0.1.11:**
+- Netplay (rounds 197-202, 208-216, 222): online play for up to 4 players in
+  lockstep, from the launcher's Netplay screen (join codes, public games,
+  UPnP), each PC its own player's full-screen view and HUD, chat (T),
+  the host driving the menus, a stand-in when the host leaves, Leave Game,
+  a version check against other players and against GitHub's latest
+  release. Mods, sound packs and the BattleTanx 1 sounds are off online.
+- Steady Distant Scenery (Graphics, on by default; rounds 217-219): distant
+  buildings and fences no longer blink out for a frame.
+- Tank shadows no longer flicker with frame interpolation (round 220).
+- Windows: debug runtime check and DPI awareness for TVs and Windows 11,
+  the window brought to the front, the launcher's spacing on a TV, Add to
+  Steam, crash logs for crashes outside game code (rounds 203-207).
+- README: links to the Gang Mod and the mod template.
+
+**Known, not fixed:** a small snap of the view as a netplay match starts
+(round 216's fix not confirmed; the owner didn't notice it in the last
+test); buildings sometimes flickering between intact and damaged while
+moving (round 224, intermittent, not reproduced).
+
+## 2026-11-14, round 224: buildings flickering between intact and damaged (not found yet)
+
+Owner: the flicker is a building switching between its intact look and its look
+after being shot once, on lots of buildings in lots of levels; Steady
+Distant Scenery, frame rate and anti-aliasing make no difference. The owner's
+second clip shows it on the Houses of Parliament: a building's dark side face
+appears for a few frames and goes.
+
+Checked (temporary probes, kept outside the repo as r224_probes.patch):
+- The objects' model (+0x48) and kind (+0x4C) don't flip: in three minutes of
+  mission 1 only 4 objects changed, once each (kind 2 to 0, the model's next
+  record), most likely things that got hit.
+- A model's pieces are separate faces side by side (a building's walls),
+  not an intact and a damaged layer drawn over each other.
+- func_800AA058 builds each object's lights (point lights near it, e.g.
+  fires and explosions) from the per-frame allocator func_8007B190 (0x2000
+  units of 8 bytes, falling back to the default lights when full): at most
+  1650 used in mission 1.
+- Mission 1 parked at the start, 80 screenshots: only moving things change
+  (the pickup, a vehicle, the sandbox's screen filter), no building.
+
+Not reproduced in the sandbox yet. Next: a still view of a flickering
+building (where, which level) to probe exactly that object.
+
+Then (owner): it only happens while moving, isn't at any one spot, and a later
+test didn't show it at all, with other settings too. Also checked: each
+object's lights (func_800AA058) are the same from frame to frame (the lights
+lists rotate through three buffers at 0x8017CEE0, 0x8018CEE0, 0x8019CEE0; the
+probe is r225_light_probe.patch). Left until it can be caught again.
+
+## 2026-11-14, round 223: Parliament building flicker (owner's clip), still looking
+
+Owner's clip (Houses of Parliament, Steady Distant Scenery on): buildings still
+flicker, some "between their whole state and part of their destroyed state".
+Measured on that level in the sandbox (Level Select, London - Parliament,
+Original Draw Distance, about 2-3 minutes of driving each, temporary probes):
+- Not detail levels: no type 2 or 3 scenery was drawn (the multi-level path in
+  func_800AF978 never ran).
+- Not the game's draw limits: at most 127 of 300 queue keys and 997 of 2288
+  items a frame.
+- One-frame gaps (round 217's probe): 22 frames, 28 objects, more than mission
+  1. Many are the second piece of two-piece (kind 3 and 4) objects, queued at
+  0x800B020C right after the first piece (0x800B015C / 0x800B01D0), which the
+  probe didn't see missing in the same frame. Unexplained so far: both calls
+  run together after the same test, and func_8007B1F0 returned no failure.
+- The clip itself, frame by frame (60 fps): the Parliament's far face turns
+  into its near one as the tank closes in (frames 66-69); no clear one-frame
+  blink found by image differencing.
+
+Asked the owner for the time in the clip and which building. Probes kept
+outside the repo (scratchpad r223_stash_*.patch).
+
+## 2026-11-14, round 222: netplay's update check; compared with PaxDino again
+
+Owner: does netplay have PaxDino's update check? It didn't: round 198 ported
+the Rage Wars port's rounds 134-185 but left out the update check from its
+round 174 (the version labels in Hello/Welcome and the Worker's "version"
+answer were ported).
+
+**Update check** (`src/netplay/update_check.cpp`, `update_check.h`, from
+PaxDino's `src/main/update_check.cpp`): when the Netplay screen first opens,
+one anonymous request (the HTTP helper's generic user agent) to
+api.github.com for wootbeer/btgarecomp's latest release, at most once a
+launch, off the UI's thread. Only the tag is read and compared with this
+build's version number by number; if it's newer, a line at the top of the
+screen: "A newer version is out (X; you have Y). Everyone in a game needs the
+same version: get it at github.com/wootbeer/btgarecomp/releases". Nothing is
+downloaded. Netplay only (off with `BTGA_NETPLAY`). Tested with a small
+harness against GitHub: 0.1.10 sees 0.1.11 as newer; 0.1.11 and 0.2.0 see
+nothing. The game builds; the latest release is v0.1.11, so this build shows
+nothing.
+
+**Compared with PaxDino after its round 185:** 186 (window in front), 187
+(Leave Game from an AppImage), 188 (build ID from the code's last commit), 192
+(the Start held to the Welcome's settings) are here; 191 (no game thread
+spinning) was this port's own fix; 189-190 (stick look) are Rage Wars only.
+Before it, the Rage Wars-only parts (Controller Paks, profiles, crosshairs,
+Unlock Everything, Extra Modes) don't apply. One deliberate difference:
+Chat's default key is T only (Enter is Start, the pause, in this game).
+
+## 2026-11-14, round 221: remaining scenery gaps investigated (nothing changed)
+
+Owner asked to try round 218's leftover: objects whose farthest detail level
+is empty, vanishing as the camera's distance wobbles at the threshold. Findings
+(temporary probes, mission 1, Very Far, Steady Distant Scenery on, about 3
+minutes of driving per run):
+- Mission 1's scenery is all type 1 (one detail level): the level code in
+  func_800AF978 (0x800AFC8C, 0x800AFF6C, 0x800B00C0) never switches anything
+  there. A hold on level changes (9edbcc8) was reverted untested on a map that
+  uses types 2 and 3.
+- The remaining one-frame gaps (4-22 per run; the count varies a lot from run
+  to run) all come from func_800AC538 failing for exactly one frame more than
+  the hold. A 4- or 8-frame hold left as many (failure runs come in all
+  lengths, and a one-frame gap is only seen at the end of one).
+- All of them are close objects (well inside the draw distance) failing the
+  view clip (func_800AAEA0), not the occlusion test (func_800ABF38, which only
+  func_800AC538 calls). Skipping the occlusion test changed nothing measurable
+  (the 2-frame hold already covers its one-frame gaps); passing objects whose
+  ground rectangle is within 64 of the camera didn't help either. Most are
+  likely at the screen's edges as the tank turns, so not visible; the probe
+  can't tell.
+
+Nothing kept. Next only if the owner still sees blinking: a clip of it, to
+find what the probe can't.
+
+## 2026-11-14, round 220: tank shadows flickering (interpolation IDs)
+
+Owner: the shadows under the tanks flicker. (The Android branch only fixed their
+jitter, with the IDs PC already has; its PLAN still lists a rare flicker.)
+
+**How a shadow is drawn.** Each tank's shadow is a flat black quad (prim alpha
+0x9F) under the hull, 70 x 148 for the starting tank, drawn with no depth
+compare or update (render mode C8104240) in a bucket of its own right after the
+ground. Its queue record's model display list is `gDPSetPrimColor(.., alpha)`
+and a branch to the quad.
+
+**What went wrong.** A temporary per-frame probe of the display list (mission 1,
+three minutes of driving) found every tank's shadow drawn every frame, but its
+matrix comes two ways: either the hull's Mtx (so it had the hull's ID, tank + 1)
+or one built for it in the 0x8021B478 scratch (tank + 11 + 8 * k, as the first
+part built there). Tanks switched between the two about 40 times in the run
+(the player's tank around the end of the intro, the others while driving). On
+each switch RT64 paired the shadow with the wrong transform from the frame
+before (the hull, the Rattler cannon, or nothing) and blended or snapped it on
+the in-between frames: the flicker. Counted as a scratch part, the shadow also
+shifted the Rattler cannon's k.
+
+**Fix** (`src/game/interpolation_ids.cpp`): a record whose model list is a
+shadow's gets an ID of its own, its tank + 0x201, either way:
+- the queue hook (func_8007B1F0, where the model list is `$fp`) records the
+  shadow's Mtx under that ID, without counting it among the tank's parts;
+- the walker's matrix-load hook (record in `$s1`) uses it for a shadow record,
+  falling back to the hull's ID's tank;
+- a new hook at L_8007B7A4 (`btga_interp_record_start`) forces a matrix load
+  when the walker goes between a shadow's record and another with the same Mtx
+  (the shadow and the hull can share one Mtx but not one ID).
+
+Verified here: the same drive afterwards had 9082 shadow draws, all tank +
+0x201, no switches and no one-frame gaps; the hull's other draws keep tank + 1.
+The sandbox renders too slowly for in-between frames, so the owner's test
+decides whether the flicker is gone.
+
+**Confirmed (owner, Windows):** the shadows are stable now.
+
+## 2026-11-14, round 219: Steady Distant Scenery on by default
+
+Owner tested round 218's option on Windows: it works, and as a bug fix it
+should be the default. Now On (the Graphics tab's default, and the setting
+before the config loads); Off keeps the original game's blinking. Saved
+configs that already have the option keep their choice.
+
+## 2026-11-14, round 218: Steady Distant Scenery (Graphics tab, off by default)
+
+Owner: at Original Draw Distance and Original resolution it's less, but
+still noticeable, and not on an emulator. Higher resolutions add shimmer
+(edges finer than a pixel); the rest is round 217's one-frame gaps.
+
+Where the gaps come from (temporary probes, mission 1, Very Far, about 3
+minutes): func_800AF978's occlusion list (func_800ABE6C) is almost always
+empty; most scenery is drawn by its second loop, which runs each object
+with its per-view bit (+0x4D) through func_800AC538, a test of its
+rectangle against the view. 38 objects failed that test for exactly one
+frame between two passes; none were dropped by the +0x4D bit.
+
+**Option** (src/game/steady_scenery.cpp, Graphics: Steady Distant Scenery,
+Off = the game's own): an object this view listed (hook at 0x800AFAE0) or
+that passed func_800AC538 (hook at 0x800AFDE4) in the last 2 frames is kept
+when it drops out. Kept objects draw like any other. In netplay it's the
+host's setting for everyone (SharedSettings.steady_scenery, shown in the
+session's settings), since it changes what the drawing code writes to game
+memory; the history comes from the game's own results, the same on every
+PC. Tested: the probe's gaps fell from 15-20 to 6-10 in the same drive;
+a two-player match with it on, 3426 frames the same.
+
+Still left: type 1-3 objects choose a detail level by distance
+(0x80072F68-0x80072F8C) and the farthest can be empty, so one whose
+distance wobbles at that threshold can vanish for a frame (the remaining
+6-10). Not on an emulator per the owner; why it differs is not known yet.
+
+## 2026-11-14, round 217: distant buildings blinking out (found where, not fixed)
+
+Owner: distant buildings and fences flicker (clips from mission 1 and
+London); still with Vulkan and at Framerate Original, so neither D3D12 nor
+interpolation. Round 193's depth clip change is already in.
+
+Probe (temporary, kept as a patch outside the repo): every queued draw
+(func_8007B1F0: display list, matrix translation) per frame; a "gap" is one
+drawn at the same place two frames before and two after but not in the
+middle frame. Mission 1, driving and turning, about 3 minutes each:
+- Original Draw Distance: about 3 frames with scenery gaps; Very Far: 13-19.
+- Nothing appears at the same place in the gap frame: not a detail-level
+  swap (func_800AF978 picks LOD 0-2 by squared distance against
+  0x80072F68 / F6C / F70).
+- The same with the cull factor k left alone (no Expand widening, no
+  round 192 turn margin): 19 against 20 objects.
+- The groups of about 15 gaps at one place are tanks (func_80094744 ->
+  func_80092C38 -> func_800AE184), probably the game's own blinking.
+- The frame-time measure (func_80097660 / func_800976AC -> 0x801B45A8) is
+  never read: no time budget.
+
+Where: scenery is queued by func_8009B0F0 -> func_800B0268 (per view) ->
+func_800AF978, which first runs every map object (0x50-byte records, flag
++0x4E bit 0x80, per-view bits at +0x4D) through func_800AB980. That takes
+the camera position truncated to integers and the object's ground
+rectangle (+0x40..+0x46), rejects it past the draw distance (squared), and
+clips the edges facing the camera against the view (func_800AAEA0), handing
+them to func_800AAC14: apparently an angular coverage (occlusion) test,
+where nearer buildings hide farther ones. An object judged hidden for one
+frame is the gap. Next: log func_800AB980's inputs and result for an object
+that gaps, and compare with an emulator at Original Draw Distance.
+
+## 2026-11-14, round 216: own view from the match's first frame; fades; a message by the radar
+
+Owner (join codes work between the two PCs; the TV's picture and menus
+right now):
+- **A snap as the match starts:** its first frames showed the split screen.
+  They don't call the full-screen viewport list yet ("own view: 2 views,
+  but no full-screen viewport" in every test log), so own_view left them.
+  The list is there all the same (segment 1 at 0x138: the viewport's
+  G_MOVEMEM, then the whole screen's scissor): its viewport is read from
+  it. No such line in the logs now.
+- **The tunnel's fade still a black band in the middle:** it isn't drawn in
+  the view's span but with the HUD, over most of the player's view; the
+  HUD pass moved it like a widget (16 from the edge). Rectangles over at
+  least 90% of a view's width and half its height are now this player's
+  stretched from the view to the screen, another player's left out. (The
+  round 214 change for fills inside the span stays.) Not seen here.
+- The kill message's digit starts a pixel from the radar's edge and went
+  with the radar (a "2" beside it): rectangles now join a widget only when
+  they touch or overlap (the letters of a word, a box and its icon, the
+  radar's strips); the 3 within a view is gone.
+3196 frames the same.
+
+**Confirmed (owner, two Windows PCs, 2026-11-15):** the tunnel fades are good.
+
+## 2026-11-14, round 215: the HUD's snap as the game pauses
+
+Owner's video: elements snapped as the pause menu opened. The frame the
+game pauses in (state 5 from that frame's controller read) still draws the
+HUD, then the pause menu; the HUD pass ran only at state 3 or 7, so for
+that frame the HUD showed where split screen has it. Now, paused, a frame
+with rect-align commands (only HUD scripts write them, widescreen) is
+taken as that one: the rects under its commands are moved as in play, and
+what comes after the last of them (the pause menu) stays as it is. Later
+paused frames have no HUD and no commands; unpausing goes straight to 3
+with the HUD. Tested: four pauses, two of them in a frame with the HUD
+(about 54 rects moved, the menu left), the pause menu itself unchanged;
+4330 frames the same.
+
+## 2026-11-14, round 214: own view's HUD laid out as one player's; fades over the screen
+
+Owner (two Windows PCs, one on a TV): the weapon and ammo icons outside
+their boxes, the radar cut off (top-left on the joiner's TV) or touching the
+bottom, the health bar beside the boxes instead of centred; and in tunnels
+half the screen went black.
+
+Found here once the test sessions had the window's shape
+(BTGA_NETPLAY_WSCALE: BTGA_NETPLAY sessions start before the window, so the
+host's widescreen scale was 1 and no HUD anchoring happened):
+- **Anchoring.** In widescreen, widescreen.cpp anchors each HUD element to
+  an edge by its script x; in split screen a box (left of 120: the left
+  edge) and its icon (between: none) parted. own_view.cpp now gives each
+  rect-align command the anchoring of where its widget ends up (left of 120
+  the left edge, from 200 the right, else none); a command that also
+  anchors other rects (a message over the screen) stays, and its widget
+  follows it. In a session widescreen.cpp writes a command for each element,
+  even the same as the last, so elements don't share one (the same on every
+  PC: the session's player count).
+- **The radar** is one for both players in two-player, drawn half by each
+  player's HUD (its map in two strips, 88-128 and 128-153) across the line
+  between the views: each PC showed half. Rects of other players that touch
+  this player's (between views only touching, within a view up to 3 apart)
+  are kept; such a shared widget goes to the bottom on every PC.
+- **The health bar** (rects at least 40 wide and at most 10 high, and what's
+  inside its frame: the fill is as wide as the health left) moves on its
+  own, centred at the bottom, unanchored.
+- Up and down, widgets keep at least 16 from the screen's edge (the game's
+  TV-safe margin).
+- **Fades:** fill rectangles drawn inside this player's view (a fade, the
+  black between places in a tunnel) are stretched from the view to the
+  whole screen, as the 3D is. Not seen here (no tunnel reached in the test
+  match); from the owner's video, where the black covered the joiner's old
+  half.
+
+Tested over 127.0.0.1 at 16:9: both PCs show the radar whole at the bottom
+left, the health bar centred, the ammo icon and count in their box, as one
+player's HUD; 3789 frames the same.
+
+## 2026-11-14, round 213: chat while paused
+
+Owner: the other players can't control the pause menu, so they should be
+able to chat there. The chat now opens while paused too: for the players
+whose input the pause menu doesn't take as in a match (any Chat key), for
+whoever drives it (the host, or a joiner standing in for one that's gone)
+as on the menu screens (Enter selects there, so it doesn't open the chat).
+Tested paused: the joiner's line and the host's (by T) sent, the host's
+Enter that sent it didn't pick Continue; 3951 frames the same.
+
+## 2026-11-14, round 212: Chat as a control; chat where; the host drives the menus
+
+As in the Rage Wars port (its rounds 160, 166 and 176):
+- **Chat is a control** (Controls tab, RecompFrontend 0021, its 0017:
+  GameInput::OPEN_CHAT): T by default (Enter is Start here), any key or a
+  controller button can be bound. On a controller the Chat button again
+  sends and B is Escape; Steam's on-screen keyboard is asked for when Steam
+  started the game. The keys and buttons it takes are kept from the game
+  until let go, a controller's too (chat_held_buttons).
+- **Where it opens:** in a match and on the game's menu screens (Enter
+  doesn't open it there, it selects), not while paused; a line open when
+  the game pauses closes, keeping what's typed. From the game's state each
+  sweep (chat_set_where: 3 or 7 a match, 5 paused).
+- **The host drives the menus:** this game's shared menu screens (title,
+  main menu, Game Setup, the map) already answer player 1's controller only,
+  and Team Align and Gang Select each player's own (tested: player 2's keys
+  changed nothing on Game Setup or the title). What was left: in a match
+  the other players' Start is left out (only the host pauses), and while
+  paused their whole read (the pause menu is the host's). After the
+  stand-in for a host that's gone, so a joiner on their own still can.
+
+Game states seen (0x802195C8): 0 title and boot, 3 the attract demo, then
+1 and 2 for the front end (every menu screen 2), 7 the match's start, 3
+playing, 5 paused. No clean screen id was found for Team Align and Gang
+Select (not needed after the test above).
+
+Tested over 127.0.0.1: player 2's Start in a match didn't pause; the host's
+did; player 2's keys didn't move the pause menu; T while paused did nothing;
+after Continue player 2's line sent. 4215 frames the same. Chat in the
+Controls tab (keyboard: T).
+
+## 2026-11-14, round 211: the joiner stands in for a host that's gone
+
+From the Rage Wars port's round 183: a joiner whose host left or was lost
+plays on alone, but the game's menus and its pause answer player 1's
+controller only, so nobody could pause or quit. stand_in_for_host
+(src/netplay/netplay.cpp, after the exchange): outside a match and while
+paused, this player's read is player 1's too; in a match (state 3 or 7) only
+its Start, so player 1's tank stands still. Tested: host killed mid-match,
+"Lost the connection to the host" after the timeout, the joiner's Enter
+paused it (Continue, Restart, Quit on their view).
+
+## 2026-11-14, round 210: chat's Enter kept from the game; F1, F10 and F2
+
+Owner: Enter that sent a chat line opened (or closed) the pause menu. The
+chat's event filter drops the key's events, but the game reads the
+keyboard's state, and Enter is also Start: the line closed on the key going
+down, and the next reads saw Start held. As the Rage Wars port does
+(chat_held_buttons): the keys the chat takes (T that opens it, Enter that
+sends, Escape that closes, every key while it's open) are kept from this
+PC's read, as the buttons bound to them in its keyboard profile, until let
+go (src/netplay/chat.cpp, netplay.cpp). Tested over 127.0.0.1 in a match and
+on the map screen: the line sent, no pause menu or selection, 3914 frames
+the same.
+
+The menu keys from the Rage Wars port (RecompFrontend 0018-0020, its
+0003-0005): F1 and F10 open and close the menu like Escape, F2 opens it on
+a chosen tab: Cheats normally, the Netplay tab (players, Leave Game) in a
+session; F1 after F2 keeps that tab. Tested: F2 in a session opens Netplay.
+
+## 2026-11-14, round 209: own view's HUD during the match
+
+Owner (two Windows PCs): both players' HUDs showed on each PC, where split
+screen has them. Reproduced here. The HUD pass ran only while the game's
+state (0x802195C8) was 7, which round 201 took for "playing": it's 7 for the
+match's start only (the intro and countdown, about 900 frames in two-player
+Tank Wars), then 3 while it plays, 5 paused (func_800A8690). Round 201's
+checks were all in those first seconds. Now 3 or 7. Tested over 127.0.0.1:
+mid-match each PC shows only its own HUD at the screen's edges, paused the
+menu as it is, 3850 frames the same.
+
+## 2026-11-14, round 208: Netplay after Load ROM
+
+Owner (Windows 11 PC, first run): after Load ROM, Netplay still said to
+load the ROM first, until the program was started again. The runtime's list
+of valid ROMs (recomp::is_rom_valid) is made once at startup
+(check_all_stored_roms); select_rom stores a new one but doesn't add it, and
+only the launcher's own Start Game remembers. open_screen
+(src/netplay/online_menu.cpp) now checks the stored ROMs again when the game
+isn't on the list. Tested: started with no stored ROM, put it back while the
+launcher was up, Netplay opened its screen. The Rage Wars port has the same
+check (its online_menu.cpp).
+
+## 2026-11-14, round 207: the launcher on a TV
+
+With Netplay and Add to Steam the launcher's menu (seven entries) reached up
+into the title. As in the Rage Wars port (its rounds 142 and 143): Controls
+and Mods are gone from the menu (they only opened Settings at their tabs,
+which are still there), and the entries have 11 above and below (the
+frontend's 16). Start Game, Netplay, Settings, Add to Steam, Exit; the title
+at 25% from the top and the menu at 25% from the bottom (the frontend's),
+well inside the edges a TV may crop. Checked at 1920 x 1080: clear of the
+title.
+
+## 2026-11-14, round 206: Add to Steam
+
+The Rage Wars port's launcher option (its round 49), in the launcher before
+Exit (src/main/steam_shortcut.cpp, include/btga_steam.h): adds this copy to
+every Steam account on the computer as a non-Steam game, in
+`userdata/<account>/config/shortcuts.vdf` (binary VDF, read and rewritten
+keeping every other entry; the old file is kept as
+`shortcuts.vdf.btga-backup`). App ID = CRC-32 of Exe + AppName with the top
+bit set, as Steam makes it. Steam must be closed (it rewrites the file when
+it exits): if it's running, the option offers to close it (`steam://exit`)
+and waits on a thread. Run again, it updates its entry. Linux records the
+binary with its folder as the start folder (assets load from there).
+
+Artwork: the code that makes Steam's three pieces (portrait capsule, wide
+capsule, hero) from a square cover and a wide picture is in, downloading
+them from SteamGridDB only when the option runs, into the player's
+`config/grid/`. The owner picked two plain SteamGridDB pictures (game
+39008): a square cover (1024 x 1024) and a wide banner (920 x 430), the
+full-size grid files of the thumbnails sent. Checked with the fake Steam
+folder: the three pieces written (600 x 900, 920 x 430, 1920 x 620).
+
+Tested with a fake Steam folder (HOME pointed at it) holding another game's
+shortcut: that entry kept, ours added, a second run updated it with no
+duplicate.
+
+## 2026-11-14, round 205: crash logs for crashes outside game code
+
+From the Rage Wars port's round 125: src/main/crash_handler.cpp now also
+writes the faulting thread's name (the runtime and RT64 name theirs) and its
+host call stack, each frame as module+offset: Windows unwinds from the fault
+with the x64 unwind data (RtlLookupFunctionEntry / RtlVirtualUnwind, there
+with or without symbols), Linux takes backtrace() from the faulting frame on.
+Also the game thread's MIPS registers when a host register still points at
+its recomp_context, and on Linux one report when several threads fault at
+once. Not the port's crash_rdram.bin: N64 memory holds the game's code, and
+players attach these files to public issues.
+
+Windows Release builds now write line tables to BattleTanxGARecompiled.pdb
+(/Z7 with -gline-tables-only; not RecompiledFuncs, -g0), with /OPT:REF kept
+and /PDBALTPATH so only the file name goes into the exe;
+tools/package-windows.ps1 keeps the .pdb in dist\ beside the zip, not in it
+(it has the build machine's paths), for resolving a release's offsets.
+Checked on Linux (SIGSEGV sent to the game): the log shows the thread and
+eight frames. The Windows path is not built here.
+
+## 2026-11-14, round 204: controller list; the window in front on Windows
+
+More from the Rage Wars port, for the owner's Windows 11 TV PC:
+- assets/gamecontrollerdb.txt (SDL_GameControllerDB, the port's copy; its
+  notice in licenses/, packaged by both scripts), given to SDL before it
+  starts (SDL_HINT_GAMECONTROLLERCONFIG_FILE, beside the exe first): only
+  pads SDL knows are used, and pads like an 8BitDo Ultimate 2C in its
+  DirectInput mode it doesn't know itself. The log now names each joystick
+  and whether it's used. 751 mappings load here (Linux's section).
+- The window in front (the port's round 186): Windows 11 could open it
+  behind Explorer. create_window sets SDL_HINT_FORCE_RAISEWINDOW and raises
+  it; ten launcher frames in, it's brought to the front again
+  (BringWindowToTop and SetForegroundWindow with the foreground window's
+  thread input attached), since the start can take a while. Leave Game's
+  restart already allowed the new process the foreground
+  (src/netplay/netplay.cpp). Only the SDL part runs here (Linux).
+
+## 2026-11-14, round 203: Windows on a TV: debug runtime, DPI
+
+The owner's second Windows PC (Windows 11, on a TV), with the netplay test
+zip, the same two problems as the Rage Wars port's round 144:
+- The exe wanted MSVCP140D_ATOMIC_WAIT.dll (Microsoft's debug runtime, only
+  on PCs with Visual Studio). 0.1.11's exe names MSVCP140.dll, and nothing in
+  the tree asks for the debug one: the build-release folder had been
+  configured as another build type. tools/package-windows.ps1 now starts
+  such a folder over, checks the type after configuring, pins
+  CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreadedDLL, and refuses an exe that
+  names a debug runtime.
+- The settings were bigger than the screen and cropped at the left and top:
+  the process wasn't DPI-aware, so at a TV's display scale Windows stretched
+  the window while RT64 sized its swap chain in real pixels. Now per-monitor
+  DPI aware (SDL_HINT_WINDOWS_DPI_AWARENESS), and the first window is 16:9 at
+  two thirds of the screen's height (at least 1280 x 720 where that fits),
+  so not tiny on a 4K screen.
+
+## 2026-11-13, round 202: netplay, "Waiting for player N..." during a stall
+
+While the game waits for another player's input (`screen_held()` in
+`src/netplay/session.cpp`), nothing new is drawn, so the message overlay never
+reached the screen. RecompFrontend patch 0017 (the Rage Wars port's 0016)
+adds `RT64Context::update_screen_held()`: it shows the last frame again with
+the UI drawn over it. `OwnViewContext::update_screen` (`own_view.cpp`) calls
+it while the screen is held. Tested by stopping the joiner (SIGSTOP) for 4 s
+in a two-player match: the host showed "Waiting for player 2..." over the
+held frame, and once the joiner went on, the two stayed in sync (4319 frames,
+all the same).
+
+## 2026-11-13, round 201: netplay, each PC its own player's view
+
+`src/netplay/own_view.cpp` (the Rage Wars port's idea, redone for this
+game), through a wrapper around the renderer (`btga::netplay::wrap_renderer`,
+`src/main/main.cpp`): in a session, just before each display list goes to the
+renderer, this PC's player's view is drawn over the whole screen.
+
+**How the game draws split screen** (display lists dumped from a two-player
+Tank Wars match): the views are interleaved. For each of its draw buckets,
+for each view, the main list (our buffer at 0x80C40000, round 161) calls the
+view's viewport list in segment 1 (0x01000150 top half, 0x01000168 bottom;
+0x01000138 the full screen; 0x01000080 is the frame's setup, no viewport),
+loads the view's projection (G_MTX projection, 0x40 apart) and draws. The
+second list then calls the overlay (in the level heap, 0x804Fxxxx): every
+player's HUD in screen coordinates under the full-screen viewport; in two
+player the two radars are stacked across the line between the views. Each
+view keeps one player's vertical field of view, widened sideways to the
+view's shape. The players' cameras are 0x250 apart from 0x80235F00, each's
+viewport list at +0x118.
+
+**What changes:**
+- This player's view: its camera's viewport list (not the order the views
+  come in: after a respawn the game drew the other view first, and the views
+  swapped). Its spans (a viewport call to the next, or the end of the list)
+  get the full-screen viewport list; its projections a copy in the spare end
+  of the main list's buffer (+0x3F000) with the x column scaled back to the
+  screen's shape: one player's picture.
+- The other views' spans: still drawn, but under a scissor far below the
+  screen (a small list in the same spare area that calls the view's own
+  viewport list, then sets the scissor). Jumping over them broke the
+  textures: the game sets an object's textures and modes only when they
+  differ from the last object's, so later views needed what they set.
+- The HUD (rectangles outside the spans), only while the match plays (the
+  state at 0x802195C8 is 7; func_800A8690 sets 5 for the pause menu, which
+  is left as it is): each rectangle is the view's its middle lies in;
+  another player's are left out; this player's are grouped into widgets
+  (rectangles within 6 pixels of each other: a box and its icon, the radar
+  and its dots, a line of text) and each widget moves as one to the same
+  edges of the screen it was near in its view, kept on the screen. The line
+  between the views goes.
+- Every changed word is put back right after the renderer's send_dl (RT64
+  reads the whole list there), so the game's memory (the overlay is in the
+  level heap) is never left changed.
+
+The desync check now also leaves out the depth buffer (0x803DA800-0x80400000),
+which the renderer writes back and which differs once each PC draws its own
+view; nothing else differed.
+
+**Tests** (copies on one machine, each on its own display):
+- Two-player Tank Wars: each PC its own tank full screen with its own HUD
+  (radar, weapons, health, messages), through respawns and Change Tank: 4,045
+  and 4,055 frames the same on both.
+- The pause menu: whole on both (4,447 frames the same).
+- Four players (four copies, the game at its original resolution): Convoy
+  with four humans, each PC its own quadrant's view and HUD: 5,231 frames
+  the same on all four; a one-player campaign mission with four connected,
+  to the Victory screen: 5,594.
+- `BTGA_SHARED_SCREEN` keeps the game's split screen (testing).
+
+Not tried: three players (a full-width view and two quadrants; the same
+code, by the viewport lists).
+
+## 2026-11-13, round 200: netplay security check; the Start's settings held to the Welcome's
+
+Checked against the Rage Wars port's security review (its round 173), item by
+item, in `src/netplay/`: no Controller Pak data exists online (no pak on any
+port, `get_accessory`; its packet types are gone, unknown types ignored); a
+joiner's id never passed on; the host takes a port's reads only from its
+player; reads only for unplayed sweeps at most 256 ahead, hashes only at
+their marks; the stick finite and in range, buttons 16 bits; the host's
+settings made sane; nicknames (letters, digits, `'!?.,:()_-`, no spaces,
+12 at most), version labels, lobby names and chat (printable ASCII, 255 at
+most) cleaned on every PC, and recompui escapes all text it shows; chat
+rate-limited; STUN, join code and token, UPnP and the HTTP fetch checked as
+there; peers' chat text and names never written to the log.
+
+**Fixed (also open in the Rage Wars port):** a joiner accepted the settings
+in the host's Welcome, but took the ones in its Start unchecked, so a host
+could show "Cheats: none" and start with cheats on (only from the game's own
+list, values the menus offer). Now the Start's settings must be the
+Welcome's (`same_settings`), or the join fails: "The host's settings changed
+after you joined."
+
+**Hostile-peer test** (a Python script as a joiner against a hosting copy):
+500 garbage packets of random sizes; a Hello whose name had markup, a
+newline, an escape sequence, bytes 0x7F-0xFF and a right-to-left override
+(shown as "bevilb31"); Ready, which started the session; inputs with NaN,
+infinite and 1e30 sticks, all buttons, odd answer values, reads claiming the
+host's port and reads at 0xFFFFFFF0 with count 0xFFFFFFFF; chats with markup,
+control characters, 256 bytes, random bytes and claimed lengths of 300 and
+0xFFFFFFFF; floods of 30 chats; 3,000 random packets with a valid header.
+The host kept running, took 12 chats (the limit), showed only cleaned text,
+and dropped the player 20 s after its input stopped. A fake host sending a
+Welcome without cheats and a Start with Invincibility: the joiner refused.
+A normal join afterwards: unchanged.
+
+## 2026-11-13, round 199: the Netplay screen, join codes, chat
+
+The owner deployed `tools/matchmaker` to Cloudflare:
+https://btga-match.wootbeer.workers.dev answers, and is the build's
+`kMatchmaker`.
+
+**Launcher:** our own launcher menu now (`launcher_init` in
+`src/main/main.cpp`): the library's default entries, with **Netplay** after
+Start Game when netplay is built in (`btga::netplay::kLauncherEntry`).
+
+**Netplay screen** (`src/netplay/online_menu.cpp`, the Rage Wars port's,
+without its Unlock Everything, Load Profiles and update check): your name;
+Host a game (UDP port, 47100 by default; input delay, Auto or 1-8 reads;
+Public and the lobby's name); Join a game (a join code, or an address, or a
+public game from the list, refreshed every 15 s); the lobby (the join code,
+who's in and ready, Start, Cancel, how others reach this PC, the settings
+for everyone). The joiner is shown the host's settings and input delay
+before joining. Saved in online.txt in the config folder.
+
+**In a session:** the menu's Netplay tab (players, ping, input delay, the
+session's settings, Leave Game, which restarts the game on the Netplay
+screen with `--netplay`); the Cheats, Hacks and Mods tabs hidden; messages
+over the game ("Waiting for player 2...", a player gone, a desync).
+
+**Chat** (`src/netplay/chat.cpp`): T opens it in a session (T isn't bound
+in the game by default), Enter sends, Escape clears then closes, Ctrl+V
+pastes; while it's open this PC's player sends no input (`controller_read`)
+and the keys reach neither the game nor the menus (an SDL event filter).
+Text is printable ASCII, 255 at most, and recompui escapes what it shows, so
+markup in a message or name is shown as text. Each PC allows ten of its own
+in 30 s; every PC drops more than twelve of a player's in 30 s.
+
+**A desync from the runtime's dummy framebuffer**
+(`lib-patches/N64ModernRuntime/0004`): before the game starts the runtime
+points the screen at 0x80700000, and the renderer draws there; with round
+150's level heap in the upper 4 MB that's game memory, and a renderer
+running behind (the host's window slow to start) drew there after the game
+had started: memory 0x80700000-0x8074FFFF differed from frame 37 and the
+check reported a desync at read 840. The dummy framebuffer is now at
+0x80E00000, above everything the game and our code use (mods start at
+0x81000000).
+
+**Tests** (two copies, each on its own display and config folder):
+- The live Worker: a join code (VDAK9E) for the host, its public game in
+  the joiner's list. Joining by code can't finish in this sandbox: no UDP
+  reaches a STUN server, and the Worker rightly takes no documentation-range
+  local address (192.0.2.2), so it offered only the sandbox's outside
+  address. Joined by address instead.
+- Host, join by address, the settings prompt, Start (Auto chose 2 reads at
+  a 44 ms ping): 1,175 and 1,188 frames the same.
+- Chat both ways during the intro, one message with markup and an
+  ampersand (shown as typed); a name typed with `<b>` arrived without it.
+- The Netplay tab; Leave Game (the host restarted on the Netplay screen, its
+  public game closed; the joiner was told and played on alone).
+- A session without the sync test, 90 s: no desync reported (the memory hash
+  is compared every 120 reads).
+
+## 2026-11-13, round 198: netplay, a two-player match over the network
+
+The Rage Wars port's netplay (wootbeer/trwrecomp `src/main/netplay.cpp`,
+its rounds 134-185) ported to `src/netplay/session.cpp`, still reached only
+through `include/btga_netplay.h`. Started for now by testing switches:
+`BTGA_NETPLAY=host:<udp port>` / `join:<address>:<udp port>`
+(`BTGA_NETPLAYERS`, `BTGA_NICKNAME`, `BTGA_NETDELAY`); the launcher screen,
+join codes on screen and chat on screen are next.
+
+**How it plays:** both PCs run the game in deterministic mode. At each sweep
+of the game's controller reads (`osContGetReadData`, port 0's call) this
+PC's player's read (its own controls and mouse, as player 1's) goes out for
+the sweep 3 on (the input delay; Auto or the host's), and every port's read
+for this sweep comes back, waited for if need be; the other ports get them.
+A hash of the game's memory every 120 sweeps finds a desync. Online, every
+session port reports a controller and none a pak (`get_connected_device_info`,
+`get_accessory`), and this PC's controls are its own player's.
+
+**Left out of the port:** Controller Pak sharing (Rage Wars had it off too).
+Online nobody has a pak, so nothing is read from or written to anyone's
+saves, and no pak data goes over the network. The game's "No Controller Pak
+found" prompt is answered by itself: when its text pointer (0x8011F834)
+becomes "No Controller Pak found" or "Still no Controller Pak found", player
+1 presses B (Play Game Without Saving) 15 sweeps later, decided from game
+memory at the same sweep on every PC.
+
+**Security, as in the Rage Wars port (its round 173):** a joiner is known by
+an id only it and the host have (never passed on); the host takes a port's
+reads only from that port's player; reads only for sweeps not yet played and
+at most 256 ahead, hashes only at their marks; every value from a peer made
+sane (buttons 16 bits, stick finite and in -1..1, the host's settings ones
+the menus offer, the input delay 1-8, ports and player counts in range);
+nicknames, version labels and chat text printable ASCII and short; chat
+rate-limited per player on every PC; STUN answers only from the servers
+asked; the join code and token checked; UPnP and the HTTP fetch as there.
+
+**Settings that split the games** (each changed on its own in a replay of the
+round 197 recording, compared with the sync test):
+- Change what the game does, so the host's for the session
+  (`src/netplay/settings.cpp`, sent in its Welcome and Start, shown to the
+  joiner): Draw Distance (from frame 515, the level start), the aspect ratio
+  (the widened culling; held with the runtime's aspect ratio override,
+  `lib-patches/N64ModernRuntime/0003`, and the game's widen factor is the
+  host's window's), every cheat and hack.
+- Off for everyone online (the owner's call): sound packs and every other
+  mod (`recomp::mods::disable_all_mods_unsaved`, patch 0002, mods.json
+  untouched), the BattleTanx 1 sounds, Sound Effects Reverb, extra sound
+  channels. The BattleTanx 1 sounds changed the game itself: from the level
+  start the tanks' memory differed and the burning wreck's flames looked
+  different, so the sounds touch the game's random numbers.
+- Each player's own: Fog (only the fog word in the two start display lists,
+  0x80157E80-0x80158080, now left out of the hash), volume, frame rate (both
+  hashed the same as the recording), and the rest of the picture and
+  controls.
+
+**Tests** (two copies on one machine over 127.0.0.1, each on its own X
+display and config folder, the joiner's settings all different: fog on,
+aspect Original, Draw Distance Far, BattleTanx 1 sounds and reverb on, Rapid
+Fire; the host's Infinite Tank Bucks):
+- The host keying into mission 1: 2,439 frames the same on both; the joiner
+  was told the host's settings (Draw Distance Original, Expand, Infinite Tank
+  Bucks) and its own fog showed on its screen only.
+- A two-player Tank Wars match, each player confirming their own panel
+  (Team Align: two humans, blue and green), both driving and firing, kills
+  on both: 3,917 frames the same; the pak prompt answered by itself.
+- The round 197 recording replayed outside a session: the same as before.
+
+**Join codes:** `tools/matchmaker` (the Rage Wars port's Cloudflare Worker,
+renamed `btga-match`), to deploy on the owner's account; the game asks
+https://btga-match.wootbeer.workers.dev (`kMatchmaker`; `BTGA_MATCHMAKER`
+overrides). Until it's deployed, hosting says there's no code and players
+join by address.
+
+## 2026-11-13, round 197: netplay groundwork, a deterministic game
+
+Netplay (as in the Rage Wars port, wootbeer/trwrecomp rounds 132-185) runs
+both PCs' games in lockstep and sends only controller reads, so given the
+same reads the game has to do exactly the same thing on every PC, however
+fast each runs. This round gets there, behind testing switches only.
+
+**Kept apart** (so a build can leave it out, e.g. Android): everything is in
+`src/netplay/`, reached only through `include/btga_netplay.h`, whose
+functions are empty inline stubs when the CMake option `BTGA_NETPLAY` (on by
+default) is off. With it off, the netplay sources and the runtime patch are
+left out (checked: a `-DBTGA_NETPLAY=OFF` build compiles).
+
+**The runtime's deterministic mode**
+(`lib-patches/N64ModernRuntime/0001-deterministic-mode.patch`, the Rage
+Wars port's 0004, one hunk redone for this runtime's display-list thread):
+`ultramodern::set_deterministic(true)`, before the game starts. Events from
+the runtime's own threads (retraces, RSP and display list completions,
+controller reads, DMA) reach the game only when all its threads wait, in a
+fixed order; with nothing pending, the game's time moves on one retrace,
+paced to the host's clock but never skipped. The CPU counter is retraces x
+the count rate, and queued audio drains a retrace's worth per retrace. Off,
+nothing changes.
+
+**This game's busy-wait loops** (rounds 47-65, 188): they never wait, so in
+deterministic mode the game hung at the first one (`func_800A1384`, the
+main thread spinning for the audio thread, and every hook call after 2 ms of
+spinning advanced a whole retrace, by the host's clock). In deterministic
+mode `btga_yield_via_priority_drop` counts calls instead: every 64th call
+stands in for every thread waiting (`wait_for_external_message_timed`, which
+the mode turns into its idle point), and the hand-off to other threads runs
+on every call as before. Outside the mode, unchanged.
+
+**Sync test** (`src/netplay/sync_test.cpp`, from the Rage Wars port's):
+`BTGA_SYNCTEST=<file>` turns the mode on and writes, each frame (the frame
+clear), the retrace count and a hash of each 64 KB of the first 12 MB (the
+game's 8 MB and our sound heap at 0x80800000; not our draw item pool and
+display lists from 0x80C00000). `BTGA_SYNCDUMP=<frames>` saves that memory
+at those frames; `tools/sync_compare.py` finds the first frame and chunks
+that differ. Left out of the hash, found with it:
+- the runtime's host pointer in each of the game's five OSThreads
+  (0x80217070, 0x8021BA00, 0x8021BBB0, 0x80222988, 0x803ADA90, 8 bytes each;
+  the only words that differed through the first 515 frames);
+- the three framebuffers, 320 x 240 x 2 bytes from 0x80000400 to 0x80070C00,
+  which the renderer writes back with dithering that differs from run to run.
+
+**Input record and replay** (`src/netplay/input_record.cpp`):
+`BTGA_INPUTREC=<file>` writes every controller read the game gets (each
+port's, after the controls and the mouse stick; `src/main/main.cpp`'s input
+callback now goes through `btga::netplay::controller_read`), and
+`BTGA_INPUTPLAY=<file>` gives the game those instead.
+
+**Results** (sandbox):
+- Two boots with no input: 4,551 frames (intro, title, attract demo) the same.
+- A run keyed through the menus into mission 1, driving, turning and firing
+  (10 kills), recorded, then replayed: 2,885 frames the same, the same last
+  picture.
+- A normal boot (no switches): no deterministic mode, plays as before.
+
+**Next:** the two-player session over the network (the Rage Wars port's
+`netplay.cpp`: each PC's read sent for a sweep a few reads ahead, the other's
+waited for, a memory hash compared every few seconds). Things that change
+the game and so must come from the host: cheats and hacks, likely Draw
+Distance; sound packs and the BattleTanx 1 sounds change sound data in
+memory (the hash would need them alike or left out).
+
+## 2026-11-13, round 196: 0.1.11
+
+Version 0.1.11 (`version_string` in `src/main/main.cpp`). PC and Linux; the
+Android branch gets it with the Android update.
+
+**Release scan:** no testing switches or debug prints left from rounds
+190-195 (the probes in `interpolation_ids.cpp` were removed), one new lib
+patch (rt64 0023), and no ROM, ROM-derived or Lossless Scaling files
+tracked.
+
+**New since 0.1.10:**
+- Buildings no longer flicker with an extended Draw Distance: RT64's
+  simulated N64 depth clip is off (round 193, GitHub issue 7). Not seen by
+  the owner since; to confirm with the reporter.
+- The Annihilator boss's turret and guns no longer flicker when it fires
+  with frame interpolation on (round 195, GitHub issue 4). Checked by the
+  owner on the White House mission.
+- A turn margin on the view cone for in-between frames, so the ground and
+  objects at the screen's sides don't pop in while turning fast (round 192).
+
+## 2026-11-13, round 195: the Annihilator's guns keep their interpolation IDs when it fires
+
+**Report** (GitHub issue 4, reopened): the Annihilator's turret and guns
+flicker briefly when it fires. Round 190 couldn't reach it.
+
+**Reaching it:** it's the boss tank type `TANK_BOSS_A` (index 12 in the tank
+table at `0x80122E30`, 0xD0 apart; a tank's type is the word at +0x98 of its
+object, its x / z at +0x8 / +0xC). The Level Select cheat opens every
+mission on the map; Washington DC - White House is 8 presses right. It
+parks at (0, -1079) behind the barricades, so a temporary probe moved the
+player in front of it once the drive stopped at the barricade.
+
+**Cause:** unlike other tanks, the boss is drawn from the object loop
+(`func_800A1FDC`, round 156) as one object: hull and turret (tank IDs), a
+flash part (tank + 5) only while it fires, then its two side guns, both
+built in a scratch matrix in the stack (0x8021B540). Those got the object
+loop's IDs: the part's order among all the object's parts, given only while
+the part count is the same as in the two frames before. So when the flash
+part came and went, the guns had no ID for a frame or two (automatic
+matching), then came back shifted by one, each gun named as the other had
+been: RT64 blended each gun toward the other. Logged per frame: 4 parts
+(guns `object + 4`, `+ 6`) without firing, and 5 with it (guns AUTO, then
+`+ 6`, `+ 8`).
+
+**Fix** (`src/game/interpolation_ids.cpp`): in an object-loop draw that has
+queued a tank's hull or turret, such stack-matrix parts are named by that
+tank, in their order among themselves: tank + 9 + 8k (odd, clear of the
+hull 1, turret 3 and the extra parts' 5, 7 and 11 + 8k). The hull's Mtx is
+queued again in the draw (for the decal, keeping the hull's ID), so a Mtx
+already named this frame is skipped before counting. Logged again: guns at
+tank + 9 and + 17 on every frame, firing or not (400 frames, none
+automatic). Objects with no tank in their draw are unchanged, and other
+tanks aren't drawn this way.
+
+**Owner's test** (Windows, White House): looks right, no flicker seen.
+
+## 2026-11-12, round 194: Draw Distance's far plane and distant tank models checked (no change)
+
+**From the BattleTanx port** (wootbeer/btrecomp, commits 1f22e9d and
+617ec4b), where its Draw Distance (ported from here) had two problems:
+
+1. **The far plane and fog didn't follow the setting** there: its scene
+   function rebuilt the projections only when the distance differed from
+   a copy, and the level start stored both from one register.
+   Here: the gameplay projection reads `0x8023A060` directly
+   (`func_800A72C0` at camera setup, `func_800A7664` when the governor
+   `func_80099FE8` changes it; the governor only touches values under 5000,
+   so Far and above are built once, at camera setup). Logged with a gdb
+   breakpoint on `guPerspectiveF` in mission 1: Original builds far 3400 and
+   then 3450, 3500 ... as the governor raises it; Far builds 10200 (3 x
+   3400; 10150 and 10100 as the governor trims under 20 fps in the sandbox).
+   So Far does move the far plane and the fog. Doesn't apply.
+2. **Distant tanks lost their textures** there: past 1700 units tanks use
+   an untextured model, which the fog used to hide.
+   Here: the tank drawer `func_800AE184` (and `func_800AE4D0`) also pick
+   models at squared distances 300 / 1000 / 1700 (floats at `0x80072EE8` and
+   `0x80072EF8`; data at RAM 0x80070000 + ROM offset). With all three
+   tank thresholds forced to 1 (temporary), every tank used its farthest
+   model: simpler (a plain turret) but textured, decal included. So distant
+   tanks just get less detailed, as on the N64. Raising the thresholds would
+   only cost draws. No change.
+
+## 2026-11-12, round 193: RT64's simulated F3D depth clip off
+
+**From the BattleTanx port** (wootbeer/btrecomp, commit 0c79066, its lib
+patch 0011): distant scenery flashed at the fog line while driving, with
+interpolation off and in Original too; it now matches an emulator.
+
+**Applies here:** the game sets the same fog, `gSPFogPosition(995, 1000)`
+(the 0x64009D00 word at 0x8007A688, `btga_fog_word` only zeroes it when Fog
+is off), and RT64's `RasterPS.hlsl` still discards every pixel past depth
+1022/1024 (`simulateDepthClipF3D = true`, copying F3D's clipping; the game
+runs F3DEX 2.07). At 0.998 the fog is only about 60% thick, so distant
+scenery was cut while still visible, and small camera moves took it back and
+forth across the cut; with Fog off the cut was a sharp edge. Rounds 115-117
+found the same interaction (and round 117 doubled the far plane and re-fit
+the fog), but round 122 traced that flicker to RT64's Expand decomposition
+(patch 0001) and the workaround didn't stay; the clip itself was never
+changed. This also may be part of issue 7 (buildings flickering with an
+extended draw distance).
+
+**Change** (`lib-patches/rt64/0023-no-f3d-depth-clip.patch`):
+`simulateDepthClipF3D = false`, with a comment why. No other patch touches
+`RasterPS.hlsl`. Distant geometry now fades fully into the fog (up to the
+far plane, which the game sets at its draw distance) instead of being cut
+0.2% short of it. This follows emulators rather than the N64's microcode
+quirk.
+
+**Checked:** the configure resets RT64 and applies every patch with the new
+one (the stamp changed); a clean copy of RT64 with all patches applied
+matches the working tree. The game builds (the shaders rebuild) and mission 1
+plays; at Map Edge with Fog off the far scenery draws cleanly to the
+horizon, nothing new appears. The owner needs `cmake -S . -B build` (or the
+usual configure line) before building.
+
+**Owner's test** (Windows, after round 194): the building flicker on the
+Houses of Parliament mission (issue 7; seen before at Framerate Original
+too, so not interpolation) didn't show this time. Most likely this round:
+the flickering building sat at the fog line. To confirm with the issue's
+reporter in the next release.
+
+## 2026-11-12, round 192: a turn margin on the view cone, for in-between frames
+
+**From the BattleTanx port** (wootbeer/btrecomp, commit 558ae85): ground
+popped in at the left and right screen edges while turning at higher frame
+rates. The game culls each frame against the angle it's about to draw, with
+almost no room to spare; RT64's in-between frames turn the camera part of
+the way to the next game frame but draw the newer frame's objects, so the
+side the camera turns away from showed ground that frame hadn't drawn, until
+the next game frame popped it in. The original game never shows an angle it
+didn't cull for. Not reported here, but it's the same mechanism (round 98's
+cull factor k at camera+0x168: 2.29 for 1 player, 1.12 for the 2-player
+halves), and it may be what issue 7's reporter sees as buildings flickering.
+
+**Change** (`src/game/widescreen.cpp`, `btga_widen_cull`): the full-width
+views' k is divided by `kTurnMargin` = 1.3 as well as the Expand factor, in
+Original too (the Expand factor is then 1). About 8 degrees more per side,
+more than one game frame of turning. 4-player quadrants keep the game's cone
+(RT64 doesn't widen them either).
+
+**Safe:** the cull record (`0x802194B4`, stride 0x28) is read by the drawing
+code (`func_800AA..`-`func_800AF..`: scenery cull, model drawers) and by
+`func_80097EE4` / `func_80097FB4`, which read only the camera position (+0x0,
++0x4); k scales the direction fields, so only what's drawn changes.
+
+**Measured** (sandbox, Expand, Original Draw Distance, temporary probes;
+margin 1.0 against 1.3):
+- 1 player, mission 1, driving and turning: mesh draws peak 722 / 729 of
+  2,288, main list 0x5C20 / 0x5F48 of the 0xADE0 cut-off.
+- 2 players (Tank Wars, round 191's 4-port setup): 638 / 653, 0x51B0 /
+  0x5A78.
+- No limit hit; both runs played normally (the 1.3 run finished mission 1).
+
+The popping itself can't be shown in the sandbox (it can't run faster than
+the game). Owner's check: turn left and right at Display rate and watch the
+bottom corners; raise the margin a little if fast turns still pop.
+
+## 2026-11-12, round 191: 4-player display lists checked (BattleTanx's freeze doesn't apply)
+
+**Request:** BattleTanx (wootbeer/btrecomp, issue 1, commit 944460f) froze
+in 4-player matches: its main display list buffer (0x8000) has no length
+check, a 4-player frame used ~0x5660, its interpolation tags pushed it to
+0x81B0, and it overran into the next buffer (the frames' start lists), so
+the two frames' lists called each other and RT64 looped (10 GB+ on D3D12, a
+crash on Vulkan). Check Global Assault, change nothing if it has room or
+checks the length.
+
+**Frame slots** (`func_80079CB8`, graphics state 0x801293E0 + 0x90 + 0x10 *
+slot, two slots):
+
+| Field | List | Game's buffer | Size |
+|---|---|---|---|
+| +0x0 | start list | 0x80157E80 + 0x100 * slot | 0x100 |
+| +0x4 | main list | 0x801420C0 + 0xAEE0 * slot | 0xAEE0 |
+| +0x8 | second list | 0x801418C0 + 0x400 * slot | 0x400 |
+| +0xC | Mtx pool | 0x801298C0 + 0xC000 * slot | 0xC000 |
+
+**Length checks:** the main list's writers, the draw walker `func_8007B65C`
+and the sprite walker `func_8007B8EC`, stop at base + a cut-off (0xADE0,
+0x100 short of the end). Since round 161 both main lists are 0x40000-byte
+buffers at 0x80C40000 at every Draw Distance, with the cut-off 0xADE0 at
+Original and 0x30000 above it; our tags stop 0x400 before the cut-off
+(`btga_interp_matrix_load`). So past the cut-off there are 0x35000 bytes
+(Original) or 0x10000 (extended) for what follows.
+
+**Measured** (sandbox, temporary probes: four ports reported connected and
+port 1's input mirrored to all four, so PLAYERS 4 and four human players;
+Tank Wars, Convoy, Arizona - Truck Stop; the main list sampled at the
+walkers' ends):
+- Original Draw Distance: peak 0x8810 with our tags, 0x63E8 without (tags
+  about +40%), under the 0xADE0 cut-off.
+- Map Edge: peak 0xE130, inside the 0x40000 buffer and under the 0x30000
+  cut-off (it would have passed the game's own 0xAEE0 without round 161).
+- Mtx pool: peak 0x2C40 of 0xC000.
+- Memory over 3 minutes of a 4-player match at Map Edge: 727 to 736 MB,
+  level; the match kept running.
+
+**Result:** no change. Global Assault's main list is bigger, its writers
+check the length, and it already has round 161's larger buffers. No
+CHANGELOG.md in this repo; the round is logged here.
+
+## 2026-11-12, round 190: building flicker and the Annihilator (not reproduced)
+
+**Reports** (GitHub): issue 7, some buildings flicker in plain sight with an
+extended draw distance, especially on the Europe maps; issue 4 reopened, the
+Annihilator's turret and guns flicker briefly when firing. Both most likely
+with frame interpolation on.
+
+**Annihilator:** not reachable here: it isn't in mission 1's Change Tank list
+with All Tanks All Levels on, Tank Wars has no tank select, and the Hacks
+code only renames "Tank Boss A". Checked the likeliest cause instead, a
+tank building its hull or turret matrix twice in a frame when firing (only
+extra parts get an ID per copy; a second hull/turret Mtx would share the
+ID, and `id_for` drops a shared ID to automatic matching): driving and
+firing the Rattler, Goliath and M1A1 in mission 1, 0 of about 460,000
+hull/turret queues hit an ID already used that frame. So it's specific to
+the Annihilator's model.
+
+**Buildings** (Tank Wars, Paris - Eiffel Tower, Very Far and Map Edge, fog off;
+the sandbox needs Framerate Manual 60, since Xvfb reports refresh 0 and
+Display then makes no in-between frames):
+- Standing still at six headings: no buildings change between frames.
+- Draw limits: mesh items peaked at 1,303 of 8,192 (round 161's pools).
+- Interpolation IDs: almost every loaded matrix has an ID (at most 71 per
+  100 frames left automatic), and none of 11,000-15,000 tagged loads per 60
+  frames jumped more than 400 units under the same ID (the matrices are
+  world transforms, so a standing building's doesn't change), apart from the
+  tanks moved to their spawn points at the start.
+
+Not found. Needs the reporter's map, Draw Distance, Fog and Framerate
+settings, ideally a clip. Round 115's mechanism (RT64 discards depth past
+1022/1024; the game's fog hides that edge) remains a candidate with Fog off.
 
 ## 2026-11-10, round 189: 0.1.10
 

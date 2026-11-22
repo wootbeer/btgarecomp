@@ -40,6 +40,16 @@ foreach (prefix IN ITEMS "${CMAKE_SOURCE_DIR}" "${BTGA_SOURCE_DIR_NATIVE}")
     endif()
 endforeach()
 
+# Windows Release builds: line tables in BattleTanxGARecompiled.pdb beside the
+# exe, so the crash log's host call stack (src/main/crash_handler.cpp)
+# resolves for a release kept with its .pdb (tools/package-windows.ps1 keeps
+# it in dist\, outside the zip). Not for the recompiled game code
+# (RecompiledFuncs): the log names those functions itself.
+if (MSVC)
+    # /Z7 with clang's line tables only (clang-cl has no /Zd).
+    add_compile_options($<$<CONFIG:Release>:/Z7> $<$<CONFIG:Release>:/clang:-gline-tables-only>)
+endif()
+
 # Opt out of constexpr mutex constructor on windows to prevent vcredist issues
 if (WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR")
@@ -93,6 +103,19 @@ btga_apply_lib_patches(N64Recomp lib/N64ModernRuntime/N64Recomp)
 # The menu (headings on the Cheats tab; on Android, the hidden Open Mods Folder button and others).
 btga_apply_lib_patches(RecompFrontend)
 
+# Netplay (src/netplay/, include/btga_netplay.h): online play in lockstep, which needs the
+# runtime's deterministic mode (lib-patches/N64ModernRuntime/, off unless netplay or its sync
+# test turns it on). Kept to its own folder so a build without it (Android) just sets this off.
+# Off by default on Android: its web requests go through curl, which Android doesn't have.
+if (ANDROID)
+    option(BTGA_NETPLAY "Build netplay (online play)." OFF)
+else()
+    option(BTGA_NETPLAY "Build netplay (online play)." ON)
+endif()
+if (BTGA_NETPLAY)
+    btga_apply_lib_patches(N64ModernRuntime)
+endif()
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/rt64 ${CMAKE_BINARY_DIR}/rt64)
 
 # Lossless Scaling frame generation (lib/lsfg, round 177): the library on plume's Vulkan,
@@ -139,6 +162,9 @@ target_compile_options(RecompiledFuncs PRIVATE
     # Declarations for the [[patches.hook]] text in battletanx.us.rev0.toml.
     ${BTGA_RECOMP_HOOKS_FORCE_INCLUDE}
 )
+if (MSVC)
+    target_compile_options(RecompiledFuncs PRIVATE $<$<CONFIG:Release>:/clang:-g0>)
+endif()
 
 target_include_directories(RecompiledFuncs PRIVATE
     ${CMAKE_SOURCE_DIR}/include
@@ -281,6 +307,30 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/src/game/*.cpp
     ${CMAKE_SOURCE_DIR}/rsp/*.cpp
 )
+if (BTGA_NETPLAY)
+    file(GLOB_RECURSE NETPLAY_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/netplay/*.cpp)
+    if (NETPLAY_SOURCES AND SOURCES)
+        list(APPEND SOURCES ${NETPLAY_SOURCES})
+        target_compile_definitions(BattleTanxGARecompiled PRIVATE BTGA_NETPLAY)
+        if (WIN32)
+            target_link_libraries(BattleTanxGARecompiled PRIVATE Ws2_32.lib Winhttp.lib)
+        endif()
+        # Netplay's build check: everyone needs the same build. The last commit
+        # that changed the game's code or data.
+        find_package(Git QUIET)
+        if (GIT_FOUND)
+            execute_process(
+                COMMAND "${GIT_EXECUTABLE}" -c safe.directory=* log -1 --format=%h --abbrev=12 HEAD -- src include lib lib-patches
+                    patches patches.toml cmake CMakeLists.txt battletanxga.us.rev0.toml n_aspMain.us.rev0.toml BattleTanxGASyms assets
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                OUTPUT_VARIABLE BTGA_BUILD_ID OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        endif()
+        if (NOT BTGA_BUILD_ID)
+            set(BTGA_BUILD_ID "unknown")
+        endif()
+        target_compile_definitions(BattleTanxGARecompiled PRIVATE BTGA_BUILD_ID="${BTGA_BUILD_ID}")
+    endif()
+endif()
 
 # src/main/register_overlays.cpp #includes RecompiledFuncs/recomp_overlays.inl,
 # which (like the rest of RecompiledFuncs/) doesn't exist yet on a fresh
@@ -377,6 +427,10 @@ endif()
 if (MSVC)
     # Disable identical code folding, since this breaks mod function patching as multiple functions can get merged into one.
     target_link_options(BattleTanxGARecompiled PRIVATE /OPT:NOICF)
+    # The .pdb for Release (see /Z7 above). /DEBUG would turn off /OPT:REF,
+    # so it's kept; only the .pdb's file name goes into the exe, not the
+    # build machine's folder.
+    target_link_options(BattleTanxGARecompiled PRIVATE $<$<CONFIG:Release>:/DEBUG> $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/PDBALTPATH:BattleTanxGARecompiled.pdb>)
 elseif (APPLE)
     # Use a wrapper around ld64 that respects segprot's `max_prot` value in order
     # to make our executable memory writable (required for mod function patching)
@@ -431,7 +485,8 @@ if (WIN32)
     if (EXISTS ${CMAKE_SOURCE_DIR}/icons/app.res)
         target_link_libraries(BattleTanxGARecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.res)
     endif()
-    target_link_libraries(BattleTanxGARecompiled PRIVATE SDL2 Winmm.lib)
+    # Urlmon: Add to Steam downloads its artwork (src/main/steam_shortcut.cpp).
+    target_link_libraries(BattleTanxGARecompiled PRIVATE SDL2 Winmm.lib Urlmon.lib)
 endif()
 
 if (APPLE)

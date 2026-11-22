@@ -1,0 +1,16 @@
+diff --git a/src/shaders/RasterPS.hlsl b/src/shaders/RasterPS.hlsl
+index e7895c3..51a873b 100644
+--- a/src/shaders/RasterPS.hlsl
++++ b/src/shaders/RasterPS.hlsl
+@@ -68,7 +68,10 @@ LIBRARY_EXPORT bool RasterPS(const RenderParams rp, float4 vertexPosition, float
+     // in a wider range of values. Not accounting for this can lead to geometry showing up that should otherwise be invisible.
+     // This max range was determined by using a test ROM against an LLE implementation.
+     // FIXME: This should be turned off for non-F3D microcodes.
+-    const bool simulateDepthClipF3D = true;
++    // BattleTanx GA: off. Its fog (gSPFogPosition(995, 1000)) is only about 60% thick at this depth,
++    // so distant scenery was cut off while still visible and flickered at the fog line as the camera moved
++    // (and with the Fog option off, cut off sharply). Emulators that don't copy the quirk fade it into the fog.
++    const bool simulateDepthClipF3D = false;
+     const float MaxDepth = simulateDepthClipF3D && !renderFlagRect(rp.flags) && !zSourcePrim ? (1022.0f / 1024.0f) : 1.0f;
+     
+     // FIXME: This can be implemented by checking feature support for the API and embedding the depth bounds into the pipeline.

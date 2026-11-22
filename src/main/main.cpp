@@ -7,11 +7,13 @@
 // RecompFrontend loads itself), each with its license in assets/, and our
 // own icons (tools/make_icons.py).
 //
-// Not done yet: no mod/texture-pack content types and no launcher menu
-// customization (the library's default_launcher_init_callback runs; on
-// Android src/android/android_launcher.cpp adds Change ROM to it).
+// The launcher menu is the library's default plus Netplay (when built in);
+// on Android src/android/android_launcher.cpp's: the default plus Change ROM.
 
 #include <algorithm>
+#include <atomic>
+#include <optional>
+#include <thread>
 #include <cstdio>
 #include <cstdlib>
 #include <cinttypes>
@@ -38,6 +40,7 @@
 
 #include "btga_android.h"
 #include "recompui/recompui.h"
+#include "base/ui_launcher.h"
 #include "recompui/program_config.h"
 #include "recompui/renderer.h"
 #include "recompui/config.h"
@@ -53,7 +56,11 @@
 #include "librecomp/helpers.hpp"
 
 #include "btga_config.h"
+#include "btga_steam.h"
 #include "btga_cheats.h"
+#include "btga_command_line.h"
+#include "btga_netplay.h"
+#include "btga_restart.h"
 
 #if defined(BTGA_HAS_APP_ICON)
 #include "icon_bytes.h"
@@ -77,7 +84,7 @@ namespace btga {
 
 static const std::string program_name = "BattleTanx: Global Assault Recompiled";
 static const std::u8string program_id = u8"btgarecomp";
-static const std::string version_string = "0.1.10";
+static const std::string version_string = "0.1.13";
 
 template <typename... Ts>
 [[noreturn]] static void exit_error(const char* fmt, Ts... args) {
@@ -120,10 +127,41 @@ SDL_Window* window = nullptr;
 static ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
 
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+    // Windows: work in the screen's real pixels. Without this, at a display
+    // scale above 100% (a TV at 300% or so) Windows stretches the window while
+    // the renderer's swap chain is sized in real pixels, and the picture comes
+    // out bigger than the screen and cropped (the Rage Wars port's round 144).
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+
+    // The community controller list (assets/gamecontrollerdb.txt, from
+    // SDL_GameControllerDB), for pads SDL doesn't know itself (an 8BitDo
+    // Ultimate 2C in its DirectInput mode): only pads SDL knows are used.
+    // Given before SDL starts, so the pads already connected are announced
+    // as controllers; added after, they weren't, and went unused (the Rage
+    // Wars port's round 144).
+    std::string controller_db = "assets/gamecontrollerdb.txt";
+    if (char* base = SDL_GetBasePath()) {
+        std::string beside = std::string(base) + controller_db;
+        SDL_free(base);
+        if (std::filesystem::exists(beside)) {
+            controller_db = beside;
+        }
+    }
+    SDL_SetHint(SDL_HINT_GAMECONTROLLERCONFIG_FILE, controller_db.c_str());
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) != 0) {
         exit_error("Failed to initialize SDL2: %s", SDL_GetError());
+    }
+    fprintf(stderr, "[BTGA] controller mappings from %s: %d known in all\n", controller_db.c_str(), SDL_GameControllerNumMappings());
+    // What SDL finds, for when a controller isn't picked up: only those it
+    // takes as game controllers are used.
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        char guid[64];
+        SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(i), guid, sizeof(guid));
+        const char* name = SDL_JoystickNameForIndex(i);
+        fprintf(stderr, "[BTGA] joystick %d: %s (%s)%s\n", i, name != nullptr ? name : "?", guid,
+            SDL_IsGameController(i) ? "" : " - not a known game controller, not used");
     }
 
     return {};
@@ -171,11 +209,28 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
     flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 #endif
 
-    window = SDL_CreateWindow(program_name.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, flags);
+    // 16:9, two thirds of the screen's height (in real pixels, so not tiny
+    // on a 4K screen), at least 1280 x 720 where that fits.
+    int window_w = 1280, window_h = 720;
+    SDL_Rect usable;
+    if (SDL_GetDisplayUsableBounds(0, &usable) == 0 && usable.h > 0) {
+        window_h = std::max(720, usable.h * 2 / 3);
+        window_w = window_h * 16 / 9;
+        if (window_w > usable.w * 9 / 10) {
+            window_w = usable.w * 9 / 10;
+            window_h = window_w * 9 / 16;
+        }
+    }
+    window = SDL_CreateWindow(program_name.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, window_w, window_h, flags);
     if (window == nullptr) {
         exit_error("Failed to create window: %s", SDL_GetError());
     }
     set_window_icon(window);
+    // In front, with the keyboard: Windows 11 can leave a new window behind
+    // others (Explorer's) when another had the focus meanwhile; the hint
+    // makes SDL take it (the Rage Wars port's round 186).
+    SDL_SetHint(SDL_HINT_FORCE_RAISEWINDOW, "1");
+    SDL_RaiseWindow(window);
 
 #if defined(_WIN32)
     SDL_SysWMinfo wm_info;
@@ -326,9 +381,34 @@ static void set_frequency(uint32_t frequency) {
 // Rumble Pak here; that only sets "something is plugged in" in the status
 // the game queries. What it finds when it probes is decided per port by
 // src/game/controller_pak_hle.cpp's osPfsInitPak.
+// The controls (and the mouse stick), then netplay's say (include/btga_netplay.h).
+#if defined(__ANDROID__)
+// Player 1 also gets the on-screen touch controls, unless one of the game's menus has the input.
+static bool get_n64_input_with_touch(int player_index, uint16_t* buttons_out, float* x_out, float* y_out) {
+    const bool got = btga::get_n64_input_with_mouse(player_index, buttons_out, x_out, y_out);
+    if ((player_index == 0) && !recompinput::game_input_disabled()) {
+        btga::android::add_touch_input(buttons_out, x_out, y_out);
+    }
+    return got;
+}
+#endif
+
+static bool get_input(int controller_num, uint16_t* buttons, float* x, float* y) {
+#if defined(__ANDROID__)
+    const bool answered = get_n64_input_with_touch(controller_num, buttons, x, y);
+#else
+    const bool answered = btga::get_n64_input_with_mouse(controller_num, buttons, x, y);
+#endif
+    return btga::netplay::controller_read(controller_num, answered, buttons, x, y);
+}
+
 static ultramodern::input::connected_device_info_t get_connected_device_info(int controller_num) {
     size_t ports = 1;
-    if (!recompinput::players::is_single_player_mode()) {
+    if (btga::netplay::session_players() > 0) {
+        // Online: one per player in the session, each driven over the network.
+        ports = (size_t)btga::netplay::session_players();
+    }
+    else if (!recompinput::players::is_single_player_mode()) {
         ports = std::max<size_t>(1, recompinput::players::get_number_of_assigned_players());
     }
     if (controller_num < 0 || (size_t)controller_num >= ports) {
@@ -344,16 +424,6 @@ static ultramodern::input::connected_device_info_t get_connected_device_info(int
     };
 }
 
-#if defined(__ANDROID__)
-// Player 1 also gets the on-screen touch controls, unless one of the game's menus has the input.
-static bool get_n64_input_with_touch(int player_index, uint16_t* buttons_out, float* x_out, float* y_out) {
-    const bool got = btga::get_n64_input_with_mouse(player_index, buttons_out, x_out, y_out);
-    if ((player_index == 0) && !recompinput::game_input_disabled()) {
-        btga::android::add_touch_input(buttons_out, x_out, y_out);
-    }
-    return got;
-}
-#endif
 
 // --- Misc callbacks -----------------------------------------------------
 
@@ -426,10 +496,148 @@ void btga_report_fatal_error(const char* message);
     std::abort();
 }
 
+#if !defined(__ANDROID__)
+// Add to Steam (src/main/steam_shortcut.cpp, from the Rage Wars port): it
+// closes Steam first when it's running, which takes a few seconds, so that
+// runs on its own thread, and the launcher's update callback shows the
+// outcome.
+namespace {
+    enum class SteamJob { Idle, Running, Done };
+    std::atomic<SteamJob> steam_job{ SteamJob::Idle };
+    std::mutex steam_job_mutex;
+    btga::steam::Result steam_job_result;
+
+    void show_steam_result(const btga::steam::Result& result) {
+        if (!result.ok) {
+            recompui::open_info_prompt("Add to Steam", result.error, "OK", nullptr);
+            return;
+        }
+        recompui::open_choice_prompt(
+            "Add to Steam",
+            std::string(result.added ? "The game was added to your Steam library" : "The game's Steam shortcut was updated") +
+                " as a non-Steam game" + (result.art > 0 ? ", with its artwork" : "") + ". Open Steam now?",
+            "Open Steam", "Not now",
+            [] { btga::steam::open_steam(); }, nullptr,
+            recompui::ButtonStyle::Success, recompui::ButtonStyle::Tertiary, false);
+    }
+
+    void add_to_steam(btga::steam::Location location, bool close_first) {
+        steam_job = SteamJob::Running;
+        std::thread([location, close_first] {
+            btga::steam::Result result;
+            if (close_first && !btga::steam::close_steam_and_wait(20)) {
+                result.error = "Steam didn't close. Close it yourself (Steam > Exit) and try again.";
+            }
+            else {
+                result = btga::steam::add_shortcut(location);
+            }
+            {
+                std::lock_guard lock{ steam_job_mutex };
+                steam_job_result = result;
+            }
+            steam_job = SteamJob::Done;
+        }).detach();
+    }
+
+    void on_add_to_steam() {
+        if (steam_job != SteamJob::Idle) {
+            return;
+        }
+        if (btga::steam::started_from_steam()) {
+            recompui::open_info_prompt("Add to Steam", "The game was started from Steam, so it's in your library already.", "OK", nullptr);
+            return;
+        }
+        std::optional<btga::steam::Location> location = btga::steam::locate();
+        if (!location) {
+            recompui::open_info_prompt("Add to Steam", "Steam wasn't found on this computer.", "OK", nullptr);
+            return;
+        }
+        if (btga::steam::steam_running()) {
+            recompui::open_choice_prompt(
+                "Add to Steam",
+                "Steam has to be closed while the game is added (it rewrites its list of games when it exits). "
+                "Close Steam now? It can be opened again afterwards.",
+                "Close Steam", "Cancel",
+                [location] {
+                    recompui::open_notification("Add to Steam", "Closing Steam...");
+                    add_to_steam(*location, true);
+                }, nullptr,
+                recompui::ButtonStyle::Success, recompui::ButtonStyle::Tertiary, false);
+            return;
+        }
+        add_to_steam(*location, false);
+    }
+}
+
+// The launcher's menu: Start Game, Netplay (when it's built in), Settings,
+// Add to Steam and Exit. Controls and Mods only opened Settings at their tabs,
+// which are still there; without them the menu stays clear of the title (the
+// Rage Wars port's rounds 142 and 143). The title is 25% from the top and the
+// menu 25% from the bottom (the frontend's), well inside the edges a TV may
+// crop.
+static void launcher_init(recompui::LauncherMenu* menu) {
+    const recomp::GameEntry& game = supported_games[0];
+    recompui::GameOptionsMenu* options = menu->init_game_options_menu(
+        game.game_id, game.mod_game_id, game.display_name, game.thumbnail_bytes, recompui::GameOptionsMenuLayout::Center);
+    recompui::update_game_mod_id(game.mod_game_id);
+    // Entries a little slimmer than the frontend's (16 above and below).
+    auto slim = [](recompui::GameOption* option) {
+        option->set_padding_top(11.0f);
+        option->set_padding_bottom(11.0f);
+    };
+    slim(options->add_start_game_or_load_rom_option());
+    if (btga::netplay::kLauncherEntry) {
+        slim(options->add_option("Netplay", [] { btga::netplay::open_screen(supported_games[0].game_id); }));
+    }
+    slim(options->add_settings_option());
+    slim(options->add_option("Add to Steam", on_add_to_steam));
+    slim(options->add_exit_option());
+}
+
+static void launcher_update(recompui::LauncherMenu*) {
+    if (steam_job == SteamJob::Done) {
+        btga::steam::Result result;
+        {
+            std::lock_guard lock{ steam_job_mutex };
+            result = steam_job_result;
+        }
+        steam_job = SteamJob::Idle;
+        show_steam_result(result);
+    }
+#ifdef _WIN32
+    // In front once the launcher shows (the start can take a while, and
+    // Windows hands the focus to what was clicked meanwhile): with the
+    // foreground window's thread input attached, as SDL's hint does.
+    static int frames_to_front = 10;
+    if (frames_to_front > 0 && --frames_to_front == 0 && window != nullptr) {
+        SDL_SysWMinfo wm_info;
+        SDL_VERSION(&wm_info.version);
+        if (SDL_GetWindowWMInfo(window, &wm_info)) {
+            HWND hwnd = wm_info.info.win.window;
+            HWND front = GetForegroundWindow();
+            DWORD front_thread = front != nullptr ? GetWindowThreadProcessId(front, nullptr) : 0;
+            DWORD own_thread = GetCurrentThreadId();
+            bool attached = front_thread != 0 && front_thread != own_thread && AttachThreadInput(front_thread, own_thread, TRUE);
+            BringWindowToTop(hwnd);
+            SetForegroundWindow(hwnd);
+            if (attached) {
+                AttachThreadInput(front_thread, own_thread, FALSE);
+            }
+        }
+    }
+#endif
+    btga::cli::launcher_update(supported_games[0].game_id, supported_games[0].mod_game_id);
+    btga::netplay::launcher_update(supported_games[0].game_id);
+}
+
+#endif // !__ANDROID__
+
 int main(int argc, char** argv) {
 #if defined(__ANDROID__)
     btga::android::startup();
 #endif
+    btga::cli::parse(argc, argv, version_string);
+    btga::netplay::command_line(argc, argv);
     std::set_terminate(report_unhandled_exception_and_abort);
 
     // Controller defaults: Z (the main gun) on the right trigger and R on the left, the other way
@@ -445,6 +653,7 @@ int main(int argc, char** argv) {
         { recompinput::InputField::keyboard(SDL_SCANCODE_Q), recompinput::InputField{ recompinput::InputType::Mouse, SDL_BUTTON_LEFT } });
     recompinput::set_default_mapping_for_keyboard(recompinput::GameInput::R,
         { recompinput::InputField::keyboard(SDL_SCANCODE_R), recompinput::InputField{ recompinput::InputType::Mouse, SDL_BUTTON_RIGHT } });
+    btga::netplay::set_control_defaults(); // Chat
 
     recomp::Version project_version{};
     if (!recomp::Version::from_string(version_string, project_version)) {
@@ -459,6 +668,8 @@ int main(int argc, char** argv) {
 
     recompui::programconfig::set_program_name(program_name);
     recompui::programconfig::set_program_id(program_id);
+    // Before anything reads the app folder.
+    btga::cli::default_to_portable();
 
     SDL_InitSubSystem(SDL_INIT_AUDIO);
     if (!open_audio_device(game_frequency)) {
@@ -507,12 +718,24 @@ int main(int argc, char** argv) {
     }
     btga::cheats::add_cheats_tabs();
     recompui::config::create_mods_tab();
+    btga::netplay::create_menu_tab();
     recompui::config::finalize();
     btga::init_mouse_stick();
+    // Settings and the ROM from the command line, after the saved ones load.
+    btga::cli::apply_after_config(supported_games[0].game_id);
+
+    // Netplay's testing switches (and its session, once the launcher can
+    // start one): after the settings are loaded, before the game runs.
+#ifndef BTGA_BUILD_ID
+#define BTGA_BUILD_ID "unknown"
+#endif
+    btga::netplay::startup((version_string + " " + BTGA_BUILD_ID).c_str());
 
     // Read from the just-loaded config; takes effect on the next launch if
     // changed in the menu.
-    if (btga::config::get_local_multiplayer()) {
+    // Online, this PC's controls are its own player's (netplay puts them on
+    // the right port).
+    if (btga::config::get_local_multiplayer() && !btga::netplay::session_active()) {
         recompinput::players::set_single_player_mode(false);
     }
 
@@ -523,7 +746,8 @@ int main(int argc, char** argv) {
     ultramodern::renderer::callbacks_t renderer_callbacks{
         .create_render_context = [](uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode) {
             auto presentation_mode = ultramodern::renderer::PresentationMode::PresentEarly;
-            return recompui::renderer::create_render_context(rdram, window_handle, presentation_mode, developer_mode);
+            return btga::netplay::wrap_renderer(rdram,
+                recompui::renderer::create_render_context(rdram, window_handle, presentation_mode, developer_mode));
         },
     };
 
@@ -541,11 +765,7 @@ int main(int argc, char** argv) {
 
     ultramodern::input::callbacks_t input_callbacks{
         .poll_input = recompinput::poll_inputs,
-#if defined(__ANDROID__)
-        .get_input = get_n64_input_with_touch,
-#else
-        .get_input = btga::get_n64_input_with_mouse,
-#endif
+        .get_input = get_input,
         .set_rumble = recompinput::set_rumble,
         .get_connected_device_info = get_connected_device_info,
     };
@@ -563,11 +783,14 @@ int main(int argc, char** argv) {
         .get_game_thread_name = get_game_thread_name,
     };
 
-    // recompui's own default launcher menu is used (see file-level comment);
-    // on Android the same one plus Change ROM.
 #if defined(__ANDROID__)
+    // On Android its own launcher menu (Change ROM; no Netplay or Add to Steam).
     btga::android::register_launcher();
+#else
+    recompui::register_launcher_init_callback(launcher_init);
+    recompui::register_launcher_update_callback(launcher_update);
 #endif
+    btga::restart::install(argc, argv);
 
     recomp::start({
         .argc = argc,
@@ -595,6 +818,8 @@ int main(int argc, char** argv) {
     // returns, so running static destructors/atexit handlers underneath
     // them can crash on quit -- exit directly instead (same approach as
     // other N64Recomp projects' main()).
+    btga::netplay::quitting();
+    btga::restart::relaunch_if_requested();
     fflush(stdout);
     fflush(stderr);
     std::_Exit(EXIT_SUCCESS);

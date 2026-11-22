@@ -42,7 +42,7 @@ cd "$(dirname "$(readlink -f "$0")")" && exec ./BattleTanxGARecompiled "$@"
 EOF
 chmod 755 "$stage/BattleTanxGARecompiled.sh"
 cp -r assets "$stage/"
-cp README.md SOUND_PACKS.md COPYING "$stage/"
+cp README.md SOUND_PACKS.md COMMAND_LINE.md COPYING "$stage/"
 
 # License notices for the third-party code built into the binary.
 licenses=(
@@ -68,6 +68,7 @@ licenses=(
     "plutovg:lib/RecompFrontend/recompui/lib/lunasvg/plutovg/LICENSE"
     "GamepadMotionHelpers:lib/RecompFrontend/lib/GamepadMotionHelpers/LICENSE"
     "SlotMap:lib/SlotMap/README.md"
+    "SDL_GameControllerDB:licenses/SDL_GameControllerDB.txt"
     # Lossless Scaling frame generation (lib/lsfg): lsfg-vk's passes, DXVK's shader compiler, SPIR-V headers.
     "lsfg-vk:lib/lsfg/LICENSE-lsfg-vk.md"
     "DXVK:lib/lsfg/LICENSE-dxvk.txt"

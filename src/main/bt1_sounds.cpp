@@ -35,6 +35,7 @@
 //   none of those loop).
 //
 // Nothing in the game's code changes.
+#include "btga_netplay.h"
 #include "btga_config.h"
 
 #include <algorithm>
@@ -297,7 +298,8 @@ void btga::config::add_bt1_sounds_option(recomp::config::Config& sound) {
 // The game entry's on_init_callback: after the ROM is loaded, before the game
 // runs.
 void btga::apply_bt1_sounds(uint8_t* rdram, recomp_context*) {
-    if (!enabled()) {
+    // Off online (src/netplay/settings.h): every PC's game needs the same sounds.
+    if (!enabled() || btga::netplay::session_active()) {
         return;
     }
     std::vector<uint8_t> saved;

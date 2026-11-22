@@ -1,0 +1,31 @@
+diff --git a/recompui/include/recompui/renderer.h b/recompui/include/recompui/renderer.h
+--- a/recompui/include/recompui/renderer.h
++++ b/recompui/include/recompui/renderer.h
+@@ -29,6 +29,9 @@
+             void send_dl(const OSTask *task) override;
+             void send_dummy_workload(uint32_t fb_address) override;
+             void update_screen() override;
++            // The last frame presented again, with what's drawn over it (the
++            // game waiting and sending no frames of its own).
++            void update_screen_held();
+             void shutdown() override;
+             uint32_t get_display_framerate() const override;
+             float get_resolution_scale() const override;
+diff --git a/recompui/src/renderer/rt64_render_context.cpp b/recompui/src/renderer/rt64_render_context.cpp
+--- a/recompui/src/renderer/rt64_render_context.cpp
++++ b/recompui/src/renderer/rt64_render_context.cpp
+@@ -360,6 +360,14 @@
+     app->updateScreen();
+ }
+ 
++void renderer::RT64Context::update_screen_held() {
++    // RT64 repeats the last workload and present while its debugger pauses;
++    // paused only for this call, so no display list is ever skipped.
++    app->state->debuggerInspector.paused = true;
++    app->updateScreen();
++    app->state->debuggerInspector.paused = false;
++}
++
+ void renderer::RT64Context::shutdown() {
+     if (app != nullptr) {
+         app->end();

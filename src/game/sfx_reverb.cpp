@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdint>
 
+#include "btga_netplay.h"
 #include "recomp.h"
 
 #include "btga_config.h"
@@ -54,7 +55,8 @@ void btga::set_sfx_reverb(bool on, double percent) {
 // n_alEnvmixerPull before 0x801003C0: $a0 is an FX mix update (the mix at
 // +0xC), $s0 the voice.
 extern "C" void btga_sfx_reverb(uint8_t* rdram, recomp_context* ctx) {
-    if (!enabled.load()) {
+    // Off online (src/netplay/settings.h): it's in the game's own synth.
+    if (!enabled.load() || btga::netplay::session_active()) {
         return;
     }
     const uint32_t wave = (uint32_t)MEM_W(0x20, ctx->r16);

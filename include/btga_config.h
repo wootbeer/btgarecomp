@@ -54,6 +54,8 @@ namespace btga::config {
 namespace btga {
     void set_widescreen_scale(float scale);
     float get_widescreen_scale();
+    // This window's own (get_widescreen_scale is the online session's, in one).
+    float window_widescreen_scale();
 
     // The game entry's on_init_callback (src/main/bt1_sounds.cpp): swaps in
     // the first game's sound effects when that option is on.
@@ -71,6 +73,13 @@ namespace btga {
     // 0 Original, 1 Far, 2 Very Far, 3 Map Edge.
     void set_draw_distance(int level);
     int draw_distance_level();
+    // The Graphics tab's own (draw_distance_level is the online session's, in one).
+    int draw_distance_setting();
+    // Steady Distant Scenery (src/game/steady_scenery.cpp): the Graphics tab's
+    // own, and the one in use (the online session's, in one).
+    void set_steady_scenery(bool on);
+    bool steady_scenery_setting();
+    bool steady_scenery();
 
     // Sound tab: Sound Effects Reverb (src/game/sfx_reverb.cpp), amount 0-100.
     void set_sfx_reverb(bool on, double percent);

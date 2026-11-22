@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "btga_netplay.h"
 #include "btga_cheats.h"
 #include "recomp.h"
 
@@ -434,6 +435,10 @@ const std::vector<Cheat>& btga::cheats::list() {
     return list;
 }
 
+uint32_t btga::cheats::get_value(size_t index) {
+    return index < wanted().size() ? wanted()[index].load() : 0;
+}
+
 void btga::cheats::set_value(size_t index, uint32_t value) {
     if (index < wanted().size()) {
         wanted()[index].store(value);
@@ -456,7 +461,7 @@ extern "C" void btga_cheats_frame(uint8_t* rdram) {
     for (size_t i = 0; i < entries().size(); i++) {
         const Entry& e = entries()[i];
         Applied& state = applied[i];
-        uint32_t value = wanted()[i].load();
+        uint32_t value = btga::netplay::cheat_value(i, wanted()[i].load());
         if (value != state.value) {
             restore_bytes(rdram, state);
             if (e.flag_size != 0 && value == 0) {
@@ -481,7 +486,8 @@ extern "C" int btga_cheat(int hook) {
     if (hook < 0 || hook >= HookCount || hook_entries()[hook] < 0) {
         return 0;
     }
-    return (int)wanted()[hook_entries()[hook]].load();
+    const size_t index = (size_t)hook_entries()[hook];
+    return (int)btga::netplay::cheat_value(index, wanted()[index].load());
 }
 
 // Before the pickup jump table in func_8008ECB4 (0x8008ECF0): the case to run

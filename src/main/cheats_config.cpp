@@ -28,6 +28,9 @@ namespace {
 
 void btga::cheats::add_cheats_tabs() {
     recompui::config::create_config_tab("Cheats", cheats_id, false);
+    // F2 opens the menu here (RecompFrontend patch 0019; a netplay session
+    // moves it to the Netplay tab, src/netplay/online_menu.cpp).
+    recompui::config::set_hotkey_tab(cheats_id);
     recompui::config::create_config_tab("Hacks", hacks_id, false);
     const std::vector<Cheat>& all = list();
     for (size_t i = 0; i < all.size(); i++) {

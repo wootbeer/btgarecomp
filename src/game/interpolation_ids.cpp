@@ -55,9 +55,49 @@ namespace {
         // (round 171), and the ones that turned too far since the last frame.
         std::unordered_map<uint32_t, std::array<float, 9>> rotations;
         std::unordered_set<uint32_t> snap_rotation;
+        // Tank shadows (round 220): the Mtx a tank's shadow is queued with -> its ID.
+        std::unordered_map<uint32_t, uint32_t> shadow_id;
     };
     Generation generations[2];
     int current = 0;
+
+    // Tank shadows (round 220). Each tank's shadow, a flat black translucent quad
+    // under it (drawn without depth, in a bucket of its own right after the
+    // ground), is a queue record whose model display list sets the alpha
+    // (gDPSetPrimColor(0, 0, 0, 0, 0, a)) and branches to the quad. Its matrix
+    // comes either from the hull's Mtx (so it got the hull's ID, tank + 1) or
+    // from one built for it in the 0x8021B478 scratch (tank + 11 + 8 * k, the
+    // first of the tank's parts built there); a tank switched between the two
+    // now and then (in mission 1 about 40 times in three minutes, among all the
+    // tanks), and each switch paired the shadow with the wrong transform in
+    // the frame before: on the in-between frames it was blended from the hull
+    // or another part, or drawn unblended -- the shadows flickering. Counted
+    // among the scratch parts it also shifted the Rattler cannon's k. A shadow
+    // gets an ID of its own, the same in both cases: its tank + kShadowSlot
+    // (odd like the other tank IDs, above all of them: 11 + 8 * 15 = 131).
+    constexpr uint32_t kShadowSlot = 0x201;
+    constexpr uint32_t kTankObjects = 0x801AD128;
+    constexpr uint32_t kTankStride = 0x4CC;
+    constexpr uint32_t kTankCount = 64;
+
+    bool is_shadow_dl(uint8_t* rdram, uint32_t dl) {
+        if (dl < 0x80000000u || dl >= 0x80800000u - 0x10 || (dl & 7) != 0) {
+            return false;
+        }
+        const gpr d = (gpr)(int32_t)dl;
+        return (uint32_t)MEM_W(0x0, d) == 0xFA000000u && ((uint32_t)MEM_W(0x4, d) & 0xFFFFFF00u) == 0 &&
+               (uint32_t)MEM_W(0x8, d) == 0xDE010000u;
+    }
+
+    // The tank object a tank part's ID names (tank + an odd offset below
+    // kShadowSlot), or 0.
+    uint32_t tank_of_id(uint32_t id) {
+        if (id < kTankObjects || id >= kTankObjects + kTankCount * kTankStride || (id & 1) == 0) {
+            return 0;
+        }
+        const uint32_t offset = (id - kTankObjects) % kTankStride;
+        return (offset < kShadowSlot) ? id - offset : 0;
+    }
 
     uint32_t id_for(uint32_t mtx) {
         for (int g = 0; g < 2; g++) {
@@ -77,6 +117,8 @@ namespace {
     // the Mtx it has queued so far in this draw, and how many parts each
     // object drew in the last three frames.
     uint32_t draw_object = 0;
+    // The tank whose hull or turret this draw has queued so far (round 195), or 0.
+    uint32_t draw_tank = 0;
     std::vector<uint32_t> draw_parts;
     std::unordered_map<uint32_t, uint32_t> object_parts[3];
     int object_parts_current = 0;
@@ -224,9 +266,18 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
             // rest came this way, so their parts had no tank ID.
             object = (uint32_t)MEM_W(0x64, drawer_sp);
         }
+        if ((object >= 0x80000000u) && (object < 0x80800000u) && ((object & 3) == 0) &&
+            is_shadow_dl(rdram, (uint32_t)ctx->r30)) {
+            // The record's model display list ($fp): a tank's shadow (above id_for).
+            generations[current].shadow_id[mtx] = object + kShadowSlot;
+            return;
+        }
         if ((object >= 0x80000000u) && (object < 0x80800000u) && ((object & 3) == 0)) {
             // Odd, so never the address of an Mtx or float matrix used as an ID; all
             // below the next tank (0x4CC on).
+            if (draw_object != 0) {
+                draw_tank = object;
+            }
             if (hull_or_turret) {
                 source = object | ((float_source == 0x8021B2A0u) ? 1u : 3u);
             }
@@ -251,11 +302,39 @@ extern "C" void btga_interp_queue_mtx(uint8_t* rdram, recomp_context* ctx) {
     // the draw function's own stack frame is scratch shared by every object
     // of its kind (flying wreckage: func_800DA340's at sp+0x20), so the object
     // the loop is drawing names it, with the part's order within that draw.
+    //
+    // Round 195 (GitHub issue 4): the Annihilator boss is drawn this way, as one object: hull,
+    // turret, a flash part (tank + 5) only while it fires, then its two side guns, both built in
+    // one scratch matrix (0x8021B540). Counted among all the object's parts, the guns lost their
+    // IDs on the frames the part count changed, then came back shifted by one, each gun named
+    // as the other had been -- the guns and turret flickering when it fired. In a draw that has
+    // queued a tank's hull or turret, such parts are named by that tank instead, in the order
+    // they come among themselves (tank + 9 + 8 * k: odd, clear of the 1, 3, 5, 7 and 11 above).
     if ((draw_object != 0) && (source == float_source) && (float_source > (uint32_t)ctx->r29) &&
         (float_source < (uint32_t)ctx->r29 + 0x1000)) {
-        const uint32_t object_id = object_part_id(mtx);
-        if (object_id != 0) {
-            source = object_id;
+        if (draw_tank != 0) {
+            // Only the first time this frame: the hull's Mtx comes again for the tank's decal
+            // (it keeps the hull's ID, below), and counting it would shift the parts after it.
+            if (generations[current].mtx_source.count(mtx) != 0) {
+                return;
+            }
+            std::vector<uint32_t>& built = generations[current].extra_parts[draw_tank + 9u];
+            size_t k = 0;
+            while (k < built.size() && built[k] != mtx) {
+                k++;
+            }
+            if (k == built.size()) {
+                built.push_back(mtx);
+            }
+            if (k < 16) {
+                source = draw_tank + 9u + 8u * (uint32_t)k;
+            }
+        }
+        else {
+            const uint32_t object_id = object_part_id(mtx);
+            if (object_id != 0) {
+                source = object_id;
+            }
         }
     }
     Generation& gen = generations[current];
@@ -327,17 +406,20 @@ void btga_interp_new_frame() {
     generations[current].extra_parts.clear();
     generations[current].rotations.clear();
     generations[current].snap_rotation.clear();
+    generations[current].shadow_id.clear();
 }
 
 // func_800A1FDC, around each object's draw call (0x800A20F8 and after it): the
 // object record in $a0.
 extern "C" void btga_interp_draw_object_begin(uint8_t* rdram, recomp_context* ctx) {
     draw_object = (uint32_t)ctx->r4;
+    draw_tank = 0;
     draw_parts.clear();
 }
 
 extern "C" void btga_interp_draw_object_end(uint8_t* rdram, recomp_context*) {
     draw_object = 0;
+    draw_tank = 0;
 }
 
 // func_8007B65C, at L_8007B738: the start of one bucket's record list (the walker goes
@@ -353,10 +435,46 @@ extern "C" void btga_interp_bucket_start(uint8_t* rdram, recomp_context* ctx) {
     MEM_W(0x3C, ctx->r29) = 0;
 }
 
+namespace {
+    // Whether the last matrix load was for a tank shadow's record.
+    bool loaded_for_shadow = false;
+
+    // The ID for a record's matrix load: a tank shadow's own (above id_for), else
+    // the Mtx's.
+    uint32_t record_id(uint8_t* rdram, uint32_t record, uint32_t mtx) {
+        const uint32_t id = id_for(mtx);
+        if (!is_shadow_dl(rdram, (uint32_t)MEM_W(0x0, (gpr)(int32_t)record))) {
+            return id;
+        }
+        for (int g = 0; g < 2; g++) {
+            const Generation& gen = generations[(current + 2 - g) % 2];
+            auto it = gen.shadow_id.find(mtx);
+            if (it != gen.shadow_id.end()) {
+                return it->second;
+            }
+        }
+        // Queued some way the queue hook didn't know the tank: by the hull's ID.
+        const uint32_t tank = tank_of_id(id);
+        return (tank != 0) ? tank + kShadowSlot : id;
+    }
+}
+
+// func_8007B65C, at L_8007B7A4 (the walker about to compare the record's Mtx, $s1 the
+// record, with the last one loaded): a shadow and its tank's hull can share one Mtx but
+// not one ID, so going from one to the other forces a load (and its matrix group).
+extern "C" void btga_interp_record_start(uint8_t* rdram, recomp_context* ctx) {
+    const uint32_t record = (uint32_t)ctx->r17;
+    if (is_shadow_dl(rdram, (uint32_t)MEM_W(0x0, (gpr)(int32_t)record)) != loaded_for_shadow) {
+        MEM_W(0x3C, ctx->r29) = 0;
+    }
+}
+
 // func_8007B65C, before 0x8007B7B4 (ahead of the gSPMatrix through func_8007AC34): $v0 is
-// the record's Mtx.
+// the record's Mtx, $s1 the record.
 extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
     const uint32_t mtx = (uint32_t)ctx->r2;
+    const uint32_t record = (uint32_t)ctx->r17;
+    loaded_for_shadow = is_shadow_dl(rdram, (uint32_t)MEM_W(0x0, (gpr)(int32_t)record));
     // The walker stops drawing once the head passes the limit at 0x5C($sp) (buffer base +
     // 0xADE0, 0x100 short of its end). Don't start tagging that close to it; once tagging
     // has started, a few more commands still fit.
@@ -366,7 +484,7 @@ extern "C" void btga_interp_matrix_load(uint8_t* rdram, recomp_context* ctx) {
     if (!group_pushed && (head + 0x400 > limit)) {
         return;
     }
-    const uint32_t id = id_for(mtx);
+    const uint32_t id = record_id(rdram, record, mtx);
     if (!group_pushed) {
         write_cmd(rdram, 0xE0525464u, 0x10000064u); // gEXEnable
         write_matrix_group(rdram, id, true);

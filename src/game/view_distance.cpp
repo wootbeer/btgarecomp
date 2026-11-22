@@ -26,6 +26,17 @@
 // func_800E2F9C / func_800E3460 square the draw distance in a 32-bit int,
 // which overflows past 46,340.
 //
+// Gun emplacements (round 227): the turrets' range comes from the draw
+// distance too. Its range checks (func_800E3460 at 0x800E36A8 and 0x800E3874;
+// a third copy at 0x800E3404 is never called) are (draw distance)^2 * 0.92, a
+// third of that for one kind: about 96% of the draw distance, 3400 at a
+// one-player level's start growing to 5000 as the governor raises it. With
+// Far and beyond they opened fire from three times as far or more (reported
+// on GitHub). They're given the game's own draw distance instead: the value
+// the game would have, kept beside the real one (set at the same stores,
+// stepped by the governor's rule once a second: +50 under 5000, or -50 down
+// to 1801 under 20 fps).
+//
 // The "Maximum Visibility" GameShark code doesn't do this: it patches the
 // RSP graphics microcode at 0x800F9522, which RT64 doesn't run.
 #include <atomic>
@@ -33,6 +44,7 @@
 
 #include "recomp.h"
 
+#include "btga_netplay.h"
 #include "btga_config.h"
 
 namespace {
@@ -40,6 +52,10 @@ namespace {
     std::atomic<int> distance_level{ 0 };
 
     constexpr int32_t kMaxDrawDistance = 45000;
+
+    // The draw distance the game would have without the option (game thread
+    // only), 0 before the first scene.
+    int32_t game_distance = 0;
 }
 
 void btga::set_fog_enabled(bool enabled) {
@@ -51,6 +67,10 @@ void btga::set_draw_distance(int level) {
 }
 
 int btga::draw_distance_level() {
+    return btga::netplay::draw_distance(distance_level.load());
+}
+
+int btga::draw_distance_setting() {
     return distance_level.load();
 }
 
@@ -66,7 +86,8 @@ extern "C" void btga_fog_word(uint8_t* rdram, recomp_context* ctx) {
 // 0x800D289C and 0x800D28B0).
 extern "C" void btga_scene_draw_distance(uint8_t* rdram, recomp_context* ctx) {
     int32_t distance = (int32_t)ctx->r2;
-    switch (distance_level.load()) {
+    game_distance = distance;
+    switch (btga::draw_distance_level()) {
         case 1: distance *= 3; break; // Far
         case 2: distance *= 6; break; // Very Far
         case 3: distance = kMaxDrawDistance; break; // Map Edge
@@ -76,4 +97,29 @@ extern "C" void btga_scene_draw_distance(uint8_t* rdram, recomp_context* ctx) {
         distance = kMaxDrawDistance;
     }
     ctx->r2 = (gpr)distance;
+}
+
+// func_80099FE8 at L_8009A1B4: the governor's once-a-second step, $a0 the
+// frames counted in the last second (the paths that skip it don't reach here).
+// The same rule on the game's own draw distance.
+extern "C" void btga_governor_draw_distance(uint8_t* rdram, recomp_context* ctx) {
+    if (game_distance == 0) {
+        return;
+    }
+    if ((int32_t)ctx->r4 < 20) {
+        if (game_distance >= 0x709) {
+            game_distance -= 50;
+        }
+    }
+    else if (game_distance < 5000) {
+        game_distance += 50;
+    }
+}
+
+// Right after the turrets' range checks load the draw distance into $v0
+// (func_800E3460, 0x800E36B0 and 0x800E387C): the game's own.
+extern "C" void btga_turret_draw_distance(uint8_t* rdram, recomp_context* ctx) {
+    if (btga::draw_distance_level() > 0 && game_distance > 0) {
+        ctx->r2 = (gpr)game_distance;
+    }
 }

@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "btga_netplay.h"
 #include "recomp.h"
 
 #include "btga_config.h"
@@ -47,7 +48,8 @@ void btga::set_sound_channels(int count) {
 
 // func_80097560 before 0x80097608 (jal MusInitialize): the musConfig is at sp+0x10.
 extern "C" void btga_sound_channels(uint8_t* rdram, recomp_context* ctx) {
-    const int count = channels.load();
+    // Online, the game's own for everyone (src/netplay/settings.h).
+    const int count = btga::netplay::session_active() ? kOriginalChannels : channels.load();
     const gpr config = ctx->r29 + 0x10;
     if (count <= kOriginalChannels || MEM_W(0x04, config) != kOriginalChannels) {
         return;

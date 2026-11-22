@@ -43,10 +43,37 @@ if (-not (Test-Path $ClangCl)) {
     throw "clang-cl not found at $ClangCl -- pass -ClangCl <path> or set `$env:BTGA_CLANGCL."
 }
 
-cmake -S . -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_C_COMPILER=$ClangCl" "-DCMAKE_CXX_COMPILER=$ClangCl"
+# The build type a folder was configured with, from its CMakeCache.txt.
+function Get-BuildType([string]$dir) {
+    $cache = Join-Path $dir "CMakeCache.txt"
+    if (-not (Test-Path $cache)) { return $null }
+    $line = Select-String -Path $cache -Pattern "^CMAKE_BUILD_TYPE:" | Select-Object -First 1
+    if ($line) { return ($line.Line -split "=", 2)[1] }
+    return ""
+}
+
+# A folder left over from another build type is started over: its objects
+# would otherwise link Microsoft's debug runtime (MSVCP140D.dll and the
+# like), which only PCs with Visual Studio have (the Rage Wars port's round 144).
+$type = Get-BuildType $BuildDir
+if ($null -ne $type -and $type -ne "Release") {
+    Write-Host "$BuildDir was configured as '$type'; starting it over as Release."
+    Remove-Item $BuildDir -Recurse -Force
+}
+
+cmake -S . -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL "-DCMAKE_C_COMPILER=$ClangCl" "-DCMAKE_CXX_COMPILER=$ClangCl"
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
+$type = Get-BuildType $BuildDir
+if ($type -ne "Release") { throw "$BuildDir configured as '$type', not Release." }
 cmake --build $BuildDir --target BattleTanxGARecompiled
 if ($LASTEXITCODE -ne 0) { throw "Build failed." }
+
+# Never ship an exe that needs the debug runtime.
+$exe = Join-Path $BuildDir "BattleTanxGARecompiled.exe"
+$debugRuntime = Select-String -Path $exe -Pattern "MSVCP140D|VCRUNTIME140D|VCRUNTIME140_1D|ucrtbased" -List
+if ($debugRuntime) {
+    throw "BattleTanxGARecompiled.exe uses Microsoft's debug runtime ($($debugRuntime.Matches[0].Value).dll); it won't run on PCs without Visual Studio. Delete $BuildDir and run this again."
+}
 
 $name = "BattleTanxGARecompiled-$Version-windows"
 $stage = Join-Path $root "dist\$name"
@@ -57,7 +84,7 @@ foreach ($file in @("BattleTanxGARecompiled.exe", "SDL2.dll", "dxil.dll", "dxcom
     Copy-Item (Join-Path $BuildDir $file) $stage
 }
 Copy-Item "assets" $stage -Recurse
-Copy-Item "README.md", "SOUND_PACKS.md", "COPYING" $stage
+Copy-Item "README.md", "SOUND_PACKS.md", "COMMAND_LINE.md", "COPYING" $stage
 
 # License notices for the third-party code built into the exe or shipped
 # beside it. Each library's own file, gathered under licenses\.
@@ -87,6 +114,7 @@ $licenses = [ordered]@{
     "GamepadMotionHelpers"  = "lib\RecompFrontend\lib\GamepadMotionHelpers\LICENSE"
     "SlotMap"               = "lib\SlotMap\README.md"
     "DirectXShaderCompiler" = "licenses\DirectXShaderCompiler.txt"
+    "SDL_GameControllerDB"  = "licenses\SDL_GameControllerDB.txt"
     # Lossless Scaling frame generation (lib\lsfg): lsfg-vk's passes, DXVK's shader compiler, SPIR-V headers.
     "lsfg-vk"               = "lib\lsfg\LICENSE-lsfg-vk.md"
     "DXVK"                  = "lib\lsfg\LICENSE-dxvk.txt"
@@ -111,3 +139,13 @@ $zip = Join-Path $root "dist\$name.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip
 Write-Host "Packaged $zip"
+
+# The exe's symbols, kept beside the zip (not in it): crash logs from this
+# release give host call stack offsets that resolve against it, e.g.
+#   llvm-symbolizer --obj=dist\<name>\BattleTanxGARecompiled.exe 0x<offset>
+$pdb = Join-Path $BuildDir "BattleTanxGARecompiled.pdb"
+if (Test-Path $pdb) {
+    Copy-Item $pdb (Join-Path $root "dist\$name.pdb")
+    Write-Host "Symbols in dist\$name.pdb (keep it with this release; don't upload it)"
+}
+else { Write-Warning "BattleTanxGARecompiled.pdb not found in $BuildDir" }
