@@ -112,6 +112,8 @@ has started the new process. Also as snprecomp: a quit that gets stuck after
 Restart starts the game again and ends after 5 s. With the delay, and without,
 in-game Restart now starts the game again.
 
+**Confirmed (owner, Windows):** Restart from in-game works.
+
 ## 2026-11-22, round 227: turret range no longer grows with Draw Distance
 
 Report (via the owner): with a long or maximum draw distance, turrets open fire
