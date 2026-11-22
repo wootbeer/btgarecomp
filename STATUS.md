@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 226)
+## Overview (as of round 227)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,37 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-22, round 227: turret range no longer grows with Draw Distance
+
+Report (via the owner): with a long or maximum draw distance, turrets open fire
+from much farther away, in both BattleTanx ports; more noticeable here, where
+they used to have a shorter range than in the first game.
+
+**Cause:** the gun emplacements' range checks (func_800E3460 at 0x800E36A8 and
+0x800E3874; a third copy at 0x800E3404 is never called) use the draw distance
+at 0x8023A060: (draw distance)^2 * 0.92 (0x80075C74-0x80075C80, read from game
+memory), a third of that for one kind. That's about 96% of the draw distance:
+3400 at a one-player level's start, growing to 5000 as the frame-rate governor
+(func_80099FE8) raises it. Draw Distance multiplies the draw distance (Far x3,
+Very Far x6, Map Edge 45000), so the turrets' range went with it. The value's
+other readers are rendering only: the scenery drawer, the camera projection
+(func_800A72C0, func_800A7664), the object view test (func_800AA664, reached
+only from the draw functions through func_800AD14C), the camera scripts.
+
+**Fix** (`src/game/view_distance.cpp`): the draw distance the game would have
+without the option is kept beside the real one: set at the same stores (scene
+start, camera scripts) before the option scales them, and stepped by the
+governor's own rule at its once-a-second check (hook at L_8009A1B4, $a0 the
+frames of the last second: under 20, -50 down to 1801; otherwise +50 under
+5000). The turrets' range checks get it (hooks right after both loads) when
+Draw Distance is above Original.
+
+Tested (temporary prints): at Original, the kept value follows the real one
+through a mission 1 drive (3400 to 5000); on Houses of Parliament at Far, the
+turrets' range checks read 10200 before and now the game's 4250-5000, as
+without the option. In netplay it's from the game's state and the host's
+Draw Distance alike on every PC.
 
 ## 2026-11-19, round 226: portable by default; command-line options
 

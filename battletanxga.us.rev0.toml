@@ -2338,3 +2338,26 @@ before_vram = 0x800AFDE4
 text = """
     { extern void btga_scenery_object_test(uint8_t *rdram, recomp_context *ctx); btga_scenery_object_test(rdram, ctx); }
 """
+
+# Turret range (round 227, src/game/view_distance.cpp): the game's own draw
+# distance for the gun emplacements' range, not the Draw Distance option's.
+[[patches.hook]]
+func = "func_80099FE8"
+before_vram = 0x8009A1B4
+text = """
+    { extern void btga_governor_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_governor_draw_distance(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800E3460"
+before_vram = 0x800E36B0
+text = """
+    { extern void btga_turret_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_turret_draw_distance(rdram, ctx); }
+"""
+
+[[patches.hook]]
+func = "func_800E3460"
+before_vram = 0x800E387C
+text = """
+    { extern void btga_turret_draw_distance(uint8_t *rdram, recomp_context *ctx); btga_turret_draw_distance(rdram, ctx); }
+"""
