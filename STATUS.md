@@ -101,6 +101,8 @@ turrets' range checks read 10200 before and now the game's 4250-5000, as
 without the option. In netplay it's from the game's state and the host's
 Draw Distance alike on every PC.
 
+**Confirmed (owner, Windows):** fixed.
+
 ## 2026-11-19, round 226: portable by default; command-line options
 
 Owner: portable by default (existing players left as they are), and command
