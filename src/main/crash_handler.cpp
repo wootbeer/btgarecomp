@@ -35,6 +35,7 @@
 
 #include "recomp.h"
 #include "librecomp/sections.h"
+#include "btga_restart.h"
 
 namespace {
     struct GameFunc {
@@ -435,6 +436,7 @@ namespace {
         }
         bool has_access = (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION || rec->ExceptionCode == EXCEPTION_IN_PAGE_ERROR) && rec->NumberParameters >= 2;
         if (is_shutdown_fault(has_access, has_access ? (uintptr_t)rec->ExceptionInformation[1] : 0)) {
+            btga::restart::relaunch_if_requested(); // Restart was chosen: start again all the same
             TerminateProcess(GetCurrentProcess(), 0);
         }
         char detail[512];
@@ -491,6 +493,7 @@ namespace {
         }
         const char* what = sig == SIGSEGV ? "segmentation fault" : sig == SIGBUS ? "bus error" : sig == SIGILL ? "illegal instruction" : "floating point exception";
         if (is_shutdown_fault(sig == SIGSEGV || sig == SIGBUS, (uintptr_t)info->si_addr)) {
+            btga::restart::relaunch_if_requested(); // Restart was chosen: start again all the same
             _exit(0);
         }
         Dl_info dl{};

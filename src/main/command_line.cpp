@@ -48,6 +48,7 @@
 #include "util/file.h"
 
 #include "btga_command_line.h"
+#include "btga_restart.h"
 
 namespace {
     struct Setting {
@@ -435,6 +436,18 @@ void btga::cli::parse(int argc, char** argv, const std::string& version_text) {
         else {
             add_problem("unknown option \"" + arg + "\". --help lists them.");
         }
+    }
+    // Started again by the menu's Restart (src/main/restart.cpp): the settings
+    // given were saved at the first start, and the menu may have changed them
+    // since; --rom and --play still count. Its problems were shown then too.
+    if (const char* restarted = std::getenv(btga::restart::kRestartedVariable); restarted != nullptr) {
+#if defined(_WIN32)
+        _putenv_s(btga::restart::kRestartedVariable, "");
+#else
+        unsetenv(btga::restart::kRestartedVariable);
+#endif
+        settings.clear();
+        problems.clear();
     }
 }
 

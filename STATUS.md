@@ -4,7 +4,7 @@ The project's working log: every investigation and fix, newest first, as
 "rounds". PROGRESS.md has the short version of where things stand; this file
 is for finding out why something is the way it is.
 
-## Overview (as of round 227)
+## Overview (as of round 228)
 
 **Where it stands.** The game runs from boot through the campaign
 (played through mission 13 so far) and credits on Windows, with audio, saves, rumble, local multiplayer, widescreen
@@ -69,6 +69,35 @@ The sections at the very end ("Done", "Blocked", "Next steps") are the
 original 2026-09-18 plan and are long out of date.
 
 # Log
+
+## 2026-11-22, round 228: Restart in the menu
+
+Owner: a Restart button like snprecomp's.
+
+Ported from snprecomp's round 12. `lib-patches/RecompFrontend/0022` (its 0023,
+rebased onto ours) gives the menu's header a Restart button between Quit and
+Close, and the quit prompt (Quit, Alt+F4, closing the window) a Restart choice
+between Quit and Cancel. Once the game has started, the button asks first ("Are
+you sure you want to restart?"); in the launcher it restarts straight away. Both
+show only when the game has set a restart callback.
+
+`src/main/restart.cpp`: the callback marks the restart and quits as Quit does,
+so in netplay the other players are told (btga::netplay::quitting, as before).
+Just before the process ends (main's end, or the quiet shutdown-fault exit in
+`crash_handler.cpp`), the game is started again with the same command line:
+`CreateProcessW` with `GetCommandLineW()` and `AllowSetForegroundWindow` on
+Windows; on Linux `posix_spawn` of the AppImage (`$APPIMAGE`, since the
+executable's mount goes away with the process) or `/proc/self/exe`, with the
+same arguments and environment. The new start gets `BTGA_RESTARTED=1`, and the
+command line's settings are skipped (`src/main/command_line.cpp`): they were saved
+at the first start, and a change made in the menu since would otherwise be
+undone. `--rom` and `--play` still count.
+
+Tested (Linux, Xvfb): in the launcher, the header's Restart starts the game
+again at once, with the same arguments; started with `--mouse_stick=Turn` and
+changed to Off in the menu, it's still Off after the restart. In-game, the button
+asks first, and the quit prompt shows Quit / Restart / Cancel; Restart from there
+quits the game and starts it again, with no crash log.
 
 ## 2026-11-22, round 227: turret range no longer grows with Draw Distance
 

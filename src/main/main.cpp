@@ -58,6 +58,7 @@
 #include "btga_cheats.h"
 #include "btga_command_line.h"
 #include "btga_netplay.h"
+#include "btga_restart.h"
 
 #if defined(BTGA_HAS_APP_ICON)
 #include "icon_bytes.h"
@@ -744,6 +745,7 @@ int main(int argc, char** argv) {
 
     recompui::register_launcher_init_callback(launcher_init);
     recompui::register_launcher_update_callback(launcher_update);
+    btga::restart::install(argc, argv);
 
     recomp::start({
         .argc = argc,
@@ -769,6 +771,7 @@ int main(int argc, char** argv) {
     // them can crash on quit -- exit directly instead (same approach as
     // other N64Recomp projects' main()).
     btga::netplay::quitting();
+    btga::restart::relaunch_if_requested();
     fflush(stdout);
     fflush(stderr);
     std::_Exit(EXIT_SUCCESS);

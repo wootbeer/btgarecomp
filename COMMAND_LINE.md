@@ -54,6 +54,8 @@ BattleTanxGARecompiled.exe --draw_distance=Far --fog=Off --graphics.msaa_option=
   front (`graphics.`, `sound.`, ...).
 
 Settings given this way are saved, the same as changing them in the menu.
+The menu's Restart keeps the other options but skips these settings, so
+anything you changed in the menu since stays as you set it.
 
 `--list-settings` shows the ids and values. Run it from a terminal (on
 Windows, Command Prompt or PowerShell in the game's folder):
