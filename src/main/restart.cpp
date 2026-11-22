@@ -11,6 +11,9 @@
 #include "btga_restart.h"
 
 #include <atomic>
+#include <chrono>
+#include <thread>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -35,7 +38,13 @@ extern char** environ;
 
 namespace {
     std::atomic_bool restart_requested = false;
-    std::atomic_bool relaunched = false;
+    // 0: not started, 1: starting the new process, 2: done. Quitting from a
+    // game frees its memory while the game's threads still run; their faults
+    // end the process (crash_handler.cpp's shutdown faults) and call this too,
+    // so a second caller waits for the first to finish starting the new
+    // process instead of ending this one under it (as happened on Windows,
+    // where starting a process takes a while: round 228).
+    std::atomic_int relaunch_state = 0;
 #if !defined(_WIN32)
     std::string program;                // what to start: the AppImage, or this executable
     std::vector<std::string> arguments; // the command line, argv[0] first
@@ -78,6 +87,16 @@ void btga::restart::install(int argc, char** argv) {
         setenv(kRestartedVariable, "1", 1);
 #endif
         ultramodern::quit();
+        // If quitting gets stuck (a game thread that never finishes), start
+        // again and end this process anyway after a few seconds, as
+        // snprecomp's quit watchdog does.
+        std::thread([]() {
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            btga::restart::relaunch_if_requested();
+            std::fflush(stdout);
+            std::fflush(stderr);
+            std::_Exit(EXIT_SUCCESS);
+        }).detach();
     });
 }
 
@@ -85,33 +104,48 @@ bool btga::restart::requested() {
     return restart_requested.load();
 }
 
-void btga::restart::relaunch_if_requested() {
-    if (!restart_requested.load() || relaunched.exchange(true)) {
-        return;
-    }
+namespace {
+    void start_again() {
 #if defined(_WIN32)
-    wchar_t exe[MAX_PATH * 4];
-    const DWORD length = GetModuleFileNameW(nullptr, exe, (DWORD)(sizeof(exe) / sizeof(exe[0])));
-    if (length == 0 || length >= sizeof(exe) / sizeof(exe[0])) {
+        wchar_t exe[MAX_PATH * 4];
+        const DWORD length = GetModuleFileNameW(nullptr, exe, (DWORD)(sizeof(exe) / sizeof(exe[0])));
+        if (length == 0 || length >= sizeof(exe) / sizeof(exe[0])) {
+            return;
+        }
+        std::wstring command_line = GetCommandLineW();
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process{};
+        if (CreateProcessW(exe, command_line.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &process)) {
+            // This process has the foreground: let the new window take it.
+            AllowSetForegroundWindow(process.dwProcessId);
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+        }
+#else
+        std::vector<char*> argv;
+        for (std::string& argument : arguments) {
+            argv.push_back(argument.data());
+        }
+        argv.push_back(nullptr);
+        pid_t child = 0;
+        posix_spawn(&child, program.c_str(), nullptr, nullptr, argv.data(), environ);
+#endif
+    }
+}
+
+void btga::restart::relaunch_if_requested() {
+    if (!restart_requested.load()) {
         return;
     }
-    std::wstring command_line = GetCommandLineW();
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION process{};
-    if (CreateProcessW(exe, command_line.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &process)) {
-        // This process has the foreground: let the new window take it.
-        AllowSetForegroundWindow(process.dwProcessId);
-        CloseHandle(process.hThread);
-        CloseHandle(process.hProcess);
+    int expected = 0;
+    if (!relaunch_state.compare_exchange_strong(expected, 1)) {
+        // Another thread is starting it: wait (up to 10 s) until it has.
+        for (int i = 0; i < 1000 && relaunch_state.load() != 2; i++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return;
     }
-#else
-    std::vector<char*> argv;
-    for (std::string& argument : arguments) {
-        argv.push_back(argument.data());
-    }
-    argv.push_back(nullptr);
-    pid_t child = 0;
-    posix_spawn(&child, program.c_str(), nullptr, nullptr, argv.data(), environ);
-#endif
+    start_again();
+    relaunch_state.store(2);
 }

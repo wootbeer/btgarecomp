@@ -99,6 +99,19 @@ changed to Off in the menu, it's still Off after the restart. In-game, the butto
 asks first, and the quit prompt shows Quit / Restart / Cancel; Restart from there
 quits the game and starts it again, with no crash log.
 
+**Owner (Windows): Restart from the launcher worked; from in-game it just closed
+the game.** Cause: quitting a game frees its memory while the game's threads
+still run, and their faults end the process quietly (`crash_handler.cpp`'s
+shutdown faults), which also calls relaunch_if_requested. When main had already
+begun starting the new process, that second call returned at once and the
+process ended under it; Windows' CreateProcess takes long enough to lose that
+race every time (no game threads in the launcher, so it worked there).
+Reproduced on Linux with a temporary 1 s delay before the spawn: the game closed
+and nothing started. Fix: a second caller waits (up to 10 s) until the first
+has started the new process. Also as snprecomp: a quit that gets stuck after
+Restart starts the game again and ends after 5 s. With the delay, and without,
+in-game Restart now starts the game again.
+
 ## 2026-11-22, round 227: turret range no longer grows with Draw Distance
 
 Report (via the owner): with a long or maximum draw distance, turrets open fire
